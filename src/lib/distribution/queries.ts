@@ -17,7 +17,7 @@ import {
   sources,
   usgClubPolicy,
 } from '../db/schema';
-import { clampInstallation, type ClampInput, type ClampResult } from './clamps';
+
 import { composeEffectiveAgent, type ComposeInput } from './compose';
 
 /** Source kinds that live in the USG org rather than the club (§8 clamps table). */
@@ -93,15 +93,6 @@ export async function loadAgents(filter: AgentFilter): Promise<LoadedAgent[]> {
   return loaded;
 }
 
-/** The club that owns an installation, or null for an unknown or malformed id. */
-export async function installationOrgId(installationId: string): Promise<string | null> {
-  if (!isUuid(installationId)) return null;
-  const [row] = await getDb()
-    .select({ orgId: agentInstallations.orgId })
-    .from(agentInstallations)
-    .where(eq(agentInstallations.id, installationId));
-  return row?.orgId ?? null;
-}
 
 /** The composed config for one installation, or null when it does not resolve. A clamp violation
  * on the row is thrown, not hidden. */
@@ -110,31 +101,6 @@ export async function loadAgent(installationId: string): Promise<EffectiveAgent 
   return first?.agent ?? null;
 }
 
-/**
- * Runs the clamps against a change a club is proposing, without writing it. `publishToAllStudents`
- * uses this so a rejected publish never reaches the database: I7 has the clamps run on every
- * write, and a row written past them would make every later read throw.
- */
-export async function clampProposedChange(
-  installationId: string,
-  override: ClampInput['installation'],
-): Promise<ClampResult | null> {
-  const [loaded] = await loadComposeInputs({ installationId });
-  if (!loaded) return null;
-  const { input } = loaded;
-  return clampInstallation({
-    version: {
-      audience: input.version.audience,
-      usableBy: input.version.usableBy,
-      maxTier: input.version.maxTier,
-      tools: input.version.tools,
-      modelClasses: input.version.modelClasses,
-      defaultModelClass: input.version.defaultModelClass,
-    },
-    installation: override,
-    club: input.club,
-  });
-}
 
 interface LoadedInput {
   input: ComposeInput;

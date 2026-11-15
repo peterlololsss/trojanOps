@@ -1,5 +1,5 @@
 // Owner: B. Shared write checks; all installation candidates use the same pure I7 clamps.
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { requireUser } from '../api';
 import { isUuid, isUsgAdmin } from '../authz';
 import { now } from '../clock';
@@ -19,7 +19,7 @@ export const event = (actor: Actor, targetType: string, targetId: string): Audit
 });
 
 /** Audit errors outside the failed write transaction, so the refusal is retained. */
-export async function checkedWrite<T>(actor: Actor, targetType: string, targetId: string, fn: () => Promise<T>): Promise<T> {
+export async function checkedWrite<T>(actor: Actor, targetType: string, targetId: string, fn: () => Promise<T>, attempted?: AuditAction): Promise<T> {
   requireUser(actor);
   try { return await fn(); } catch (err) {
     if (err instanceof AppError && ['forbidden', 'clamp_violation'].includes(err.error.code)) {
@@ -29,6 +29,8 @@ export async function checkedWrite<T>(actor: Actor, targetType: string, targetId
         if (found) e.installationId = targetId;
       }
       if (err.error.cap) e.details = { field: err.error.cap.field ?? '', allowed: err.error.cap.allowed as string | number | string[] };
+      // Without this a president's audit view shows an undifferentiated denial on an installation.
+      if (attempted) e.details = { ...e.details, action: attempted };
       await audit(err.error.code === 'forbidden' ? 'authz.denied' : 'installation.rejected', e);
     }
     throw err;
@@ -39,7 +41,7 @@ export function president(actor: Actor, orgId: string): void {
     throw new AppError({ code: 'forbidden', message: 'Only the president acting in this club can change its agents.' });
   }
 }
-export async function usgAdmin(tx: Tx, actor: Actor): Promise<void> {
+export async function usgAdmin(actor: Actor): Promise<void> {
   if (!await isUsgAdmin(actor)) throw new AppError({ code: 'forbidden', message: 'Only a USG admin can perform this action.' });
 }
 export async function lockTemplate(tx: Tx, id: string): Promise<Template> {
@@ -62,7 +64,8 @@ export async function versionFor(tx: Tx, template: Template, installation?: Pick
   return v;
 }
 export async function clubBudget(tx: Tx, orgId: string): Promise<number> {
-  const [q] = await tx.select().from(quotaLimits).where(and(eq(quotaLimits.scope, 'org'), eq(quotaLimits.orgId, orgId)))
+  const [q] = await tx.select().from(quotaLimits)
+    .where(and(eq(quotaLimits.scope, 'org'), eq(quotaLimits.orgId, orgId), isNull(quotaLimits.userId), isNull(quotaLimits.installationId)))
     .orderBy(desc(quotaLimits.setAt), desc(quotaLimits.createdAt)).limit(1);
   return q?.limitMicro ?? 0;
 }
@@ -89,9 +92,20 @@ export async function lockQuotaBootstrap(tx: Tx): Promise<void> {
  * Existing limits stay intact; interactive changes are handled by quota.setLimit, never here. */
 export async function ensurePublicBudget(tx: Tx, actor: Actor, installationId: string, orgId: string) {
   await lockQuotaBootstrap(tx);
-  const [limit] = await tx.select().from(quotaLimits).where(and(eq(quotaLimits.scope, 'installation'), eq(quotaLimits.installationId, installationId)));
-  if (!limit) { const at = now(); await tx.insert(quotaLimits).values({ scope: 'installation', orgId, installationId,
-    limitMicro: Math.floor(await clubBudget(tx, orgId) / 2), setBy: actor.userId, setAt: at, createdAt: at }); }
+  const [limit] = await tx.select().from(quotaLimits)
+    .where(and(eq(quotaLimits.scope, 'installation'), eq(quotaLimits.installationId, installationId), isNull(quotaLimits.userId)));
+  if (limit) return;
+  const half = Math.floor(await clubBudget(tx, orgId) / 2);
+  // A club with no quota of its own would get a limit of 0 here, which publishes the agent and
+  // then blocks every run of it. Leave no row instead: publishToAllStudents refuses that case
+  // outright, and distribute must not fail every other club over one club's missing quota.
+  if (half <= 0) {
+    console.warn(`distribution: ${orgId} has no monthly quota, so installation ${installationId} gets no budget`);
+    return;
+  }
+  const at = now();
+  await tx.insert(quotaLimits).values({ scope: 'installation', orgId, installationId,
+    limitMicro: half, setBy: actor.userId, setAt: at, createdAt: at });
 }
 export async function audited(actor: Actor, action: AuditAction, targetType: string, targetId: string, details: AuditEvent['details'] = {}) {
   await audit(action, { ...event(actor, targetType, targetId), ...(targetType === 'installation' ? { installationId: targetId } : {}), details });

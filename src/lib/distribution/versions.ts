@@ -22,7 +22,7 @@ export type VersionDraft = z.input<typeof versionDraftSchema>;
 export async function publishVersion(actor: Actor, templateId: string, input: VersionDraft): Promise<{ version: number }> {
   const version = await checkedWrite(actor, 'template', templateId, () => getDb().transaction(async tx => {
     const template = await lockTemplate(tx, templateId);
-    if (template.scope === 'global') await usgAdmin(tx, actor); else president(actor, template.publisherOrgId);
+    if (template.scope === 'global') await usgAdmin(actor); else president(actor, template.publisherOrgId);
     active(template);
     const parsed = versionDraftSchema.safeParse(input);
     if (!parsed.success) throw invalid(parsed.error.issues[0].message);
@@ -44,14 +44,14 @@ export async function publishVersion(actor: Actor, templateId: string, input: Ve
     for (const i of publicFollowers) await ensurePublicBudget(tx, actor, i.id, i.orgId);
     await tx.update(agentTemplates).set({ latestVersion: next }).where(eq(agentTemplates.id, templateId));
     return next;
-  }));
+  }), 'template.publish');
   await audited(actor, 'template.publish', 'template', templateId, { version });
   return { version };
 }
 export async function retire(actor: Actor, templateId: string): Promise<void> {
   await checkedWrite(actor, 'template', templateId, () => getDb().transaction(async tx => {
-    await usgAdmin(tx, actor); await lockTemplate(tx, templateId);
+    await usgAdmin(actor); await lockTemplate(tx, templateId);
     await tx.update(agentTemplates).set({ status: 'retired' }).where(eq(agentTemplates.id, templateId));
-  }));
+  }), 'template.retire');
   await audited(actor, 'template.retire', 'template', templateId);
 }

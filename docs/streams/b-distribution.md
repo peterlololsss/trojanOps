@@ -54,8 +54,8 @@ Stubs by H3.
 
 `distribution` exports `distribute(actor, templateId)`, `publishVersion(actor, templateId, draft)`,
 `retire(actor, templateId)`, `updateInstallation(actor, installationId, patch)`, and
-`publishRulePack(actor, slug, {label, content})`. These are services; their HTTP routes and UI
-are a later slice. `distribute` returns `{count}` for installations inserted or required agents
+`publishRulePack(actor, slug, {label, content})`. Their HTTP routes are listed below; the UI is a
+later slice. `distribute` returns `{count}` for installations inserted or required agents
 re-enabled, so repeating a distribution returns 0. Existing overrides, pins and default-agent
 opt-outs are retained. New public installations receive a half-club installation budget.
 
@@ -64,6 +64,34 @@ installation against the proposed version before advancing `latestVersion`; an i
 club override rejects the publication rather than breaking campus lists. Pinned installations keep
 their version. Retired templates cannot be published, distributed or edited through these services.
 Rule-pack publication takes effect on the next funding-agent read, including pinned templates.
+
+Only `publishToAllStudents` may open an agent to the whole campus. A patch that would reach the
+same state — setting the audience to public, or merely enabling an installation whose version is
+public — is refused with `clamp_violation` on `audience`, because the publish path is what checks
+the club has a budget, gives the installation one and audits `agent.publish_public` (§8, §12).
+
+## WP-5 HTTP routes (§14)
+
+| Method and path | Service | Who |
+|---|---|---|
+| GET `/api/directory` | `directory()` | any signed-in student |
+| GET `/api/me/agents` | `myAgents()` | the caller, for the caller only |
+| POST `/api/orgs/:orgId/installations/:id/publish` | `publishToAllStudents` | club president |
+| PATCH `/api/orgs/:orgId/installations/:id` | `updateInstallation` | club president |
+| POST `/api/templates/:id/versions` | `publishVersion` | USG admin (global), president (own) |
+| POST `/api/usg/templates/:id/distribute` | `distribute` | USG admin |
+| POST `/api/usg/templates/:id/retire` | `retire` | USG admin |
+| POST `/api/usg/rule-packs/:slug/versions` | `publishRulePack` | USG admin |
+| POST `/api/orgs/:orgId/positions/:slug/transfer` | `transferPosition` | club president |
+
+Each handler is `getActor` → one service call → JSON or `ApiError`; permissions stay in the
+services, which resolve the club from the row. A path's `orgId` is passed through and refused like
+an unknown id when it does not match, so a URL naming one club cannot act on another's agent.
+Every write parses its body with `parseBody` even when the body is empty: the `application/json`
+check is the cross-site write guard, and an empty-bodied cross-origin POST sends no content type.
+
+Still unrouted, because the services do not exist yet: the club catalog, the installations
+collection, `createClubTemplate` and `setClubPolicy`.
 
 Writes lock template → clubs in id order → installation. Non-key locks permit foreign-key reads
 from the separate quota transaction. Public publishing uses the same writer as installation edits.

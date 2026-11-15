@@ -15,6 +15,42 @@ const draft: VersionDraft = { purpose: 'Plan club events', audience: 'positions'
   maxTier: 'members', sourceKinds: ['archive', 'minutes'], tools: [], modelClasses: ['economy'],
   defaultModelClass: 'economy', systemPrompt: 'Plan events with the club.', changelog: 'Second version' };
 
+// §8 gives a club two different powers: narrowing its own installation, and opening an agent to
+// the whole campus. Only the second checks the club has a budget, gives the installation one and
+// audits agent.publish_public — so a patch must not be able to reach the same state.
+describe.skipIf(!probe)('only Publish to all students opens an agent to the campus', () => {
+  const inDirectory = async () => (await directory()).map(a => a.templateSlug);
+
+  it('refuses a patch that sets the audience to public', () => inRolledBackApp(async tx => {
+    await expect(updateInstallation(await sam(), INSTALLATION.startupRecruitingQa, { audience: 'public', enabled: true }))
+      .rejects.toMatchObject({ error: { code: 'clamp_violation', cap: { field: 'audience' } } });
+    expect(await inDirectory()).not.toContain('recruiting-qa');
+    expect((await tx.execute(sql`select audience, enabled from agent_installations where id = ${INSTALLATION.startupRecruitingQa}`))[0])
+      .toEqual({ audience: null, enabled: false });
+  }));
+
+  // The same state by a quieter route: recruiting-qa's *version* is already public, so merely
+  // enabling the installation would put it on the directory.
+  it('refuses a patch that only enables an installation of a public version', () => inRolledBackApp(async () => {
+    await expect(updateInstallation(await sam(), INSTALLATION.startupRecruitingQa, { enabled: true }))
+      .rejects.toMatchObject({ error: { code: 'clamp_violation', cap: { field: 'audience' } } });
+    expect(await inDirectory()).not.toContain('recruiting-qa');
+  }));
+
+  it('still allows ordinary narrowing of an agent that is not public', () => inRolledBackApp(async () => {
+    const updated = await updateInstallation(await sam(), INSTALLATION.startupHandoff, { promptAddendum: 'We meet on Tuesdays.' });
+    expect(updated.systemPrompt).toContain('We meet on Tuesdays.');
+  }));
+
+  // Once published, the president can still edit it without tripping the guard.
+  it('allows patching an installation that is already public', () => inRolledBackApp(async () => {
+    await publishToAllStudents(await sam(), INSTALLATION.startupRecruitingQa);
+    const updated = await updateInstallation(await sam(), INSTALLATION.startupRecruitingQa, { promptAddendum: 'Ask us anything.' });
+    expect(updated.audience).toBe('public');
+    expect(await inDirectory()).toContain('recruiting-qa');
+  }));
+});
+
 describe.skipIf(!probe)('distribution writes', () => {
   it('D2 distributes to all active clubs once and preserves a default installation’s overrides', () => inRolledBackApp(async tx => {
     const actor = await avery();
@@ -151,7 +187,10 @@ describe.skipIf(!probe)('distribution writes', () => {
       await publishVersion(await sam(), TEMPLATE.recruitingQa, { ...draft, audience: 'members', usableBy: [], maxTier: 'members' });
     });
     try {
-      await expect(publishToAllStudents(await sam(), INSTALLATION.startupRecruitingQa))
+      // A limit different from the one already stored, so the separate quota transaction this
+      // case is about actually runs: publishing without changing the limit no longer calls
+      // setLimit, which would otherwise audit a quota.limit.set nobody made.
+      await expect(publishToAllStudents(await sam(), INSTALLATION.startupRecruitingQa, { limitMicro: 1_000_000 }))
         .rejects.toMatchObject({ error: { code: 'clamp_violation' } });
       expect((await tx.execute(sql`select audience, enabled from agent_installations where id = ${INSTALLATION.startupRecruitingQa}`))[0])
         .toEqual({ audience: null, enabled: false });

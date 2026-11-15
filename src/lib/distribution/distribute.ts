@@ -9,7 +9,7 @@ import { active, audited, checkedWrite, clampWrite, ensurePublicBudget, invalid,
 
 export async function distribute(actor: Actor, templateId: string): Promise<{ count: number }> {
   const count = await checkedWrite(actor, 'template', templateId, () => getDb().transaction(async tx => {
-    await usgAdmin(tx, actor);
+    await usgAdmin(actor);
     const template = await lockTemplate(tx, templateId); active(template);
     if (template.scope !== 'global' || template.distribution === 'optional') throw invalid('Only required or default global templates can be distributed.');
     const clubs = await tx.select().from(orgs).where(and(eq(orgs.kind, 'rso'), eq(orgs.status, 'active'))).orderBy(orgs.id);
@@ -38,7 +38,7 @@ export async function distribute(actor: Actor, templateId: string): Promise<{ co
     }
     if (!template.distributedAt) await tx.update(agentTemplates).set({ distributedAt: at }).where(eq(agentTemplates.id, templateId));
     return changed;
-  }));
+  }), 'template.distribute');
   await audited(actor, 'template.distribute', 'template', templateId, { count });
   return { count };
 }
