@@ -1,12 +1,12 @@
 // Owner: B (WP-5). Invariant I7: distribution never widens. A template version is the ceiling and
 // usg_club_policy is a second ceiling above it; an installation may only narrow. These are the
 // acceptance check for D2's rejected widening, and they are pure — no database.
-import type postgres from 'postgres';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { clampInstallation } from '@/lib/distribution/clamps';
-import { FIXTURE_AGENTS, resetDistributionFixtures } from '@/lib/distribution/fixtures';
+import { directory, effectiveAgent, myAgents } from '@/lib/distribution';
 import type { Audience, ModelClass, Tier } from '@/lib/contracts';
-import { appSql } from './db';
+import { INSTALLATION, ORG, USER } from '@db/seed/ids';
+import { appSql, closeAppDb } from './db';
 
 const baseVersion = {
   audience: 'positions' as Audience,
@@ -243,42 +243,81 @@ describe('clamps · every violation is reportable', () => {
   });
 });
 
-// db/seed/ids.ts: "Stubs and tests use these, so fixtures match the real seed." Until WP-5
-// resolves installations from the database, the stubs are what C and D render, so the two have to
-// say the same thing — a divergence shows up on stage, not in a type error.
-describe('seed · the stubs and the seeded rows agree', () => {
-  let sql: postgres.Sql | null = null;
+// ---------------------------------------------------------------------------
+// The DB-backed half, against the seeded database.
+// ---------------------------------------------------------------------------
 
-  beforeAll(async () => {
-    resetDistributionFixtures();
-    sql = await appSql();
+const probe = await appSql();
+await probe?.end();
+afterAll(async () => {
+  if (probe) await closeAppDb();
+});
+
+describe.skipIf(!probe)('effectiveAgent · version, clamps and rule pack', () => {
+  it('reports a switched-off installation instead of throwing, for the gateway to refuse', async () => {
+    expect((await effectiveAgent(INSTALLATION.startupRecruitingQa)).status).toBe('disabled');
   });
 
-  afterAll(async () => {
-    await sql?.end({ timeout: 1 });
+  it('caps a public agent at the public tier', async () => {
+    expect((await effectiveAgent(INSTALLATION.danceShowcaseQa)).maxTier).toBe('public');
   });
 
-  it('agrees on slug, audience, positions, max tier, model class, rule pack and enabled state', async () => {
-    if (!sql) return; // appSql already warned that the database is unreachable
-    const rows = await sql`
-      select i.id, i.enabled, t.slug, v.audience, v.usable_by, v.max_tier,
-             v.default_model_class, v.rule_pack_slug
-      from agent_installations i
-      join agent_templates t on t.id = i.template_id
-      join agent_template_versions v on v.template_id = t.id and v.version = t.latest_version`;
+  it("honours the version's default model class", async () => {
+    expect((await effectiveAgent(INSTALLATION.danceShowcaseQa)).modelClass).toBe('economy');
+  });
 
-    expect(rows.length).toBe(Object.keys(FIXTURE_AGENTS).length);
+  it('attaches the rule pack to the funding pre-check and to nothing else', async () => {
+    expect((await effectiveAgent(INSTALLATION.startupFundingPrecheck)).rulePack?.slug).toBe('usg-funding');
+    expect((await effectiveAgent(INSTALLATION.usgReviewAssistant)).rulePack).toBeUndefined();
+  });
 
-    for (const row of rows) {
-      const fixture = FIXTURE_AGENTS[row.id as string];
-      expect(fixture, `no fixture for seeded installation ${row.id}`).toBeDefined();
-      expect(fixture.templateSlug).toBe(row.slug);
-      expect(fixture.audience).toBe(row.audience);
-      expect(fixture.usableBy).toEqual(row.usable_by);
-      expect(fixture.maxTier).toBe(row.max_tier);
-      expect(fixture.modelClass).toBe(row.default_model_class);
-      expect(Boolean(fixture.rulePack)).toBe(row.rule_pack_slug !== null);
-      expect(fixture.status === 'enabled').toBe(row.enabled);
+  it('refuses an installation that does not exist', async () => {
+    await expect(effectiveAgent(ORG.usg)).rejects.toThrow();
+  });
+});
+
+describe.skipIf(!probe)('myAgents · every club judged in that club', () => {
+  it('gives Casey, a plain Startup member, the members agent only', async () => {
+    const clubs = await myAgents(USER.casey);
+    expect(clubs.map((c) => c.orgId)).toEqual([ORG.startup]);
+    expect(clubs[0].agents.map((a) => a.templateSlug)).toEqual(['handoff']);
+    expect(clubs[0].agents[0].reasonLabel).toBe('All members');
+  });
+
+  it('gives Taylor the funding pre-check as well, labelled by position', async () => {
+    const [startup] = await myAgents(USER.taylor);
+    expect(startup.agents.map((a) => a.templateSlug).sort()).toEqual(['funding-precheck', 'handoff']);
+    const precheck = startup.agents.find((a) => a.templateSlug === 'funding-precheck');
+    expect(precheck?.reasonLabel).toBe('Treasurer, President');
+  });
+
+  // The cross-club case: Morgan is Archery's treasurer and a plain member of Startup, so the
+  // pre-check follows her position in Archery and must not follow her into Startup.
+  it("gives Morgan Archery's pre-check but not Startup's", async () => {
+    const byOrg = new Map(
+      (await myAgents(USER.morgan)).map((c) => [c.orgId, c.agents.map((a) => a.templateSlug)]),
+    );
+    expect(byOrg.get(ORG.archery)).toContain('funding-precheck');
+    expect(byOrg.get(ORG.startup)).toContain('handoff');
+    expect(byOrg.get(ORG.startup)).not.toContain('funding-precheck');
+  });
+
+  it('gives Lee, who is in no club, nothing', async () => {
+    expect(await myAgents(USER.lee)).toEqual([]);
+  });
+});
+
+describe.skipIf(!probe)('directory · enabled public agents only', () => {
+  it("lists Dance's showcase Q&A and withholds Startup's unpublished recruiting Q&A", async () => {
+    const slugs = (await directory()).map((a) => a.templateSlug);
+    expect(slugs).toContain('showcase-qa');
+    expect(slugs).not.toContain('recruiting-qa'); // D3 publishes it on stage
+  });
+
+  it('labels every listing for any signed-in student', async () => {
+    for (const listing of await directory()) {
+      expect(listing.audience).toBe('public');
+      expect(listing.reasonLabel).toBe('All students');
     }
   });
 });

@@ -1,38 +1,54 @@
-// Owner: B (WP-5, real by H7). STUB over fixtures; membership is read through authz.grantsFor.
+// Owner: B (WP-5, real by H7). What a student's own clubs expose to them.
+import { activeMemberships } from '../authz';
 import type { AgentListing, MyAgentsClub } from '../contracts';
-import { grantsFor } from '../authz';
 import { canUse } from './effective-config';
-import { FIXTURE_AGENTS, FIXTURE_CLUB_NAMES } from './fixtures';
 import { positionName, reasonLabel } from './labels';
+import { loadAgents } from './queries';
 
-/** For each distinct club where the user is an active member: that club's enabled installations
- * that canUse admits, each with its reason label. */
+/**
+ * For each **distinct** club where the user is an active member: that club's enabled
+ * installations that `canUse` admits, each with its reason label.
+ *
+ * Morgan belongs to two clubs, and each club's agents are judged in that club — she gets
+ * Archery's funding pre-check as its treasurer, and only the member-level agents in Startup.
+ */
 export async function myAgents(userId: string): Promise<MyAgentsClub[]> {
+  const held = await activeMemberships(userId);
+  if (!held || held.length === 0) return [];
+
+  const orgIds = [...new Set(held.map((m) => m.orgId))];
+  const agents = await loadAgents({ orgIds, enabledOnly: true });
+
   const clubs: MyAgentsClub[] = [];
-  for (const orgId of Object.keys(FIXTURE_CLUB_NAMES)) {
-    const grants = await grantsFor(userId, orgId);
-    if (!grants.includes(`${orgId}:*`)) continue;
-    const agents: AgentListing[] = [];
-    for (const a of Object.values(FIXTURE_AGENTS)) {
-      if (a.orgId !== orgId || a.status !== 'enabled') continue;
-      const verdict = await canUse(userId, a);
+
+  for (const orgId of orgIds) {
+    const inOrg = held.filter((m) => m.orgId === orgId);
+    const orgName = inOrg[0]?.orgName ?? '';
+    const listings: AgentListing[] = [];
+
+    for (const agent of agents.filter((a) => a.orgId === orgId)) {
+      const verdict = await canUse(userId, agent);
       if (!verdict.ok) continue;
-      agents.push({
-        installationId: a.installationId,
+      listings.push({
+        installationId: agent.installationId,
         orgId,
-        orgName: FIXTURE_CLUB_NAMES[orgId],
-        templateSlug: a.templateSlug,
-        name: a.name,
-        purpose: a.purpose,
-        audience: a.audience,
-        reasonLabel: reasonLabel(verdict.reason, a.usableBy),
-        templateVersion: a.templateVersion,
+        orgName,
+        templateSlug: agent.templateSlug,
+        name: agent.name,
+        purpose: agent.purpose,
+        audience: agent.audience,
+        reasonLabel: reasonLabel(verdict.reason, agent.usableBy),
+        templateVersion: agent.templateVersion,
       });
     }
-    const positionNames = grants
-      .filter((g) => g.startsWith(`${orgId}:`) && g !== `${orgId}:*`)
-      .map((g) => positionName(g.slice(orgId.length + 1)));
-    clubs.push({ orgId, orgName: FIXTURE_CLUB_NAMES[orgId], positionNames, agents });
+
+    clubs.push({
+      orgId,
+      orgName,
+      positionNames: inOrg.map((m) => positionName(m.positionSlug)),
+      agents: listings,
+    });
   }
+
   return clubs;
 }
