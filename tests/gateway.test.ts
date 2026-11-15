@@ -570,8 +570,10 @@ describe.skipIf(!probe)('API routes', () => {
     expect(await ok.json()).toEqual({ id, tool: 'submit_application', status: 'rejected' });
     const [row] = await tx.select().from(pendingActions).where(eq(pendingActions.id, id));
     expect(row).toMatchObject({ status: 'rejected', confirmedBy: USER.sam });
-    expect((await call(confirmRoute, 'confirm', id, USER.sam)).status).toBe(400);
-    expect((await call(rejectRoute, 'reject', id, USER.sam)).status).toBe(400);
+    for (const again of [await call(confirmRoute, 'confirm', id, USER.sam), await call(rejectRoute, 'reject', id, USER.sam)]) {
+      expect(again.status).toBe(400);
+      expect(await again.json()).toEqual({ code: 'invalid', message: 'This action was already rejected.' });
+    }
 
     const rows = await newAudit(tx, base);
     expect(rows.filter((r) => r.action === 'tool.reject').map((r) => r.details)).toEqual([{ pendingActionId: id, tool: 'submit_application' }]);
@@ -582,7 +584,7 @@ describe.skipIf(!probe)('API routes', () => {
   it('GET /api/me returns the recomputed actor, or a signed-out one', async () => {
     const me = async (headers: Record<string, string>) => (await meRoute.GET(new Request('http://localhost/api/me', { headers }), { params: Promise.resolve({}) })).json();
     expect(await me({ cookie: cookie(USER.sam, ORG.startup) })).toEqual(await actorFor(USER.sam, ORG.startup));
-    expect(await me({})).toMatchObject({ userId: null });
+    expect(await me({})).toEqual({ userId: null, activeOrgId: null, positions: [], grants: [] });
   });
 
   it('POST /api/pending-actions/:id/confirm lets the run\'s own club member confirm once, and refuses everyone else', () => scenario(async (tx, base) => {

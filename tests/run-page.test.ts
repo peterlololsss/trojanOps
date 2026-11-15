@@ -3,7 +3,7 @@
 // skipped when it is unreachable. Markup tests are in tests/run-page-render.test.ts.
 import { afterAll, describe, expect, it } from 'vitest';
 import {
-  apiErrorFrom, canConfirm, citedSources, initialRunState, latestInspector, requestConfirm, requestReject, requestRun, runReducer,
+  apiErrorFrom, canConfirm, canReject, citedSources, initialRunState, latestInspector, requestConfirm, requestReject, requestRun, runReducer,
   type FetchJson, type RunEvent, type RunState,
 } from '@/components/inspector/run-state';
 import { AppError, type RunResult } from '@/lib/contracts';
@@ -198,6 +198,9 @@ describe('run workspace state', () => {
     state = runReducer(state, { type: 'confirmed', id: 'pa-1' });
     expect(state.actions['pa-1']).toEqual({ status: 'confirmed' });
 
+    state = runReducer(state, { type: 'reject_started', id: 'pa-2' });
+    expect(state.actions['pa-2']).toEqual({ status: 'rejecting' });
+    expect(runReducer(state, { type: 'confirm_started', id: 'pa-2' })).toBe(state);
     state = runReducer(state, { type: 'rejected', id: 'pa-2' });
     expect(state.actions['pa-2']).toEqual({ status: 'rejected' });
     // Settled actions don't move again, and unknown ids change nothing.
@@ -212,7 +215,9 @@ describe('run workspace state', () => {
     state = runReducer(state, { type: 'confirm_failed', id: 'pa-1', message: 'You cannot confirm this action.', retry: false });
     expect(canConfirm(state.actions['pa-1'])).toBe(false);
     expect(runReducer(state, { type: 'confirm_started', id: 'pa-1' })).toBe(state);
-    expect(runReducer(state, { type: 'rejected', id: 'pa-1' }).actions['pa-1']).toEqual({ status: 'rejected' });
+    expect(canReject(state.actions['pa-1'])).toBe(false);
+    expect(runReducer(state, { type: 'reject_started', id: 'pa-1' })).toBe(state);
+    expect(runReducer(state, { type: 'rejected', id: 'pa-1' })).toBe(state);
   });
 
   it('reads an ApiError body and falls back for anything else', () => {
@@ -273,8 +278,10 @@ describe('run workspace requests', () => {
     expect(calls[0]).toEqual({ url: '/api/pending-actions/pa-1/reject', init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' } });
     expect(await requestReject(stub(false, { code: 'forbidden', message: 'You cannot reject this action.' }), 'pa-1', 'fallback'))
       .toEqual({ type: 'reject_failed', id: 'pa-1', message: 'You cannot reject this action.', retry: false });
-    const pending: RunState = { ...initialRunState, actions: { 'pa-1': { status: 'pending' } } };
-    expect(runReducer(pending, { type: 'reject_failed', id: 'pa-1', message: 'm', retry: true }).actions['pa-1'])
+    const rejecting: RunState = { ...initialRunState, actions: { 'pa-1': { status: 'rejecting' } } };
+    expect(runReducer(rejecting, { type: 'reject_failed', id: 'pa-1', message: 'm', retry: true }).actions['pa-1'])
       .toEqual({ status: 'failed', message: 'm', retry: true });
+    const pending: RunState = { ...initialRunState, actions: { 'pa-1': { status: 'pending' } } };
+    expect(runReducer(pending, { type: 'reject_failed', id: 'pa-1', message: 'm', retry: true })).toBe(pending);
   });
 });

@@ -188,7 +188,7 @@ Every id is `uuid default gen_random_uuid()`; every table has `created_at` writt
   - RLS: select only where `user_id::text = current_setting('app.user_id', true)`.
   - View `agent_runs_meta` (every column except `input` and `output`) for club and USG pages,
     filtered by org in the service.
-- `pending_actions(id, run_id, org_id, user_id, tool text, args jsonb, status text check (status in ('pending','confirmed','rejected')), confirmed_by null, confirmed_at null)`
+- `pending_actions(id, run_id, org_id, user_id, tool text, args jsonb, status text check (status in ('pending','confirmed','rejected')), confirmed_by null, confirmed_at null)`: `confirmed_by` and `confirmed_at` record whoever decided, confirm or reject
 - `quota_limits(id, scope text check (scope in ('platform','org','member','installation','student_daily')), org_id null, user_id null, installation_id null, limit_micro bigint, set_by, set_at)`
 - `ai_usage(id, run_id, billed_org_id, user_id, installation_id, is_public bool, model text, kind text check (kind in ('hold','settle','release')), amount_micro bigint, created_at)`
 - `audit_events(id bigserial, ts, actor_user_id null, acting_org_id null, action text, run_id null, installation_id null, target_type text, target_id text, details jsonb)`
@@ -709,7 +709,7 @@ Every handler: `const actor = await getActor(req)` → one service call → JSON
 
 | Method and path | Service | Who | Stream |
 |---|---|---|---|
-| POST `/api/session/persona`, POST `/api/session/active-org`, GET `/api/me` | identity | `DEMO_MODE` / any | A |
+| POST `/api/session/persona`, POST `/api/session/active-org`, GET `/api/me` (returns `Actor`) | identity | `DEMO_MODE` / any | A |
 | POST `/api/agents/:installationId/runs` | `gateway.runAgent` | per audience | A |
 | POST `/api/pending-actions/:id/confirm` (body `{}`) | `gateway.confirm` | the run's user, a member of the action's club (narrowed per tool) | A |
 | POST `/api/pending-actions/:id/reject` (body `{}`) | `gateway.reject` | the same as confirm | A |

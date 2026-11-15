@@ -1,12 +1,13 @@
 // Owner: C (WP-9). A pending write action (I6) inline in the transcript: nothing runs until the user
-// who ran the agent confirms it. Presentational; <RunWorkspace /> owns the requests.
+// who ran the agent confirms it. A reject is recorded by the gateway and is final too.
+// Presentational; <RunWorkspace /> owns the requests.
 // Status is icon + word, never color alone. One always-mounted live region per card carries the
 // progress and outcome, so screen readers announce each change.
 import { AlertCircle, Check, CircleSlash, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Chip } from './chip';
 import { humanizeTool } from './format';
-import { canConfirm, type ActionStatus } from './run-state';
+import { canConfirm, canReject, type ActionStatus } from './run-state';
 
 export interface PendingActionCardProps {
   action: { id: string; tool: string };
@@ -17,6 +18,7 @@ export interface PendingActionCardProps {
 
 function LiveStatus({ status }: { status: ActionStatus }) {
   const content = status.status === 'confirming' ? { icon: Clock, text: 'Confirming…', style: '' }
+    : status.status === 'rejecting' ? { icon: Clock, text: 'Rejecting…', style: '' }
     : status.status === 'confirmed' ? { icon: Check, text: 'Confirmed and recorded in the audit log.', style: 'text-success' }
       : status.status === 'rejected' ? { icon: CircleSlash, text: 'Rejected. Nothing ran.', style: 'text-muted-foreground' }
         : null;
@@ -37,7 +39,7 @@ export function PendingActionCard({ action, status, onConfirm, onReject }: Pendi
   const confirmable = canConfirm(status);
   const finalRefusal = status.status === 'failed' && !status.retry;
   const waiting = confirmable || status.status === 'confirming';
-  const rejectable = status.status === 'pending' || status.status === 'failed';
+  const rejectable = canReject(status);
   const name = humanizeTool(action.tool);
 
   return (
@@ -58,7 +60,7 @@ export function PendingActionCard({ action, status, onConfirm, onReject }: Pendi
           <div>
             <p>{status.retry ? `${status.message} You can try again.` : status.message}</p>
             {finalRefusal && (
-              <p className="text-muted-foreground">Only the person who ran the agent, as a member of the agent’s club, can confirm it.</p>
+              <p className="text-muted-foreground">Only the person who ran the agent, as a member of the agent’s club, can confirm or reject it.</p>
             )}
           </div>
         </div>

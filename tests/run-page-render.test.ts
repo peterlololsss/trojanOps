@@ -125,7 +125,7 @@ describe('run page markup', () => {
 
   it('always renders exactly one live region per card, empty while pending', () => {
     const states: ActionStatus[] = [
-      { status: 'pending' }, { status: 'confirming' }, { status: 'confirmed' }, { status: 'rejected' },
+      { status: 'pending' }, { status: 'confirming' }, { status: 'rejecting' }, { status: 'confirmed' }, { status: 'rejected' },
       { status: 'failed', message: 'Could not confirm this action.', retry: true },
       { status: 'failed', message: 'This action was already handled.', retry: false },
     ];
@@ -148,8 +148,8 @@ describe('run page markup', () => {
     expect(refused).toContain('role="alert"');
     expect(text(refused)).toContain('You can’t confirm this action.');
     expect(text(refused)).not.toContain('You can try again');
-    expect(text(refused)).toContain('Only the person who ran the agent, as a member of the agent’s club, can confirm it.');
-    expect(buttons(refused)).toEqual(['Reject']);
+    expect(text(refused)).toContain('Only the person who ran the agent, as a member of the agent’s club, can confirm or reject it.');
+    expect(buttons(refused)).toEqual([]);
     expect(text(refused)).not.toContain('Waits for you to confirm');
   });
 

@@ -12,6 +12,7 @@ export type Turn =
 export type ActionStatus =
   | { status: 'pending' }
   | { status: 'confirming' }
+  | { status: 'rejecting' }
   | { status: 'confirmed' }
   | { status: 'rejected' }
   /** `retry` is false when the gateway refused for good (forbidden, already handled, not found): the
@@ -34,6 +35,7 @@ export type RunEvent =
   | { type: 'confirm_started'; id: string }
   | { type: 'confirmed'; id: string }
   | { type: 'confirm_failed'; id: string; message: string; retry: boolean }
+  | { type: 'reject_started'; id: string }
   | { type: 'rejected'; id: string }
   | { type: 'reject_failed'; id: string; message: string; retry: boolean };
 
@@ -49,6 +51,9 @@ function setAction(state: RunState, id: string, next: ActionStatus, from: Array<
 export function canConfirm(status: ActionStatus | undefined): boolean {
   return status?.status === 'pending' || (status?.status === 'failed' && status.retry);
 }
+
+/** Reject is offered exactly when Confirm is: after a final refusal the gateway refuses both. */
+export const canReject = canConfirm;
 
 export function runReducer(state: RunState, event: RunEvent): RunState {
   switch (event.type) {
@@ -80,10 +85,12 @@ export function runReducer(state: RunState, event: RunEvent): RunState {
       return setAction(state, event.id, { status: 'confirmed' }, ['confirming']);
     case 'confirm_failed':
       return setAction(state, event.id, { status: 'failed', message: event.message, retry: event.retry }, ['confirming']);
+    case 'reject_started':
+      return canReject(state.actions[event.id]) ? setAction(state, event.id, { status: 'rejecting' }, ['pending', 'failed']) : state;
     case 'rejected':
-      return setAction(state, event.id, { status: 'rejected' }, ['pending', 'failed']);
+      return setAction(state, event.id, { status: 'rejected' }, ['rejecting']);
     case 'reject_failed':
-      return setAction(state, event.id, { status: 'failed', message: event.message, retry: event.retry }, ['pending', 'failed']);
+      return setAction(state, event.id, { status: 'failed', message: event.message, retry: event.retry }, ['rejecting']);
   }
 }
 

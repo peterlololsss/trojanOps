@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import type { ApiError } from '@/lib/contracts';
 import { Inspector } from './inspector';
 import { InspectorPlaceholder } from './inspector-placeholder';
-import { canConfirm, initialRunState, latestInspector, requestConfirm, requestReject, requestRun, runReducer } from './run-state';
+import { canConfirm, canReject, initialRunState, latestInspector, requestConfirm, requestReject, requestRun, runReducer } from './run-state';
 import { Transcript } from './transcript';
 
 export interface RunWorkspaceProps {
@@ -81,7 +81,8 @@ export function RunWorkspace({ installationId, agentName, demoRuntime }: RunWork
   }
 
   async function reject(id: string) {
-    if (!canConfirm(state.actions[id])) return;
+    if (!canReject(state.actions[id])) return;
+    dispatch({ type: 'reject_started', id });
     dispatch(await requestReject(fetch, id, 'Could not reject this action. Check your connection and try again.'));
   }
 
