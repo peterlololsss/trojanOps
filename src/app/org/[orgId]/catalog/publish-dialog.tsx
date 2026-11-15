@@ -13,9 +13,11 @@ import { Button } from '@/components/ui/button';
 import type { CatalogEntry } from '@/lib/distribution';
 import { publishConfirmation, publishErrorMessage } from './catalog-view';
 
-export function PublishButton({ orgId, orgName, entry, onPublished }: {
+export function PublishButton({ orgId, orgName, clubLimitMicro, entry, onPublished }: {
   orgId: string;
   orgName: string;
+  /** The club's monthly quota: §8's default budget is half of it. */
+  clubLimitMicro: number;
   entry: CatalogEntry;
   onPublished: (name: string) => void;
 }) {
@@ -23,7 +25,7 @@ export function PublishButton({ orgId, orgName, entry, onPublished }: {
   const dialog = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const copy = publishConfirmation(entry, orgName);
+  const copy = publishConfirmation(entry, orgName, clubLimitMicro);
   const titleId = `publish-title-${entry.installationId}`;
 
   function publish() {

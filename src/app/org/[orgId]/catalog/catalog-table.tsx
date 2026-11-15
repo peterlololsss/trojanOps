@@ -108,6 +108,7 @@ export function CatalogTable({ data }: { data: ClubCatalog }) {
               <PublishButton
                 orgId={data.orgId}
                 orgName={data.orgName}
+                clubLimitMicro={data.clubLimitMicro}
                 entry={entry}
                 onPublished={setPublished}
               />
@@ -138,6 +139,12 @@ export function CatalogTable({ data }: { data: ClubCatalog }) {
           </span>
         </p>
       )}
+      {data.canManage && data.agents.some((entry) => publishState(entry, true) === 'unavailable') && (
+        <p className="text-muted-foreground">
+          An agent can be opened to all students only when USG published its template for the whole
+          campus and lets {data.orgName} publish. The others stay internal to the club.
+        </p>
+      )}
       <p role="status" className="text-muted-foreground">
         {published
           ? `${published} is published. Anyone signed in with a USC account can use it from the campus directory.`
@@ -150,7 +157,7 @@ export function CatalogTable({ data }: { data: ClubCatalog }) {
         rowHeaderColumn="agent"
         sorted={{ id: 'agent', direction: 'asc' }}
         minWidth={1180}
-        empty={`No agents are installed in ${data.orgName} yet. USG distributes templates to clubs; ask USG for the one you need.`}
+        empty={`No agents are installed in ${data.orgName} yet. USG distributes agent templates to clubs; ask USG to distribute the one this club needs.`}
       />
     </div>
   );

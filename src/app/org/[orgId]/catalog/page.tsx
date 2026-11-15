@@ -22,8 +22,8 @@ export default async function CatalogPage({ params }: { params: Promise<{ orgId:
     );
   }
 
-  // `catalog()` answers null for an unknown club and for one with nothing installed alike; both are
-  // "no such catalog" to a reader. See the note in ../club-home-data.ts.
+  // Null means there is no such club; a club with nothing installed answers with an empty list and
+  // gets the table's "nothing yet" row.
   const found = await catalog(actor, orgId);
   if (!found) notFound();
 

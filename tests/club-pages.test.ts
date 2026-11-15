@@ -6,7 +6,7 @@ import {
 } from '@/app/org/[orgId]/club-home-data';
 import { usageSummary } from '@/app/org/[orgId]/club-home-view';
 import {
-  accessLabel, audienceLabel, publishConfirmation, publishErrorMessage, publishState,
+  accessLabel, audienceLabel, publishBudget, publishConfirmation, publishErrorMessage, publishState,
 } from '@/app/org/[orgId]/catalog/catalog-view';
 import type { Actor, QuotaRemaining } from '@/lib/contracts';
 import { catalog, type CatalogEntry } from '@/lib/distribution';
@@ -49,7 +49,9 @@ describe('catalog rows · what each row says', () => {
   it('names the audience without claiming the viewer may use it', () => {
     expect(audienceLabel(entry())).toBe('All students');
     expect(audienceLabel(entry({ audience: 'members' }))).toBe('All members');
-    expect(audienceLabel(entry({ audience: 'positions' }))).toBe('Named positions');
+    expect(audienceLabel(entry({ audience: 'positions', usableBy: ['treasurer', 'president'] })))
+      .toBe('Treasurer, President');
+    expect(audienceLabel(entry({ audience: 'positions' }))).toBe('No positions');
   });
 
   it('explains a row the viewer cannot run instead of leaving it blank', () => {
@@ -73,21 +75,47 @@ describe('catalog · when D3’s publish action is offered', () => {
   it('says a retired template cannot be published rather than offering it', () => {
     expect(publishState(entry({ status: 'retired' }), true)).toBe('retired');
   });
+
+  it('never offers it on an agent the service says could not be published', () => {
+    // `handoff`: a members-wide template version, so publishing could only return a clamp violation.
+    const internal = entry({
+      templateSlug: 'handoff', name: 'Club handoff', audience: 'members', status: 'enabled',
+      isPublic: false, canPublishPublic: false,
+    });
+    expect(publishState(internal, true)).toBe('unavailable');
+  });
 });
 
 describe('catalog · the publish confirmation (§8)', () => {
-  const confirmation = publishConfirmation(entry(), 'Startup Club');
+  const confirmation = publishConfirmation(entry(), 'Startup Club', 5 * USD);
 
-  it('names who gains access, the tier it may read and what it may spend', () => {
+  it('names who gains access, the tier it may read and the budget it gets', () => {
     expect(confirmation.title).toBe('Publish Recruiting Q&A to all students?');
     expect(confirmation.points[0]).toContain('Anyone signed in with a USC account');
     expect(confirmation.points[1]).toContain('Public tier');
-    expect(confirmation.points[2]).toContain('half of Startup Club\'s monthly quota');
+    // No budget of its own yet: half of the club's $5.00 quota, as a figure.
+    expect(confirmation.points[2])
+      .toBe('Its runs are billed to Startup Club, on a monthly budget of $2.50: half of the club\'s $5.00 quota.');
+  });
+
+  it('names the budget the agent already carries instead of the default', () => {
+    expect(publishConfirmation(entry({ limitMicro: 2.5 * USD }), 'Startup Club', 5 * USD).points[2])
+      .toBe('Its runs are billed to Startup Club, against the monthly budget of $2.50 it already has.');
+  });
+
+  it('says a club with no quota cannot publish, rather than offering a $0.00 budget', () => {
+    expect(publishConfirmation(entry(), 'Robotics Club', 0).points[2])
+      .toBe('Robotics Club has no monthly AI quota yet, so publishing is refused until USG sets one.');
+  });
+
+  it('works out the budget from the agent, then from half the club quota', () => {
+    expect(publishBudget(entry({ limitMicro: 2.5 * USD }), 5 * USD)).toEqual({ micro: 2.5 * USD, source: 'own' });
+    expect(publishBudget(entry(), 5 * USD)).toEqual({ micro: 2.5 * USD, source: 'half' });
   });
 
   it('warns that publishing also turns a switched-off agent on', () => {
     expect(confirmation.points.at(-1)).toBe('Recruiting Q&A is turned off today. Publishing turns it on.');
-    expect(publishConfirmation(entry({ status: 'enabled' }), 'Startup Club').points).toHaveLength(3);
+    expect(publishConfirmation(entry({ status: 'enabled' }), 'Startup Club', 5 * USD).points).toHaveLength(3);
   });
 
   it('shows the service’s own message when a publish is refused', async () => {
@@ -162,17 +190,26 @@ describe.skipIf(!probe)('club home · page data', () => {
     expect(await getClubHome(await actorFor(USER.sam, ORG.startup), crypto.randomUUID())).toBeNull();
   });
 
-  it('offers D3’s publish row on the seeded recruiting Q&A, and nothing to a non-president', async () => {
+  it('offers D3’s publish row on the seeded recruiting Q&A alone, and nothing to a non-president', async () => {
     const sam = await actorFor(USER.sam, ORG.startup);
     const startup = await catalog(sam, ORG.startup);
     const offered = startup!.agents
       .filter((agent) => publishState(agent, startup!.canManage) === 'available')
       .map((agent) => agent.templateSlug);
-    // Startup's recruiting Q&A is the demo row; a president may widen an internal agent too, so the
-    // confirmation is what has to name the consequences.
-    expect(offered).toContain('recruiting-qa');
+    // Only the template version USG published campus-wide: `handoff` is members-wide, so a button on
+    // it could only ever return a clamp violation.
+    expect(offered).toEqual(['recruiting-qa']);
+    expect(publishState(startup!.agents.find((a) => a.templateSlug === 'handoff')!, true)).toBe('unavailable');
 
     const dance = await catalog(sam, ORG.dance);
     expect(dance!.agents.every((agent) => publishState(agent, dance!.canManage) === null)).toBe(true);
+  });
+
+  it('names the seeded $2.50 budget in the confirmation, not the rule that sets it', async () => {
+    const startup = await catalog(await actorFor(USER.sam, ORG.startup), ORG.startup);
+    expect(startup!.clubLimitMicro).toBe(5 * USD);
+    const recruiting = startup!.agents.find((agent) => agent.templateSlug === 'recruiting-qa')!;
+    expect(publishConfirmation(recruiting, startup!.orgName, startup!.clubLimitMicro).points[2])
+      .toContain('$2.50');
   });
 });

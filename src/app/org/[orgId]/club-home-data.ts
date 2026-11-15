@@ -2,9 +2,8 @@
 // this month"), loaded through the services that own each half: distribution for the agents, C's
 // library for the documents, A's quota ledger for the spend. Nothing here touches the database.
 //
-// `catalog()` is the only distribution service that names a club, so it doubles as the club lookup:
-// a club with no installations at all is indistinguishable from an unknown id and renders as not
-// found. A `clubProfile(orgId)` on the distribution side would separate the two.
+// `catalog()` is the distribution service that names a club, so it doubles as the club lookup: it
+// answers null only for a club that does not exist, which is this page's `notFound()`.
 import { requireUser } from '@/lib/api';
 import type { Actor, LibraryDocument, MyAgentsClub, QuotaRemaining } from '@/lib/contracts';
 import { catalog, myAgents } from '@/lib/distribution';

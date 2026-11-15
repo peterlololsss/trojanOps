@@ -26,8 +26,7 @@ export default async function ClubHomePage({ params }: { params: Promise<{ orgId
     );
   }
 
-  // The club's name comes from the catalog, so an unknown club and a club with nothing installed
-  // both land here. See the note in club-home-data.ts.
+  // Null is a club that does not exist; a club with nothing installed still has a home page.
   const home = await getClubHome(actor, orgId);
   if (!home) notFound();
 
