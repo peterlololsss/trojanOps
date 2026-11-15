@@ -43,8 +43,10 @@ export interface LibraryView {
   empty: LibraryEmptyState;
 }
 
-/** Applies search (title or source name, case-insensitive) and the tier filter, keeps the input
- * order, and returns one page. An out-of-range page is clamped rather than rejected. */
+/** Applies search and the tier filter, keeps the input order, and returns one page. Search
+ * normalisation is trim plus toLowerCase; a document matches when its title or its source name
+ * contains the needle, each checked on its own, so a needle never matches across the two. An
+ * out-of-range page is clamped rather than rejected. */
 export function viewLibrary(
   documents: readonly LibraryDocument[],
   query: LibraryQuery,
@@ -52,7 +54,7 @@ export function viewLibrary(
 ): LibraryView {
   const needle = query.search.trim().toLowerCase();
   const matches = documents.filter((doc) => (!query.tier || doc.tier === query.tier)
-    && (!needle || `${doc.title} ${doc.sourceName}`.toLowerCase().includes(needle)));
+    && (!needle || [doc.title, doc.sourceName].some((text) => text.toLowerCase().includes(needle))));
   const pageCount = Math.max(1, Math.ceil(matches.length / pageSize));
   const page = Math.min(Math.max(0, Math.trunc(query.page) || 0), pageCount - 1);
   return {

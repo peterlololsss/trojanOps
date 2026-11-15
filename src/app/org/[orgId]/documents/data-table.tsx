@@ -33,7 +33,7 @@ export function DataTable<TFeatures extends TableFeatures, TData extends RowData
   const rows = table.getRowModel().rows;
   const columnCount = table.getAllLeafColumns().length;
   return (
-    <div className="overflow-x-auto rounded-md border border-border">
+    <div tabIndex={0} role="region" aria-label={caption} className="overflow-x-auto rounded-md border border-border">
       <table className="w-full border-collapse text-left" style={{ minWidth }}>
         <caption className="sr-only">{caption}</caption>
         <thead className="bg-muted">

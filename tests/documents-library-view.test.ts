@@ -53,6 +53,13 @@ describe('library view: filters', () => {
     expect(viewLibrary(docs, { ...initialQuery, search: 'document 2' }).rows.map((d) => d.id)).toEqual(['doc-2']);
   });
 
+  it('does not match a needle that spans the title and source boundary', () => {
+    const one = [doc(1, 'members', 'Club files')];
+    expect(viewLibrary(one, { ...initialQuery, search: 'document 1 club' }).matching).toBe(0);
+    expect(viewLibrary(one, { ...initialQuery, search: '1 club' }).matching).toBe(0);
+    expect(viewLibrary(one, { ...initialQuery, search: 'CLUB FILES' }).matching).toBe(1);
+  });
+
   it('filters by tier and combines with search', () => {
     expect(viewLibrary(docs, { ...initialQuery, tier: 'members' }).matching).toBe(2);
     const both = viewLibrary(docs, { search: 'minutes', tier: 'members', page: 0 });

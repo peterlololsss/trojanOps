@@ -39,6 +39,9 @@ const columns = column.columns([
   }),
 ]);
 
+const pageButton = 'aria-disabled:cursor-not-allowed aria-disabled:opacity-50';
+const plural = (count: number) => (count === 1 ? 'document' : 'documents');
+
 export function DocumentLibrary({ data }: { data: LibraryPageData }) {
   const [query, setQuery] = useState(initialQuery);
   const view = useMemo(() => viewLibrary(data.documents, query), [data.documents, query]);
@@ -50,7 +53,7 @@ export function DocumentLibrary({ data }: { data: LibraryPageData }) {
       {data.canUpload ? <UploadForm data={data} /> : (
         <p className="flex items-start gap-2 rounded-md border border-border bg-muted p-3 text-muted-foreground">
           <Lock aria-hidden className="mt-0.5 size-4 shrink-0" />
-          <span>Only this club’s president can upload documents, with this club active. Ask your president to upload, or{' '}
+          <span>Only a president of this club can upload documents, with this club active. If you are a president,{' '}
             <Link href="/" className="text-primary underline">switch your persona or active club</Link>.
           </span>
         </p>
@@ -77,8 +80,10 @@ export function DocumentLibrary({ data }: { data: LibraryPageData }) {
               {tierOptions(data.org.kind).map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
-          {view.filtered && <Button variant="ghost" onClick={clearFilters}>Clear filters</Button>}
-          <p role="status" className="pb-2 text-muted-foreground">{view.matching} of {view.total} documents</p>
+          {view.filtered && view.empty !== 'no-results' && <Button variant="ghost" onClick={clearFilters}>Clear filters</Button>}
+          <p role="status" className="pb-2 text-muted-foreground">
+            {view.filtered ? `${view.matching} of ${view.total} ${plural(view.total)}` : `${view.total} ${plural(view.total)}`}
+          </p>
         </div>
         <DataTable
           table={table}
@@ -93,9 +98,15 @@ export function DocumentLibrary({ data }: { data: LibraryPageData }) {
         />
         {view.pageCount > 1 && (
           <nav aria-label="Document pages" className="mt-3 flex items-center justify-end gap-3">
-            <Button variant="secondary" size="sm" disabled={view.page === 0} onClick={() => setQuery({ ...query, page: view.page - 1 })}>Previous</Button>
-            <span>Page {view.page + 1} of {view.pageCount}</span>
-            <Button variant="secondary" size="sm" disabled={view.page === view.pageCount - 1} onClick={() => setQuery({ ...query, page: view.page + 1 })}>Next</Button>
+            <Button
+              variant="secondary" size="sm" className={pageButton} aria-disabled={view.page === 0}
+              onClick={() => { if (view.page > 0) setQuery({ ...query, page: view.page - 1 }); }}
+            >Previous</Button>
+            <span aria-live="polite">Page {view.page + 1} of {view.pageCount}</span>
+            <Button
+              variant="secondary" size="sm" className={pageButton} aria-disabled={view.page === view.pageCount - 1}
+              onClick={() => { if (view.page < view.pageCount - 1) setQuery({ ...query, page: view.page + 1 }); }}
+            >Next</Button>
           </nav>
         )}
       </section>

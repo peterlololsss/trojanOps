@@ -1,4 +1,4 @@
-# WP-8 slice 3: document library page
+# Document library page
 
 The page at `/org/[orgId]/documents` shows the documents the viewer can read in a club, with search, a
 tier filter and pagination, and a president-only upload form. It backs the permissions story (what a
