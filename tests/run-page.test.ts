@@ -3,7 +3,7 @@
 // skipped when it is unreachable. Markup tests are in tests/run-page-render.test.ts.
 import { afterAll, describe, expect, it } from 'vitest';
 import {
-  apiErrorFrom, canConfirm, citedSources, initialRunState, latestInspector, requestConfirm, requestRun, runReducer,
+  apiErrorFrom, canConfirm, citedSources, initialRunState, latestInspector, requestConfirm, requestReject, requestRun, runReducer,
   type FetchJson, type RunEvent, type RunState,
 } from '@/components/inspector/run-state';
 import { AppError, type RunResult } from '@/lib/contracts';
@@ -264,5 +264,17 @@ describe('run workspace requests', () => {
       .toEqual({ type: 'confirm_failed', id: 'pa-1', message: 'You cannot confirm this action.', retry: false });
     expect(await requestConfirm(stub(false, undefined), 'pa-1', 'fallback'))
       .toEqual({ type: 'confirm_failed', id: 'pa-1', message: 'fallback', retry: true });
+  });
+
+  it('rejects through the gateway route with an empty JSON body', async () => {
+    const calls: Call[] = [];
+    expect(await requestReject(stub(true, { id: 'pa-1', tool: 't', status: 'rejected' }, calls), 'pa-1', 'fallback'))
+      .toEqual({ type: 'rejected', id: 'pa-1' });
+    expect(calls[0]).toEqual({ url: '/api/pending-actions/pa-1/reject', init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' } });
+    expect(await requestReject(stub(false, { code: 'forbidden', message: 'You cannot reject this action.' }), 'pa-1', 'fallback'))
+      .toEqual({ type: 'reject_failed', id: 'pa-1', message: 'You cannot reject this action.', retry: false });
+    const pending: RunState = { ...initialRunState, actions: { 'pa-1': { status: 'pending' } } };
+    expect(runReducer(pending, { type: 'reject_failed', id: 'pa-1', message: 'm', retry: true }).actions['pa-1'])
+      .toEqual({ status: 'failed', message: 'm', retry: true });
   });
 });

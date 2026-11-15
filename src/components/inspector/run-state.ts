@@ -8,9 +8,7 @@ export type Turn =
   | { kind: 'you'; key: string; text: string }
   | { kind: 'agent'; key: string; result: RunResult };
 
-/** A pending write action (I6) as the run page shows it. `rejected` is dismissed in this browser only:
- * the row stays pending on the server, so nothing ever runs.
- * TODO(verify): switch Reject to POST /api/pending-actions/:id/reject once stream A adds it (requested). */
+/** A pending write action (I6) as the run page shows it. Confirm and Reject both go to the gateway. */
 export type ActionStatus =
   | { status: 'pending' }
   | { status: 'confirming' }
@@ -36,7 +34,8 @@ export type RunEvent =
   | { type: 'confirm_started'; id: string }
   | { type: 'confirmed'; id: string }
   | { type: 'confirm_failed'; id: string; message: string; retry: boolean }
-  | { type: 'rejected'; id: string };
+  | { type: 'rejected'; id: string }
+  | { type: 'reject_failed'; id: string; message: string; retry: boolean };
 
 export const initialRunState: RunState = { turns: [], running: false, error: null, actions: {} };
 
@@ -83,6 +82,8 @@ export function runReducer(state: RunState, event: RunEvent): RunState {
       return setAction(state, event.id, { status: 'failed', message: event.message, retry: event.retry }, ['confirming']);
     case 'rejected':
       return setAction(state, event.id, { status: 'rejected' }, ['pending', 'failed']);
+    case 'reject_failed':
+      return setAction(state, event.id, { status: 'failed', message: event.message, retry: event.retry }, ['pending', 'failed']);
   }
 }
 
@@ -147,6 +148,21 @@ export async function requestConfirm(fetchFn: FetchJson, id: string, fallback: s
       : { type: 'confirm_failed', id, message: fallback, retry: true };
   } catch {
     return { type: 'confirm_failed', id, message: fallback, retry: true };
+  }
+}
+
+/** A human rejects a pending write action: POST /api/pending-actions/:id/reject with `{}`. Errors are
+ * handled as for confirm. */
+export async function requestReject(fetchFn: FetchJson, id: string, fallback: string): Promise<RunEvent> {
+  try {
+    const res = await postJson(fetchFn, `/api/pending-actions/${encodeURIComponent(id)}/reject`, {});
+    if (res.ok) return { type: 'rejected', id };
+    const error = apiErrorFrom(res.body, '');
+    return error.message
+      ? { type: 'reject_failed', id, message: error.message, retry: false }
+      : { type: 'reject_failed', id, message: fallback, retry: true };
+  } catch {
+    return { type: 'reject_failed', id, message: fallback, retry: true };
   }
 }
 

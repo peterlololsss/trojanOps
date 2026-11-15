@@ -6,7 +6,7 @@ import { AppError, type AuditAction } from '@/lib/contracts';
 import { listAudit } from '@/lib/gateway/audit';
 
 const ACTIONS = [
-  'agent.run', 'run.access', 'tool.call', 'tool.confirm',
+  'agent.run', 'run.access', 'tool.call', 'tool.confirm', 'tool.reject',
   'authz.denied', 'quota.blocked', 'quota.limit.set',
   'template.publish', 'template.distribute', 'template.retire',
   'installation.update', 'installation.rejected', 'agent.publish_public',

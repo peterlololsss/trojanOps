@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import type { ApiError } from '@/lib/contracts';
 import { Inspector } from './inspector';
 import { InspectorPlaceholder } from './inspector-placeholder';
-import { canConfirm, initialRunState, latestInspector, requestConfirm, requestRun, runReducer } from './run-state';
+import { canConfirm, initialRunState, latestInspector, requestConfirm, requestReject, requestRun, runReducer } from './run-state';
 import { Transcript } from './transcript';
 
 export interface RunWorkspaceProps {
@@ -80,6 +80,11 @@ export function RunWorkspace({ installationId, agentName, demoRuntime }: RunWork
     dispatch(await requestConfirm(fetch, id, 'Could not confirm this action. Check your connection and try again.'));
   }
 
+  async function reject(id: string) {
+    if (!canConfirm(state.actions[id])) return;
+    dispatch(await requestReject(fetch, id, 'Could not reject this action. Check your connection and try again.'));
+  }
+
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (state.running) return;   // progress is already showing; the reducer ignores it too
@@ -99,7 +104,7 @@ export function RunWorkspace({ installationId, agentName, demoRuntime }: RunWork
           agentName={agentName}
           demoRuntime={demoRuntime}
           onConfirm={(id) => void confirm(id)}
-          onReject={(id) => dispatch({ type: 'rejected', id })}
+          onReject={(id) => void reject(id)}
         />
         <div ref={endRef} />
 

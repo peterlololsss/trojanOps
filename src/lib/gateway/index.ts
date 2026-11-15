@@ -16,7 +16,7 @@ import { listAccessibleDocuments, listBlockedDocuments } from '../documents/acce
 import { getRuntime } from '../runtime';
 import { audit } from './audit';
 import { headroom, hold, settle, type QuotaHold } from './quota';
-import { confirm } from './confirm';
+import { confirm, reject } from './confirm';
 import { toolKind } from './tools';
 
 async function orgName(orgId: string): Promise<string> {
@@ -206,4 +206,4 @@ async function queueActions(
   return queued;
 }
 
-export const gateway = { runAgent, confirm };
+export const gateway = { runAgent, confirm, reject };

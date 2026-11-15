@@ -67,6 +67,7 @@ export const agentInstallations = pgTable('agent_installations', {
 }, (t) => [
   unique('agent_installations_template_org_unique').on(t.templateId, t.orgId),
   check('agent_installations_track_check', sql`${t.track} in ('latest', 'pinned')`),
+  check('agent_installations_pinned_version_check', sql`${t.track} <> 'pinned' or ${t.pinnedVersion} is not null`),
   check('agent_installations_audience_check', sql`${t.audience} is null or ${t.audience} in ('public', 'members', 'positions')`),
   check('agent_installations_model_class_check', sql`${t.modelClass} is null or ${t.modelClass} in ('standard', 'economy')`),
 ]);

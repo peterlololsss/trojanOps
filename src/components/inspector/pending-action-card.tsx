@@ -71,7 +71,6 @@ export function PendingActionCard({ action, status, onConfirm, onReject }: Pendi
           {confirmable && (
             <Button type="button" className="h-[32px] px-[12px]" onClick={() => onConfirm?.(action.id)}>Confirm</Button>
           )}
-          {/* TODO(verify): Reject is dismissed in this browser only; switch to POST /api/pending-actions/:id/reject once stream A adds it. */}
           {rejectable && (
             <Button type="button" variant="outline" className="h-[32px] px-[12px]" onClick={() => onReject?.(action.id)}>Reject</Button>
           )}

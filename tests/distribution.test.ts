@@ -433,16 +433,12 @@ describe.skipIf(!probe)('loadAgents · nothing disappears quietly', () => {
     expect((await loadAgents({})).length).toBe(count);
   });
 
-  // pinned_version is nullable and no constraint ties it to track, so a row like this is
-  // reachable. It used to resolve to NULL, match no version, and vanish from every page.
-  it('falls back to the latest version when a pin names none', () =>
+  it('refuses a pinned installation without a version (agent_installations_pinned_version_check)', () =>
     inRolledBackApp(async (tx) => {
-      await tx.execute(
+      await expect(tx.transaction((t) => t.execute(
         sql`update agent_installations set track = 'pinned', pinned_version = null where id = ${INSTALLATION.startupHandoff}`,
-      );
-      const agent = await effectiveAgent(INSTALLATION.startupHandoff);
-      expect(agent.templateVersion).toBe(1);
-      expect((await myAgents(USER.casey))[0].agents.map((a) => a.templateSlug)).toContain('handoff');
+      ))).rejects.toMatchObject({ cause: { constraint_name: 'agent_installations_pinned_version_check' } });
+      expect((await effectiveAgent(INSTALLATION.startupHandoff)).templateVersion).toBe(1);
     }));
 });
 
