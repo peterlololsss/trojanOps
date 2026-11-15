@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { capGrants, grantsFor } from '@/lib/authz';
 import type { AccessCell, Actor, EffectiveAgent, Grant, Tier } from '@/lib/contracts';
-import { pgTextArray } from '@/lib/db/with-actor';
+import { pgTextArray, withActor } from '@/lib/db/with-actor';
 import { effectiveAgent } from '@/lib/distribution';
 import { explainAccess, listAccessibleDocuments, type AccessDocument } from '@/lib/documents/access';
 import { FIXTURE_DOCUMENTS } from '@/lib/documents/fixtures';
@@ -49,7 +49,7 @@ async function runScope(userId: string, agent: EffectiveAgent) {
   const userGrants = await grantsFor(userId, agent.orgId);
   const runGrants = capGrants(userGrants, agent.orgId, agent.maxTier);
   const actor: Actor = { userId, activeOrgId: agent.orgId, positions: [], grants: userGrants };
-  const readable = new Set((await listAccessibleDocuments(actor, runGrants, agent.sourceIds)).map((d) => d.id));
+  const readable = new Set((await listAccessibleDocuments(actor, runGrants, agent)).map((d) => d.id));
   return { userGrants, readable };
 }
 
@@ -106,12 +106,19 @@ describe.skipIf(!sql)('listAccessibleDocuments under RLS', () => {
     expect([...seen]).toEqual(expect.arrayContaining(['allowed', 'not_granted', 'outside_sources', 'above_max_tier']));
   }, 20_000);   // 64 transactions
 
-  // TODO(verify): capGrants(…, 'officers') keeps every grant, so an officers-tier agent over the
-  // usg_internal source lets USG admins and reviewers read Reviewer notes while explainAccess says
-  // above_max_tier. Reported to stream A. This turns red once they agree; then make it a plain it().
-  it.fails('agrees for an officers-tier agent over the usg_internal source (known gap)', async () => {
+  it('agrees for an officers-tier agent over the usg_internal source', async () => {
     const review = await effectiveAgent(INSTALLATION.usgReviewAssistant);
     expect(await disagreements('usgReviewAssistant at officers tier', { ...review, maxTier: 'officers' }, new Set())).toEqual([]);
+  });
+
+  it('keeps library access after a run with a lower tier ceiling', async () => {
+    const grants = await grantsFor(USER.riley, ORG.usg);
+    const actor: Actor = { userId: USER.riley, activeOrgId: ORG.usg, positions: ['reviewer'], grants };
+    const agent = { sourceIds: [SOURCE.usg.usg_internal], maxTier: 'officers' } satisfies Pick<EffectiveAgent, 'sourceIds' | 'maxTier'>;
+    expect(await listAccessibleDocuments(actor, grants, agent)).toEqual([]);
+    const rows = await withActor(actor, { sourceIds: agent.sourceIds }, (tx) =>
+      tx.execute<{ id: string }>(`select id from documents`));
+    expect(rows.map((r) => r.id)).toContain(DOCUMENT.reviewerNotes);
   });
 
   // listLibraryDocuments and previewAccess still read fixtures.ts, so B's and D's pages must show the
@@ -147,13 +154,13 @@ describe.skipIf(!sql)('listAccessibleDocuments under RLS', () => {
   }
 
   it('returns exactly id, title, tier and bodyMd', async () => {
-    const docs = await listAccessibleDocuments(student, EVERY_GRANT, EVERY_SOURCE);
+    const docs = await listAccessibleDocuments(student, EVERY_GRANT, { sourceIds: EVERY_SOURCE, maxTier: 'usg_internal' });
     expect(docs.map((d) => d.id).sort()).toEqual(seeded.map((d) => d.id).sort());
     for (const doc of docs) expect(Object.keys(doc).sort()).toEqual(['bodyMd', 'id', 'tier', 'title']);
   });
 
   it('returns nothing without sources or without grants', async () => {
-    expect(await listAccessibleDocuments(student, EVERY_GRANT, [])).toEqual([]);
-    expect(await listAccessibleDocuments(student, [], EVERY_SOURCE)).toEqual([]);
+    expect(await listAccessibleDocuments(student, EVERY_GRANT, { sourceIds: [], maxTier: 'usg_internal' })).toEqual([]);
+    expect(await listAccessibleDocuments(student, [], { sourceIds: EVERY_SOURCE, maxTier: 'usg_internal' })).toEqual([]);
   });
 });

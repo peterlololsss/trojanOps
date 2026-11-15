@@ -15,6 +15,13 @@
       "when": 1794696039290,
       "tag": "0001_roles_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794708658222,
+      "tag": "0002_document_tier_ceiling",
+      "breakpoints": true
     }
   ]
 }

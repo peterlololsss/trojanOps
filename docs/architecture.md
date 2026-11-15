@@ -46,7 +46,7 @@ production deploy.
 ## 2. Invariants
 
 - **I1.** Documents are read only inside `withActor()`: a transaction that first runs
-  `set_config('app.user_id'|'app.grants'|'app.agent_sources'|'app.manage_org', …, true)`.
+  `set_config('app.user_id'|'app.grants'|'app.agent_sources'|'app.manage_org'|'app.max_tier', …, true)`.
 - **I2.** The app connects as `trojanops_app`: not superuser, not table owner, `NOBYPASSRLS`. RLS is
   enabled and forced on `documents` and `agent_runs`. Only the migration and seed CLI uses
   `DATABASE_OWNER_URL`; no route does.
@@ -209,6 +209,11 @@ Every id is `uuid default gen_random_uuid()`; every table has `created_at` writt
 | `officers` | `userGrants` |
 | `usg_internal` | `userGrants` (USG org only) |
 
+RLS also enforces the agent's document tier ceiling through transaction-local `app.max_tier`:
+`public` < `members` < `officers` < `usg_internal`. A role may grant documents at several tiers,
+so retaining its grant at the officers cap still requires the database tier check. Library reads
+omit the agent ceiling and use the viewer's grants and source scope.
+
 ### Roles, RLS and triggers (custom migration, after the tables exist)
 
 ```sql
@@ -229,7 +234,9 @@ alter table documents enable row level security;
 alter table documents force row level security;
 create policy documents_read on documents for select to trojanops_app using (
   read_grants && app_setting_array('app.grants')
-  and source_id::text = any (app_setting_array('app.agent_sources')));
+  and source_id::text = any (app_setting_array('app.agent_sources'))
+  and app_document_tier_rank(tier) <= app_document_tier_rank(
+    coalesce(nullif(current_setting('app.max_tier', true), ''), 'usg_internal')));
 create policy documents_insert on documents for insert to trojanops_app
   with check (org_id::text = current_setting('app.manage_org', true));
 create policy documents_update on documents for update to trojanops_app
@@ -252,6 +259,9 @@ create policy runs_own on agent_runs for all to trojanops_app
     revokes insert and update on it; revoke them on any future view too.
 - `audit_events.ts` is that table's `created_at`.
 - `withActor` sets `app.manage_org` to the active org only when the actor is its president.
+- `0002_document_tier_ceiling.sql` adds `app_document_tier_rank` and the tier predicate above to
+  the existing policy. `withActor` sets `app.max_tier` on every transaction; an omitted ceiling
+  permits all tiers subject to grants and sources. An invalid nonempty ceiling permits no rows.
 - An `UPDATE ... WHERE` on `documents` must also pass `documents_read`, so the library sets
   `app.grants` and `app.agent_sources` before updating.
 - Agent runs set `app.agent_sources` to the agent's sources. The document library sets it to all
@@ -487,7 +497,7 @@ export interface LLMProvider {              // used by the real runtime (WP-13)
    level; a limit of 0 always blocks. Levels: platform; billed club (`agent.orgId`); installation;
    member, when the user is an active member of the billed club; `student_daily`, for every
    public-agent run. Blocked → `quota.blocked`, 429 `quota_exceeded` with `cap`; runtime not called.
-5. `accessibleDocuments = listAccessibleDocuments(actor, runGrants, agent.sourceIds)` (C, via
+5. `accessibleDocuments = listAccessibleDocuments(actor, runGrants, agent)` (C, via
    `withActor`); `audit('run.access', {documentIds})`.
 6. `runtime.run(agent, actor, input, {runId, accessibleDocuments})`.
 7. `proposedActions`: write tools become `pending_actions`, confirmed on the run page; read and
@@ -580,8 +590,9 @@ Seeded templates (display names in UI copy):
 
 - **Upload** (`documents/library.ts`): only the club president (`app.manage_org`). Choose source,
   tier and, for `officers`, positions. The trigger computes `read_grants`. `audit('document.upload')`.
-- **`listAccessibleDocuments(actor, runGrants, sourceIds)`** (`documents/access.ts`): the RLS query
-  used by the gateway's step 5, run as `withActor(actor, {grants: runGrants, sourceIds})`.
+- **`listAccessibleDocuments(actor, runGrants, agent)`** (`documents/access.ts`): the RLS query
+  used by the gateway's step 5. `agent` requires `sourceIds` and `maxTier`; the query runs as
+  `withActor(actor, {grants: runGrants, sourceIds: agent.sourceIds, maxTier: agent.maxTier})`.
 - **`listLibraryDocuments(actor, orgId)`** (`documents/library.ts`): the club library and the club
   home's recent documents.
 - **`explainAccess(subjectGrants, agent, doc)`**: a pure function returning an `AccessCell`:
