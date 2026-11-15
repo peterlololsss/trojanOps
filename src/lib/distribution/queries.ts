@@ -47,6 +47,11 @@ export interface AgentFilter {
 export interface LoadedAgent {
   agent: EffectiveAgent;
   orgName: string;
+  /** How hard USG pushes the template: a `required` agent cannot be switched off (§8). */
+  distribution: 'required' | 'default' | 'optional';
+  /** §8's "Update available": a pinned installation whose template has published past it.
+   * It lives here rather than on `EffectiveAgent`, which is stream A's contract. */
+  updateAvailable: boolean;
 }
 
 /**
@@ -68,11 +73,11 @@ export async function loadAgents(filter: AgentFilter): Promise<LoadedAgent[]> {
   const inputs = await loadComposeInputs(filter);
 
   const loaded: LoadedAgent[] = [];
-  for (const { input, orgName } of inputs) {
+  for (const { input, orgName, distribution, updateAvailable } of inputs) {
     try {
       const agent = composeEffectiveAgent(input);
       if (filter.enabledOnly && agent.status !== 'enabled') continue;
-      loaded.push({ agent, orgName });
+      loaded.push({ agent, orgName, distribution, updateAvailable });
     } catch (err) {
       if (filter.installationId && err instanceof AppError && err.error.code === 'clamp_violation') {
         // I7 runs the clamps at run time too: a version narrowed under an installation lands here.
@@ -105,6 +110,8 @@ export async function loadAgent(installationId: string): Promise<EffectiveAgent 
 interface LoadedInput {
   input: ComposeInput;
   orgName: string;
+  distribution: 'required' | 'default' | 'optional';
+  updateAvailable: boolean;
 }
 
 async function loadComposeInputs(filter: AgentFilter): Promise<LoadedInput[]> {
@@ -134,6 +141,7 @@ async function loadComposeInputs(filter: AgentFilter): Promise<LoadedInput[]> {
       slug: agentTemplates.slug,
       name: agentTemplates.name,
       templateStatus: agentTemplates.status,
+      templateDistribution: agentTemplates.distribution,
       latestVersion: agentTemplates.latestVersion,
       version: agentTemplateVersions.version,
       purpose: agentTemplateVersions.purpose,
@@ -176,6 +184,9 @@ async function loadComposeInputs(filter: AgentFilter): Promise<LoadedInput[]> {
     }
     inputs.push({
       orgName: r.orgName,
+      distribution: r.templateDistribution,
+      // Only a pin can fall behind; a `latest` installation resolves the newest version already.
+      updateAvailable: r.track === 'pinned' && r.version < r.latestVersion,
       input: {
         template: { slug: r.slug, name: r.name, status: r.templateStatus },
         version: {
