@@ -8,7 +8,6 @@ import { AppError, type Actor } from '@/lib/contracts';
 import { pgTextArray } from '@/lib/db/with-actor';
 import { canUse, directory, effectiveAgent, myAgents, provisionOrg, publishToAllStudents } from '@/lib/distribution';
 import { previewAccess } from '@/lib/documents/preview';
-import { remaining, setLimit } from '@/lib/gateway/quota';
 import { transferPosition } from '@/lib/lifecycle/transfer';
 import { getConnectors, listConnectors } from '@/lib/connectors/registry';
 import { parseRosterCsv } from '@/lib/connectors/roster/mock';
@@ -52,12 +51,7 @@ describe('A: platform core', () => {
     expect(pgTextArray([])).toBe('{}');
   });
 
-  // runAgent, audit and listAudit are real since WP-4: tests/gateway.test.ts.
-  it('quota keeps its shape', async () => {
-    const actor = literal(USER.taylor, ORG.startup, 'treasurer');
-    await expect(setLimit(actor, { scope: 'member', orgId: ORG.startup, userId: USER.casey, limitMicro: 500_000 })).resolves.toBeUndefined();
-    expect(await remaining({ scope: 'platform' })).toEqual({ scope: 'platform', limitMicro: expect.any(Number), spentMicro: expect.any(Number), remainingMicro: expect.any(Number) });
-  });
+  // runAgent, audit, listAudit and quota are real since WP-4: tests/gateway.test.ts, tests/quota.test.ts.
 });
 
 describe('B: distribution', () => {

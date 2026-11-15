@@ -5,7 +5,8 @@ import { and, desc, eq, inArray, or, type SQL } from 'drizzle-orm';
 import { AppError, type Actor, type AuditAction, type AuditEntry, type AuditEvent } from '../contracts';
 import { now } from '../clock';
 import { getDb } from '../db/client';
-import { agentInstallations, auditEvents, orgs } from '../db/schema';
+import { isUsgAdmin } from '../authz';
+import { agentInstallations, auditEvents } from '../db/schema';
 
 /** Writes one audit row and returns its id. */
 export async function audit(action: AuditAction, event: AuditEvent): Promise<number> {
@@ -44,10 +45,7 @@ function concernsOrg(orgId: string): SQL {
  * a president acting in it, null for everyone else. */
 async function auditScope(viewer: Actor): Promise<'all' | string | null> {
   if (!viewer.userId || !viewer.activeOrgId) return null;
-  if (viewer.positions.includes('admin')) {
-    const [org] = await getDb().select({ kind: orgs.kind }).from(orgs).where(eq(orgs.id, viewer.activeOrgId));
-    if (org?.kind === 'usg') return 'all';
-  }
+  if (await isUsgAdmin(viewer)) return 'all';
   return viewer.positions.includes('president') ? viewer.activeOrgId : null;
 }
 
