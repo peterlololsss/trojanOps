@@ -12,7 +12,7 @@ import { getDb } from '../db/client';
 import { agentRuns, orgs, pendingActions, sources } from '../db/schema';
 import { withActor } from '../db/with-actor';
 import { canUse, effectiveAgent } from '../distribution';
-import { listAccessibleDocuments } from '../documents/access';
+import { listAccessibleDocuments, listBlockedDocuments } from '../documents/access';
 import { getRuntime } from '../runtime';
 import { audit } from './audit';
 import { headroom, hold, settle, type QuotaHold } from './quota';
@@ -126,6 +126,13 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
     throw err;
   }
 
+  // Only the club's president or a USG admin gets a list. A failure here must not lose a completed run.
+  let blocked: RunResult['inspector']['blocked'];
+  try {
+    blocked = await listBlockedDocuments(actor, agent, runGrants, docs.map((d) => d.id));
+  } catch {
+    blocked = undefined;
+  }
   const quotaLeft = await headroom(agent, userId, held.isMember);
   return {
     runId,
@@ -137,7 +144,7 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
       sources: await sourceNames(agent.sourceIds),
       permitted: docs.map(({ id, title, tier }) => ({ id, title, tier })),
       readInRun: docs.filter((d) => cited.includes(d.id)).map(({ id, title }) => ({ id, title })),
-      // blocked: TODO(WP-4) needs a documents/access helper from C for documents the run can't read.
+      ...(blocked !== undefined && { blocked }),
       templateVersion: agent.templateVersion,
       rulePack: agent.rulePack ? { label: agent.rulePack.label, version: agent.rulePack.version } : undefined,
       billedClub: club,

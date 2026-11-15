@@ -120,6 +120,17 @@ describe.skipIf(!probe)('runAgent', () => {
     expect(Object.keys(meta[0])).not.toContain('output');
   }));
 
+  it('fills inspector.blocked only for the club president or a USG admin (§7 step 8)', () => scenario(async () => {
+    const sam = await runAgent(await actorFor(USER.sam, ORG.startup), INSTALLATION.startupHandoff, 'x');
+    expect(sam.inspector.blocked).toEqual([
+      { id: DOCUMENT.usgFundingRules, title: 'USG funding rules (demo text)', reason: 'outside_sources' },
+    ]);
+    const casey = await runAgent(await actorFor(USER.casey, ORG.startup), INSTALLATION.startupHandoff, 'x');
+    expect(casey.inspector).not.toHaveProperty('blocked');
+    const taylor = await runAgent(await actorFor(USER.taylor, ORG.startup), INSTALLATION.startupFundingPrecheck, 'x');
+    expect(taylor.inspector).not.toHaveProperty('blocked');
+  }));
+
   it('writes run.access with document ids and agent.run with cost only, never the input (I8)', () => scenario(async (tx) => {
     const input = 'What did we decide about the venue?';
     const run = await runAgent(await actorFor(USER.casey, ORG.startup), INSTALLATION.startupHandoff, input);
