@@ -7,16 +7,20 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { now } from '@/lib/clock';
 import type { Actor, EffectiveAgent } from '@/lib/contracts';
 import type { Tx } from '@/lib/db/client';
-import { agentRuns, auditEvents, pendingActions } from '@/lib/db/schema';
+import { agentRuns, aiUsage, auditEvents, pendingActions } from '@/lib/db/schema';
 import { withActor } from '@/lib/db/with-actor';
 import { effectiveAgent } from '@/lib/distribution';
 import { runAgent } from '@/lib/gateway';
 import { audit, listAudit } from '@/lib/gateway/audit';
+import { remaining, setLimit } from '@/lib/gateway/quota';
+import { usd } from '@/lib/gateway/quota-messages';
 import { toolKind } from '@/lib/gateway/tools';
 import { mockRuntime } from '@/lib/runtime/mock';
 import { ACTIVE_ORG_COOKIE, PERSONA_COOKIE } from '@/lib/identity';
 import * as runsRoute from '@/app/api/agents/[installationId]/runs/route';
 import * as auditRoute from '@/app/api/audit/route';
+import * as limitsRoute from '@/app/api/quota/limits/route';
+import * as confirmRoute from '@/app/api/pending-actions/[id]/confirm/route';
 import { DOCUMENT, INSTALLATION, ORG, USER } from '@db/seed/ids';
 import { actorFor, appSql, closeAppDb, inRolledBackApp } from './db';
 
@@ -227,6 +231,153 @@ describe.skipIf(!probe)('runAgent', () => {
   }));
 });
 
+describe.skipIf(!probe)('runAgent quota (§7 step 4, §11)', () => {
+  const usageCount = async (tx: Tx, userId: string) =>
+    (await tx.select().from(aiUsage).where(eq(aiUsage.userId, userId))).length;
+  // recruiting-qa starts disabled in the seed (D3 publishes it); these cases run it as public.
+  const publicRecruiting = () => vi.mocked(effectiveAgent).mockImplementation(async (id) => ({
+    ...(await realEffectiveAgent(id)), status: 'enabled', audience: 'public', maxTier: 'public',
+  }));
+  const blocked = (tx: Tx, base: Baseline) =>
+    newAudit(tx, base).then((rows) => rows.filter((r) => r.action === 'quota.blocked'));
+
+  it('D5: a $0 member limit blocks Casey before the runtime; Lee runs once, then hits the daily cap', () => scenario(async (tx, base) => {
+    const sam = await actorFor(USER.sam, ORG.startup);
+    await setLimit(sam, { scope: 'member', orgId: ORG.startup, userId: USER.casey, limitMicro: 0 });
+    const casey = await actorFor(USER.casey, ORG.startup);
+    const usageBefore = await usageCount(tx, USER.casey);
+    await expect(runAgent(casey, INSTALLATION.startupHandoff, 'x')).rejects.toMatchObject({
+      status: 429,
+      error: {
+        code: 'quota_exceeded',
+        message: expect.stringMatching(/^Your monthly AI quota in Startup Club is used up \(\$\d+\.\d\d of \$0\.00\)\. Ask your president to raise it\.$/),
+        cap: { scope: 'member', limitMicro: 0, spentMicro: expect.any(Number) },
+      },
+    });
+    expect(runtime).not.toHaveBeenCalled();
+    expect(await newRuns(casey, base)).toEqual([]);
+    expect(await usageCount(tx, USER.casey)).toBe(usageBefore);
+    expect(await newAudit(tx, base).then((rows) => rows.map((r) => r.action))).toEqual(['quota.limit.set', 'quota.blocked']);
+
+    // Lee (seeded with $0.04 today) is not a Startup member: only the student cap applies to her.
+    publicRecruiting();
+    const lee = await actorFor(USER.lee, null);
+    const avery = await actorFor(USER.avery, ORG.usg);
+    const spent = (await remaining({ scope: 'student_daily', userId: USER.lee })).spentMicro;
+    await setLimit(avery, { scope: 'student_daily', limitMicro: spent + 10_000 });
+    const run = await runAgent(lee, INSTALLATION.startupRecruitingQa, 'When is rush?');
+    expect(run.inspector).toMatchObject({ billedClub: 'Startup Club', costMicro: 10_000 });
+    await expect(runAgent(lee, INSTALLATION.startupRecruitingQa, 'Again?')).rejects.toMatchObject({
+      status: 429,
+      error: {
+        code: 'quota_exceeded',
+        message: `You've reached today's limit for public agents (${usd(spent + 10_000)}). It resets at midnight PT.`,
+        cap: { scope: 'student_daily', limitMicro: spent + 10_000, spentMicro: spent + 10_000 },
+      },
+    });
+    expect(runtime).toHaveBeenCalledTimes(1);
+    // Lee acts in no club: the block is filed under the installation, not as if he acted in Startup.
+    const leeBlock = (await blocked(tx, base)).find((r) => r.actorUserId === USER.lee);
+    expect(leeBlock).toMatchObject({ actingOrgId: null, installationId: INSTALLATION.startupRecruitingQa });
+  }));
+
+  it('blocks at the club, installation and platform levels with the §11 copy, never calling the runtime', () => scenario(async (tx, base) => {
+    const avery = await actorFor(USER.avery, ORG.usg);
+    const sam = await actorFor(USER.sam, ORG.startup);
+    const taylor = await actorFor(USER.taylor, ORG.startup);
+    const funding = INSTALLATION.startupFundingPrecheck;
+    const clubSpent = (await remaining({ scope: 'org', orgId: ORG.startup })).spentMicro;
+
+    await setLimit(sam, { scope: 'installation', installationId: funding, limitMicro: 0 });
+    await expect(runAgent(taylor, funding, 'x')).rejects.toMatchObject({
+      status: 429, error: { message: expect.stringMatching(/ has used its monthly budget in Startup Club\.$/), cap: { scope: 'installation', limitMicro: 0 } },
+    });
+    await setLimit(sam, { scope: 'installation', installationId: funding, limitMicro: 2_500_000 });
+
+    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: 0 });
+    await expect(runAgent(taylor, funding, 'x')).rejects.toMatchObject({
+      status: 429,
+      error: { message: `Startup Club has used its monthly AI quota (${usd(clubSpent)} of $0.00). USG can raise it.`, cap: { scope: 'org', limitMicro: 0, spentMicro: clubSpent } },
+    });
+    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: 5_000_000 });
+
+    await setLimit(avery, { scope: 'platform', limitMicro: 0 });
+    await expect(runAgent(taylor, funding, 'x')).rejects.toMatchObject({
+      status: 429, error: { message: "TrojanOps has reached this month's platform limit.", cap: { scope: 'platform', limitMicro: 0 } },
+    });
+
+    expect(runtime).not.toHaveBeenCalled();
+    expect(await newRuns(taylor, base)).toEqual([]);
+    const rows = await blocked(tx, base);
+    expect(rows.map((r) => (r.details as { scope: string }).scope)).toEqual(['installation', 'org', 'platform']);
+    expect(rows[0]).toMatchObject({ actorUserId: USER.taylor, installationId: funding, targetType: 'installation' });
+    expect(rows[0].runId).toEqual(expect.any(String));
+    expect(rows[0].details).toEqual({ scope: 'installation', limitMicro: 0, spentMicro: expect.any(Number), holdMicro: 10_000 });
+    // Blocked runs leave no run.access row and no input anywhere (I8).
+    expect((await newAudit(tx, base)).filter((r) => r.action === 'run.access')).toEqual([]);
+  }));
+
+  it('blocks at exactly spent + hold > limit, and a limit of 0 always blocks', () => scenario(async () => {
+    const avery = await actorFor(USER.avery, ORG.usg);
+    const taylor = await actorFor(USER.taylor, ORG.startup);
+    const spent = (await remaining({ scope: 'org', orgId: ORG.startup })).spentMicro;
+    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: spent + 19_999 });
+    await runAgent(taylor, INSTALLATION.startupFundingPrecheck, 'one'); // spent + 10,000 ≤ limit
+    await expect(runAgent(taylor, INSTALLATION.startupFundingPrecheck, 'two')).rejects.toMatchObject({ status: 429 }); // +20,000 > limit
+    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: spent + 20_000 });
+    await runAgent(taylor, INSTALLATION.startupFundingPrecheck, 'three'); // exactly at the limit passes
+    expect(runtime).toHaveBeenCalledTimes(2);
+  }));
+
+  it("applies a member limit to a run of a public agent, whatever the audience", () => scenario(async (tx, base) => {
+    publicRecruiting();
+    const sam = await actorFor(USER.sam, ORG.startup);
+    await setLimit(sam, { scope: 'member', orgId: ORG.startup, userId: USER.casey, limitMicro: 0 });
+    await expect(runAgent(await actorFor(USER.casey, ORG.startup), INSTALLATION.startupRecruitingQa, 'x'))
+      .rejects.toMatchObject({ status: 429, error: { cap: { scope: 'member' } } });
+    expect((await blocked(tx, base))).toHaveLength(1);
+    expect(runtime).not.toHaveBeenCalled();
+  }));
+
+  it('records a hold and a settle for a run: spent grows by the actual cost, once', () => scenario(async (tx) => {
+    const taylor = await actorFor(USER.taylor, ORG.startup);
+    const before = await remaining({ scope: 'org', orgId: ORG.startup });
+    runtime.mockResolvedValueOnce({
+      reply: 'x', citations: [], proposedActions: [],
+      usage: { model: 'mock', inputTokens: 0, outputTokens: 0, costMicro: 25_000 },
+    });
+    const run = await runAgent(taylor, INSTALLATION.startupFundingPrecheck, 'x');
+    const rows = await tx.select().from(aiUsage).where(eq(aiUsage.runId, run.runId)).orderBy(aiUsage.kind);
+    expect(rows.map((r) => [r.kind, r.amountMicro])).toEqual([['hold', 10_000], ['settle', 15_000]]);
+    expect(rows[0]).toMatchObject({ billedOrgId: ORG.startup, userId: USER.taylor, installationId: INSTALLATION.startupFundingPrecheck, isPublic: false });
+    const after = await remaining({ scope: 'org', orgId: ORG.startup });
+    expect(after.spentMicro).toBe(before.spentMicro + 25_000);
+    expect(run.inspector.quotaRemainingMicro).toEqual({ 'Startup Club': after.remainingMicro });
+  }));
+
+  it('returns the hold when the run fails: spend is unchanged', () => scenario(async (tx) => {
+    const taylor = await actorFor(USER.taylor, ORG.startup);
+    const before = await remaining({ scope: 'org', orgId: ORG.startup });
+    runtime.mockRejectedValueOnce(new Error('runtime down'));
+    await expect(runAgent(taylor, INSTALLATION.startupFundingPrecheck, 'x')).rejects.toThrow('runtime down');
+    const rows = await tx.select().from(aiUsage).where(eq(aiUsage.userId, USER.taylor));
+    expect(rows.filter((r) => r.kind === 'hold').length).toBe(rows.filter((r) => r.kind === 'settle').length);
+    expect((await remaining({ scope: 'org', orgId: ORG.startup })).spentMicro).toBe(before.spentMicro);
+  }));
+
+  it('seeds the §15 limits and Lee\'s $0.04 of public usage', () => scenario(async () => {
+    expect(await remaining({ scope: 'platform' })).toMatchObject({ limitMicro: 50_000_000 });
+    for (const orgId of [ORG.startup, ORG.archery, ORG.dance]) {
+      expect(await remaining({ scope: 'org', orgId })).toMatchObject({ limitMicro: 5_000_000 });
+    }
+    expect(await remaining({ scope: 'member', orgId: ORG.startup, userId: USER.casey })).toMatchObject({ limitMicro: 500_000 });
+    expect(await remaining({ scope: 'student_daily', userId: USER.lee })).toMatchObject({ limitMicro: 50_000 });
+    expect(await remaining({ scope: 'installation', installationId: INSTALLATION.startupRecruitingQa })).toMatchObject({ limitMicro: 2_500_000 });
+    // Lee's four $0.01 runs from the seed; later manual runs by her today only add to it.
+    expect((await remaining({ scope: 'student_daily', userId: USER.lee })).spentMicro).toBeGreaterThanOrEqual(40_000);
+  }));
+});
+
 describe.skipIf(!probe)('listAudit', () => {
   it('shows USG admins everything, presidents their club, and refuses everyone else', () => scenario(async (_tx, base) => {
     const taylorRun = await runAgent(await actorFor(USER.taylor, ORG.startup), INSTALLATION.startupFundingPrecheck, 'x');
@@ -284,6 +435,83 @@ describe.skipIf(!probe)('API routes', () => {
     const denied = await post(JSON.stringify({ input: 'x' }), 'application/json', USER.casey);
     expect(denied.status).toBe(403);
     expect(await denied.json()).toMatchObject({ code: 'forbidden' });
+  }));
+
+  it('PUT /api/quota/limits sets a limit, enforces the parent and returns the new remaining', () => scenario(async (tx) => {
+    const put = (body: unknown, userId: string, orgId: string, type = 'application/json') => limitsRoute.PUT(
+      new Request('http://localhost/api/quota/limits', {
+        method: 'PUT', body: typeof body === 'string' ? body : JSON.stringify(body), headers: { 'content-type': type, cookie: cookie(userId, orgId) },
+      }),
+      { params: Promise.resolve({}) },
+    );
+    const casey = { scope: 'member', orgId: ORG.startup, userId: USER.casey };
+    const ok = await put({ ...casey, limitMicro: 0 }, USER.sam, ORG.startup);
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ scope: 'member', limitMicro: 0, remainingMicro: 0 });
+    const cap = await put({ scope: 'student_daily', limitMicro: 60_000 }, USER.avery, ORG.usg);
+    expect(cap.status).toBe(200);
+    expect(await cap.json()).toMatchObject({ scope: 'student_daily', limitMicro: 60_000 });
+
+    const clamp = await put({ scope: 'org', orgId: ORG.startup, limitMicro: 10 ** 12 }, USER.avery, ORG.usg);
+    expect(clamp.status).toBe(422);
+    expect(await clamp.json()).toMatchObject({ code: 'clamp_violation', cap: { scope: 'platform', limitMicro: 50_000_000 } });
+    const forbidden = await put({ ...casey, limitMicro: 1 }, USER.casey, ORG.startup);
+    expect(forbidden.status).toBe(403);
+    expect(await forbidden.json()).toMatchObject({ code: 'forbidden' });
+    expect((await put({ scope: 'platform', limitMicro: -1 }, USER.avery, ORG.usg)).status).toBe(400);
+    expect((await put({ scope: 'weekly', limitMicro: 1 }, USER.avery, ORG.usg)).status).toBe(400);
+    expect((await put({ scope: 'org', limitMicro: 1 }, USER.avery, ORG.usg)).status).toBe(400);
+    expect((await put('scope=platform&limitMicro=1', USER.avery, ORG.usg, 'application/x-www-form-urlencoded')).status).toBe(400);
+    expect((await limitsRoute.PUT(new Request('http://localhost/', { method: 'PUT', body: '{}', headers: { 'content-type': 'application/json' } }), { params: Promise.resolve({}) })).status).toBe(401);
+    expect((await tx.select().from(auditEvents).where(eq(auditEvents.action, 'quota.limit.set')).orderBy(auditEvents.id)).length).toBeGreaterThanOrEqual(2);
+  }));
+
+  it('POST /api/pending-actions/:id/confirm lets the run\'s president confirm once, and refuses everyone else', () => scenario(async (tx, base) => {
+    const post = (id: string, userId: string | null, orgId = ORG.startup, body = '{}', type = 'application/json') => confirmRoute.POST(
+      new Request(`http://localhost/api/pending-actions/${id}/confirm`, {
+        method: 'POST', body, headers: { 'content-type': type, ...(userId ? { cookie: cookie(userId, orgId) } : {}) },
+      }),
+      { params: Promise.resolve({ id }) },
+    );
+    const propose = async (userId: string) => {
+      withAgent({ tools: ['submit_application'] });
+      runtime.mockResolvedValueOnce({
+        reply: 'x', citations: [], proposedActions: [{ tool: 'submit_application', args: { amountUsd: 400 } }],
+        usage: { model: 'mock', inputTokens: 0, outputTokens: 0, costMicro: 10_000 },
+      });
+      return (await runAgent(await actorFor(userId, ORG.startup), INSTALLATION.startupFundingPrecheck, 'Submit it.')).pendingActions[0].id;
+    };
+    const samAction = await propose(USER.sam);
+    const taylorAction = await propose(USER.taylor);
+
+    expect((await post(samAction, null)).status).toBe(401);
+    expect((await post(samAction, null, ORG.startup, '', 'text/plain')).status).toBe(401); // auth before the body check
+    expect((await post('not-a-uuid', USER.sam)).status).toBe(404);
+    expect((await post('00000000-0000-4000-8000-000000000000', USER.sam)).status).toBe(404);
+    expect((await post(samAction, USER.sam, ORG.startup, 'x=1', 'application/x-www-form-urlencoded')).status).toBe(400);
+    // Not the run's user, and not a president: both 403, and the row stays pending.
+    expect((await post(taylorAction, USER.sam)).status).toBe(403);
+    expect((await post(taylorAction, USER.taylor)).status).toBe(403);
+    expect((await post(samAction, USER.casey)).status).toBe(403);
+    const status = async (id: string) => (await tx.select().from(pendingActions).where(eq(pendingActions.id, id)))[0];
+    expect(await status(samAction)).toMatchObject({ status: 'pending', confirmedBy: null });
+
+    const ok = await post(samAction, USER.sam);
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ id: samAction, tool: 'submit_application', status: 'confirmed' });
+    expect(await status(samAction)).toMatchObject({ status: 'confirmed', confirmedBy: USER.sam, confirmedAt: expect.any(Date) });
+    const again = await post(samAction, USER.sam);
+    expect(again.status).toBe(400);
+    expect(await again.json()).toMatchObject({ code: 'invalid' });
+
+    const rows = await newAudit(tx, base);
+    const confirms = rows.filter((r) => r.action === 'tool.confirm');
+    expect(confirms).toHaveLength(1);
+    expect(confirms[0]).toMatchObject({
+      actorUserId: USER.sam, targetType: 'pending_action', targetId: samAction, installationId: INSTALLATION.startupFundingPrecheck,
+      details: { pendingActionId: samAction, tool: 'submit_application' },
+    });
+    expect(rows.filter((r) => r.action === 'authz.denied' && (r.details as { reason: string }).reason === 'confirm_forbidden')).toHaveLength(3);
   }));
 
   it('GET /api/audit scopes by viewer and validates the filter', () => scenario(async () => {

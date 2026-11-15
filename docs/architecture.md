@@ -631,6 +631,17 @@ Seeded templates (display names in UI copy):
   `audit('quota.limit.set')`.
 - Mechanics: hold → settle (actual − hold) → stale holds released after 10 minutes, all as
   `ai_usage` rows; spent = sum since the period start.
+  - Amounts: a hold is +H, a settle is (actual − H), a release is −H. A finished run nets to its cost; a
+    failed or stale one nets to 0. A settle after a release writes +actual.
+  - A level with no limit row: platform, club and `student_daily` count as 0 (they block); member and
+    installation fall back to the club's limit.
+  - Checks run in this order and the first failure is reported: member, `student_daily`, installation,
+    club, platform. A blocked run writes `quota.blocked` and no run row.
+  - `setLimit` writes under an advisory lock; lowering a parent does not change its children, because a
+    run checks every level.
+- `POST /api/pending-actions/:id/confirm`: the user who ran the agent confirms, holding a position
+  allowed for the tool in the action's club (`confirmerPositions` in `gateway/tools.ts`; a tool with no
+  entry needs the president). It records `tool.confirm`; no write tool executes yet.
 
 UI copy for `quota_exceeded`, by scope:
 
