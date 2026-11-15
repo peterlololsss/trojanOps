@@ -1,0 +1,1 @@
+ALTER TABLE "agent_installations" ADD CONSTRAINT "agent_installations_pinned_version_check" CHECK ("agent_installations"."track" <> 'pinned' or "agent_installations"."pinned_version" is not null);

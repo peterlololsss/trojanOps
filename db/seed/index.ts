@@ -11,9 +11,12 @@ import { seedQuota } from './quota';
 export type SeedDb = PostgresJsDatabase<typeof schema>;
 
 export async function seed(db: SeedDb): Promise<void> {
-  await seedOrgs(db);        // D
-  await seedPersonas(db);    // D
-  await seedDistribution(db); // B
-  await seedDocuments(db);   // C
-  await seedQuota(db);       // A
+  // A failed area seed must not leave a partially populated demo database.
+  await db.transaction(async (tx) => {
+    await seedOrgs(tx);         // D
+    await seedPersonas(tx);     // D
+    await seedDistribution(tx); // B
+    await seedDocuments(tx);    // C
+    await seedQuota(tx);        // A
+  });
 }

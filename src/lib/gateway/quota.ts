@@ -22,7 +22,12 @@ import { quotaMessage, usd } from './quota-messages';
 
 const STALE_HOLD_MS = 10 * 60_000;
 
-const lock = (tx: Tx) => tx.execute(sql`select pg_advisory_xact_lock(hashtext('trojanops:quota'))`);
+const QUOTA_LOCK = sql`hashtext('trojanops:quota')`;
+
+/** The one quota lock: every check-and-write on quota_limits or ai_usage takes it inside its
+ * transaction, including B's bootstrap inserts of installation limits. */
+export const lockQuota = (tx: Tx) => tx.execute(sql`select pg_advisory_xact_lock(${QUOTA_LOCK})`);
+const lock = lockQuota;
 
 /** Keeps only the fields that identify the scope's limit. */
 function normalize(t: QuotaTarget): QuotaTarget {
@@ -57,13 +62,21 @@ function keyConditions(t: QuotaTarget): SQL[] {
   return c;
 }
 
-async function limitRow(tx: Tx, t: QuotaTarget): Promise<{ id: string; limitMicro: number } | null> {
+async function limitRow(tx: Pick<Db, 'select'>, t: QuotaTarget): Promise<{ id: string; limitMicro: number } | null> {
   const [row] = await tx.select({ id: quotaLimits.id, limitMicro: quotaLimits.limitMicro })
     .from(quotaLimits)
     .where(and(...keyConditions(t)))
     .orderBy(desc(quotaLimits.setAt), desc(quotaLimits.createdAt))
     .limit(1);
   return row ?? null;
+}
+
+/** A level's own limit in micro-USD, or null when it has no row (a member or installation then
+ * inherits the club's limit, §11). Reads inside the caller's transaction, or outside one. */
+export async function ownLimitMicro(tx: Pick<Db, 'select'>, target: QuotaTarget): Promise<number | null> {
+  const t = normalize(target);
+  requireFields(t);
+  return (await limitRow(tx, t))?.limitMicro ?? null;
 }
 
 async function installationOrg(tx: Pick<Db, 'select'>, installationId: string): Promise<string | null> {
@@ -115,7 +128,7 @@ export async function remaining(target: QuotaTarget): Promise<QuotaRemaining> {
 
 /** The non-blocking stale release a read does: skipped when a writer holds the lock. */
 async function releaseStaleHoldsIfFree(tx: Tx, at: Date): Promise<void> {
-  const [{ free }] = await tx.execute<{ free: boolean }>(sql`select pg_try_advisory_xact_lock(hashtext('trojanops:quota')) as free`);
+  const [{ free }] = await tx.execute<{ free: boolean }>(sql`select pg_try_advisory_xact_lock(${QUOTA_LOCK}) as free`);
   if (free) await releaseStaleHolds(tx, at);
 }
 

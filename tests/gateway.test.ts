@@ -22,6 +22,8 @@ import * as runsRoute from '@/app/api/agents/[installationId]/runs/route';
 import * as auditRoute from '@/app/api/audit/route';
 import * as limitsRoute from '@/app/api/quota/limits/route';
 import * as confirmRoute from '@/app/api/pending-actions/[id]/confirm/route';
+import * as rejectRoute from '@/app/api/pending-actions/[id]/reject/route';
+import * as meRoute from '@/app/api/me/route';
 import { DOCUMENT, INSTALLATION, ORG, USER } from '@db/seed/ids';
 import { actorFor, appSql, closeAppDb, inRolledBackApp } from './db';
 
@@ -118,6 +120,17 @@ describe.skipIf(!probe)('runAgent', () => {
     expect(meta).toHaveLength(1);
     expect(Object.keys(meta[0])).not.toContain('input');
     expect(Object.keys(meta[0])).not.toContain('output');
+  }));
+
+  it('fills inspector.blocked only for the club president or a USG admin (§7 step 8)', () => scenario(async () => {
+    const sam = await runAgent(await actorFor(USER.sam, ORG.startup), INSTALLATION.startupHandoff, 'x');
+    expect(sam.inspector.blocked).toEqual([
+      { id: DOCUMENT.usgFundingRules, title: 'USG funding rules (demo text)', reason: 'outside_sources' },
+    ]);
+    const casey = await runAgent(await actorFor(USER.casey, ORG.startup), INSTALLATION.startupHandoff, 'x');
+    expect(casey.inspector).not.toHaveProperty('blocked');
+    const taylor = await runAgent(await actorFor(USER.taylor, ORG.startup), INSTALLATION.startupFundingPrecheck, 'x');
+    expect(taylor.inspector).not.toHaveProperty('blocked');
   }));
 
   it('writes run.access with document ids and agent.run with cost only, never the input (I8)', () => scenario(async (tx) => {
@@ -536,6 +549,43 @@ describe.skipIf(!probe)('API routes', () => {
     expect((await limitsRoute.PUT(new Request('http://localhost/', { method: 'PUT', body: '{}', headers: { 'content-type': 'application/json' } }), { params: Promise.resolve({}) })).status).toBe(401);
     expect((await tx.select().from(auditEvents).where(eq(auditEvents.action, 'quota.limit.set')).orderBy(auditEvents.id)).length).toBeGreaterThanOrEqual(2);
   }));
+
+  it('POST /api/pending-actions/:id/reject lets the run\'s own member reject once, and then it cannot be confirmed', () => scenario(async (tx, base) => {
+    const call = (route: typeof rejectRoute | typeof confirmRoute, verb: string, id: string, userId: string) => route.POST(
+      new Request(`http://localhost/api/pending-actions/${id}/${verb}`, {
+        method: 'POST', body: '{}', headers: { 'content-type': 'application/json', cookie: cookie(userId, ORG.startup) },
+      }),
+      { params: Promise.resolve({ id }) },
+    );
+    withAgent({ tools: ['submit_application'] });
+    runtime.mockResolvedValueOnce({
+      reply: 'x', citations: [], proposedActions: [{ tool: 'submit_application', args: {} }],
+      usage: { model: 'mock', inputTokens: 0, outputTokens: 0, costMicro: 10_000 },
+    });
+    const id = (await runAgent(await actorFor(USER.sam, ORG.startup), INSTALLATION.startupFundingPrecheck, 'x')).pendingActions[0].id;
+
+    expect((await call(rejectRoute, 'reject', id, USER.casey)).status).toBe(403);
+    const ok = await call(rejectRoute, 'reject', id, USER.sam);
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ id, tool: 'submit_application', status: 'rejected' });
+    const [row] = await tx.select().from(pendingActions).where(eq(pendingActions.id, id));
+    expect(row).toMatchObject({ status: 'rejected', confirmedBy: USER.sam });
+    for (const again of [await call(confirmRoute, 'confirm', id, USER.sam), await call(rejectRoute, 'reject', id, USER.sam)]) {
+      expect(again.status).toBe(400);
+      expect(await again.json()).toEqual({ code: 'invalid', message: 'This action was already rejected.' });
+    }
+
+    const rows = await newAudit(tx, base);
+    expect(rows.filter((r) => r.action === 'tool.reject').map((r) => r.details)).toEqual([{ pendingActionId: id, tool: 'submit_application' }]);
+    expect(rows.filter((r) => r.action === 'tool.confirm')).toEqual([]);
+    expect(rows.filter((r) => r.action === 'authz.denied' && (r.details as { reason: string }).reason === 'reject_forbidden')).toHaveLength(1);
+  }));
+
+  it('GET /api/me returns the recomputed actor, or a signed-out one', async () => {
+    const me = async (headers: Record<string, string>) => (await meRoute.GET(new Request('http://localhost/api/me', { headers }), { params: Promise.resolve({}) })).json();
+    expect(await me({ cookie: cookie(USER.sam, ORG.startup) })).toEqual(await actorFor(USER.sam, ORG.startup));
+    expect(await me({})).toEqual({ userId: null, activeOrgId: null, positions: [], grants: [] });
+  });
 
   it('POST /api/pending-actions/:id/confirm lets the run\'s own club member confirm once, and refuses everyone else', () => scenario(async (tx, base) => {
     const post = (id: string, userId: string | null, orgId = ORG.startup, body = '{}', type = 'application/json') => confirmRoute.POST(

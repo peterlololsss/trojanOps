@@ -178,7 +178,7 @@ Every id is `uuid default gen_random_uuid()`; every table has `created_at` writt
 
 - `agent_templates(id, slug text unique, name text, publisher_org_id, scope text check (scope in ('global','org')), distribution text check (distribution in ('required','default','optional')), target text default 'all', status text check (status in ('active','retired')), latest_version int, distributed_at timestamptz null)`
 - `agent_template_versions(id, template_id, version int, purpose text, audience text check (audience in ('public','members','positions')), usable_by text[], max_tier text, source_kinds text[], tools text[], model_classes text[], default_model_class text, system_prompt text, rule_pack_slug text null, changelog text, published_by, published_at, unique (template_id, version))`
-- `agent_installations(id, template_id, org_id, enabled bool, track text check (track in ('latest','pinned')), pinned_version int null, audience text null, usable_by text[] null, prompt_addendum text, extra_source_ids uuid[], model_class text null, installed_by, installed_at, unique (template_id, org_id))`
+- `agent_installations(id, template_id, org_id, enabled bool, track text check (track in ('latest','pinned')), pinned_version int null (required when track = 'pinned'), audience text null, usable_by text[] null, prompt_addendum text, extra_source_ids uuid[], model_class text null, installed_by, installed_at, unique (template_id, org_id))`
 - `rule_packs(id, slug text, version int, status text check (status in ('draft','published')), label text, content jsonb, published_by, published_at, unique (slug, version))`
 - `usg_club_policy(org_id primary key, allowed_model_classes text[], allow_public_agents bool default true)`
 
@@ -188,7 +188,7 @@ Every id is `uuid default gen_random_uuid()`; every table has `created_at` writt
   - RLS: select only where `user_id::text = current_setting('app.user_id', true)`.
   - View `agent_runs_meta` (every column except `input` and `output`) for club and USG pages,
     filtered by org in the service.
-- `pending_actions(id, run_id, org_id, user_id, tool text, args jsonb, status text check (status in ('pending','confirmed','rejected')), confirmed_by null, confirmed_at null)`
+- `pending_actions(id, run_id, org_id, user_id, tool text, args jsonb, status text check (status in ('pending','confirmed','rejected')), confirmed_by null, confirmed_at null)`: `confirmed_by` and `confirmed_at` record whoever decided, confirm or reject
 - `quota_limits(id, scope text check (scope in ('platform','org','member','installation','student_daily')), org_id null, user_id null, installation_id null, limit_micro bigint, set_by, set_at)`
 - `ai_usage(id, run_id, billed_org_id, user_id, installation_id, is_public bool, model text, kind text check (kind in ('hold','settle','release')), amount_micro bigint, created_at)`
 - `audit_events(id bigserial, ts, actor_user_id null, acting_org_id null, action text, run_id null, installation_id null, target_type text, target_id text, details jsonb)`
@@ -407,7 +407,7 @@ export interface QuotaRemaining {
 
 // Audit (§12)
 export type AuditAction =
-  | 'agent.run' | 'run.access' | 'tool.call' | 'tool.confirm'
+  | 'agent.run' | 'run.access' | 'tool.call' | 'tool.confirm' | 'tool.reject'
   | 'authz.denied' | 'quota.blocked' | 'quota.limit.set'
   | 'template.publish' | 'template.distribute' | 'template.retire'
   | 'installation.update' | 'installation.rejected' | 'agent.publish_public'
@@ -605,6 +605,15 @@ Seeded templates (display names in UI copy):
   4. `allowed` otherwise.
   - A test asserts it agrees with `listAccessibleDocuments` for every persona × agent × document
     in the seed.
+- **`listBlockedDocuments(viewer, agent, runGrants, accessibleIds)`** (`documents/access.ts`) fills
+  `RunInspector.blocked` in the gateway's step 8. It returns `undefined` unless the viewer is the
+  president of `agent.orgId` (recomputed with `grantsFor`) or a USG admin.
+  - Candidates: the documents the viewer reads through their memberships in `agent.orgId`, over
+    the club's sources, the USG rulebook and the agent's sources, minus `accessibleIds`.
+  - Reasons come from `explainAccess(runGrants, …)`.
+  - Titles are resolved under the viewer's own `actor.grants`; an unreadable one is `null`
+    ("Restricted document").
+  - A document the viewer can't read at all never appears.
 - **`previewAccess(viewer, installationId)`** returns a `PreviewMatrix`, president only.
   - Rows: "Any signed-in student", "Member", and each club position.
   - Columns: every document the viewer can read in the club, plus the USG rulebook.
@@ -646,7 +655,8 @@ Seeded templates (display names in UI copy):
   active membership in the action's club. A tool with an entry in `confirmerPositions`
   (`gateway/tools.ts`) narrows that to the listed positions; a tool with no entry accepts any member
   of the club. The run's active org is not required: a public agent can be run from another club.
-  It records `tool.confirm`; no write tool executes yet.
+  It records `tool.confirm`; no write tool executes yet. `POST /api/pending-actions/:id/reject`
+  (body `{}`) takes the same check, sets the action `rejected` and records `tool.reject`.
 - `RunResult.inspector.quotaRemainingMicro` holds `{[billed club name]: n}`, where n is the smallest
   remaining amount over the levels that apply to the run (member, `student_daily`, installation, club,
   platform).
@@ -663,9 +673,9 @@ UI copy for `quota_exceeded`, by scope:
 
 ## 12. Audit
 
-`audit()` in `gateway/audit.ts` is the only writer; `details` hold ids and numbers only. Actions:
+`audit(action, event, tx?)` in `gateway/audit.ts` is the only writer; pass `tx` to commit the row with the change it records. `details` hold ids and numbers only. Actions:
 
-- `agent.run`, `run.access`, `tool.call`, `tool.confirm`
+- `agent.run`, `run.access`, `tool.call`, `tool.confirm`, `tool.reject`
 - `authz.denied`, `quota.blocked`, `quota.limit.set`
 - `template.publish`, `template.distribute`, `template.retire`
 - `installation.update`, `installation.rejected`, `agent.publish_public`
@@ -699,9 +709,10 @@ Every handler: `const actor = await getActor(req)` → one service call → JSON
 
 | Method and path | Service | Who | Stream |
 |---|---|---|---|
-| POST `/api/session/persona`, POST `/api/session/active-org`, GET `/api/me` | identity | `DEMO_MODE` / any | A |
+| POST `/api/session/persona`, POST `/api/session/active-org`, GET `/api/me` (returns `Actor`) | identity | `DEMO_MODE` / any | A |
 | POST `/api/agents/:installationId/runs` | `gateway.runAgent` | per audience | A |
 | POST `/api/pending-actions/:id/confirm` (body `{}`) | `gateway.confirm` | the run's user, a member of the action's club (narrowed per tool) | A |
+| POST `/api/pending-actions/:id/reject` (body `{}`) | `gateway.reject` | the same as confirm | A |
 | PUT `/api/quota/limits` | `quota.setLimit` | USG admin (platform, org, student_daily), president (member, installation) | A |
 | GET `/api/audit` | `audit.list` | president (own club), USG admin | A |
 | GET `/api/directory`, GET `/api/me/agents` | `distribution.directory`, `myAgents` | signed-in users | B |

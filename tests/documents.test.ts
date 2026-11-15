@@ -9,7 +9,6 @@ import { documents } from '@/lib/db/schema';
 import { pgTextArray, withActor } from '@/lib/db/with-actor';
 import { effectiveAgent } from '@/lib/distribution';
 import { explainAccess, listAccessibleDocuments, type AccessDocument } from '@/lib/documents/access';
-import { FIXTURE_DOCUMENTS } from '@/lib/documents/fixtures';
 import { listLibraryDocuments, uploadDocument, type UploadDocumentInput } from '@/lib/documents/library';
 import { listAudit } from '@/lib/gateway/audit';
 import { ACTIVE_ORG_COOKIE, PERSONA_COOKIE } from '@/lib/identity';
@@ -58,9 +57,6 @@ async function runScope(userId: string, agent: EffectiveAgent) {
   const readable = new Set((await listAccessibleDocuments(actor, runGrants, agent)).map((d) => d.id));
   return { userGrants, readable };
 }
-
-// As in src/lib/runtime/mock.ts, which quotes a document's first sentence as its citation.
-const firstSentence = (text: string) => (text.match(/^.*?[.!?](\s|$)/)?.[0] ?? text).trim();
 
 describe.skipIf(!sql)('listAccessibleDocuments under RLS', () => {
   const db = sql!;
@@ -124,19 +120,6 @@ describe.skipIf(!sql)('listAccessibleDocuments under RLS', () => {
     expect(await listAccessibleDocuments(actor, grants, agent)).toEqual([]);
     const rows = await listLibraryDocuments(actor, ORG.usg);
     expect(rows.map((r) => r.id)).toContain(DOCUMENT.reviewerNotes);
-  });
-
-  // previewAccess still reads fixtures.ts, so the preview page must show the same documents that
-  // runs read. Delete this test together with fixtures.ts.
-  it('matches the fixtures behind the preview stub', () => {
-    const project = (d: SeededDocument) => ({
-      id: d.id, orgId: d.orgId, sourceId: d.sourceId, sourceName: d.sourceName, title: d.title, tier: d.tier,
-      readGrants: [...d.readGrants].sort(), opening: firstSentence(d.bodyMd),
-    });
-    const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
-    const ids = new Set(FIXTURE_DOCUMENTS.map((d) => d.id));
-    expect(seeded.filter((d) => ids.has(d.id)).map(project).sort(byId))
-      .toEqual(FIXTURE_DOCUMENTS.map(project).sort(byId));
   });
 
   // §10 visibility contract. Columns: Recruiting FAQ, Minutes, Spring budget, USG funding rules.

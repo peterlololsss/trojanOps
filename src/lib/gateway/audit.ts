@@ -1,16 +1,17 @@
 // Owner: A (WP-4). The only audit writer (§12). audit_events is append-only: the app role has no
 // UPDATE or DELETE on it (I8). details hold ids and numbers only, never document text or run
-// input/output. audit_events has no RLS, so it is read and written with getDb().
+// input/output. audit_events has no RLS, so it is read and written with getDb() or the caller's tx.
 import { and, desc, eq, inArray, or, type SQL } from 'drizzle-orm';
 import { AppError, type Actor, type AuditAction, type AuditEntry, type AuditEvent } from '../contracts';
 import { now } from '../clock';
-import { getDb } from '../db/client';
+import { getDb, type Tx } from '../db/client';
 import { isUsgAdmin } from '../authz';
 import { agentInstallations, auditEvents } from '../db/schema';
 
-/** Writes one audit row and returns its id. */
-export async function audit(action: AuditAction, event: AuditEvent): Promise<number> {
-  const [row] = await getDb()
+/** Writes one audit row and returns its id. Pass `tx` to write it in the caller's transaction, so the
+ * change and its audit row commit or roll back together. */
+export async function audit(action: AuditAction, event: AuditEvent, tx?: Tx): Promise<number> {
+  const [row] = await (tx ?? getDb())
     .insert(auditEvents)
     .values({
       ts: now(),

@@ -11,7 +11,8 @@ import type { Tx } from '@/lib/db/client';
 import { aiUsage, auditEvents, quotaLimits } from '@/lib/db/schema';
 import { effectiveAgent } from '@/lib/distribution';
 import { periodStart } from '@/lib/gateway/period';
-import { headroom, hold, remaining, setLimit, settle, type QuotaHold } from '@/lib/gateway/quota';
+import { audit } from '@/lib/gateway/audit';
+import { headroom, hold, ownLimitMicro, remaining, setLimit, settle, type QuotaHold } from '@/lib/gateway/quota';
 import { quotaMessage, usd } from '@/lib/gateway/quota-messages';
 import { INSTALLATION, ORG, USER } from '@db/seed/ids';
 import { actorFor, appSql, closeAppDb, inRolledBackApp } from './db';
@@ -445,4 +446,25 @@ describe.skipIf(!probe)('hold: concurrent runs', () => {
     }
     expect(await remaining(target)).toMatchObject({ limitMicro: original, spentMicro: spent });
   });
+});
+
+describe.skipIf(!probe)('shared helpers for other streams', () => {
+  it('ownLimitMicro reads a level\'s own row and is null where the club limit is inherited', () => inRolledBackApp(async (tx) => {
+    const club = await remaining({ scope: 'org', orgId: ORG.startup });
+    expect(await ownLimitMicro(tx, { scope: 'org', orgId: ORG.startup })).toBe(club.limitMicro);
+    expect(await ownLimitMicro(tx, { scope: 'installation', installationId: INSTALLATION.startupHandoff })).toBeNull();
+    const dance = await tx.select({ limitMicro: quotaLimits.limitMicro }).from(quotaLimits)
+      .where(and(eq(quotaLimits.scope, 'installation'), eq(quotaLimits.installationId, INSTALLATION.danceShowcaseQa)));
+    expect(dance.length).toBeGreaterThan(0);
+    expect(await ownLimitMicro(tx, { scope: 'installation', installationId: INSTALLATION.danceShowcaseQa })).not.toBeNull();
+  }));
+
+  it('audit(…, tx) rolls back with the caller\'s transaction', () => inRolledBackApp(async (tx) => {
+    const [{ max }] = await tx.execute<{ max: string }>(sql`select coalesce(max(id), 0) as max from audit_events`);
+    await expect(tx.transaction(async (inner) => {
+      await audit('authz.denied', { actorUserId: USER.sam, actingOrgId: ORG.startup, targetType: 'test', targetId: 'tx', details: {} }, inner);
+      throw new Error('roll back');
+    })).rejects.toThrow('roll back');
+    expect(await tx.select().from(auditEvents).where(gt(auditEvents.id, Number(max)))).toEqual([]);
+  }));
 });

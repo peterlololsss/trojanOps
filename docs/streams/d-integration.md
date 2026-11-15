@@ -49,3 +49,43 @@ Stubs by H3.
 > Read `AGENTS.md`, `.claude/agents/ui-designer.md`, `docs/architecture.md` §14–§16, and
 > `docs/streams/d-integration.md`. Plan WP-2: seed runner and personas, the app shell, and the
 > restyled shadcn components. Edit only stream D paths. Show me the plan first.
+
+## Component notes
+
+- Import each primitive from its file under `@/components/ui/`.
+- `Checkbox` takes native input props (`checked`, `onChange`), not Radix props.
+- `Progress` needs an accessible label at its call site; `Skeleton`'s parent supplies the readable
+  loading status.
+- `Dialog` and `Sheet` content need a Title and Description, or an explicit
+  `aria-describedby={undefined}`.
+- `Table` is the semantic base, not a TanStack Data Table.
+- `tests/seed-db.test.ts` expects a freshly reset database, before a roster sync or manual transfer.
+
+## Demo reset
+
+1. Set `DEMO_MODE=1`, `DEMO_NOW=2026-11-15T10:00:00-08:00` and `AGENT_RUNTIME=mock`.
+2. Stop the app, run `pnpm db:reset` (owner URL, CLI only), then restart `pnpm dev`. The clock is
+   process-local and restarts at `DEMO_NOW`; a clock jump changes time only and never replaces a
+   reset. Do not jump dates during D1–D8.
+3. Start at `/` as Avery. Lee's daily allowance lasts one successful public run (D3); a second
+   practice run needs a fresh reset.
+
+## D1–D8 runbook
+
+| Beat | Steps |
+|---|---|
+| D1 | Avery → `/usg/integrations` → Sync roster, twice. Five Mock connectors; Robotics provisioned; existing clubs unchanged |
+| D2 | Avery → `/usg/templates`, distribute Event planning. Sam → Startup catalog; attempting the standard model is rejected |
+| D3 | Sam publishes Recruiting Q&A. Lee → `/directory` → one run; the Inspector shows public sources only |
+| D4 | Casey, then Taylor → `/me/agents`; Sam → Startup permission preview |
+| D5 | Sam sets Casey to $0.00; Casey's run is blocked. Lee's second public run is blocked |
+| D6 | Avery publishes usg-funding v2 at $10,000; Taylor's funding-precheck names v2 |
+| D7 | Sam transfers Treasurer Taylor → Jordan; compare My agents; Avery syncs, nothing changes |
+| D8 | Avery → `/usg/audit`; Sam → club audit. Metadata only; unreadable titles read "Restricted document" |
+
+Say "mock runtime" and keep the Mock labels visible. If a real agent misbehaves, restart with
+`AGENT_RUNTIME=mock`.
+
+## Open requests
+
+- **A:** `AppError` has no server-error code, so a failed roster audit (which rolls the sync back) surfaces as `invalid` (400).

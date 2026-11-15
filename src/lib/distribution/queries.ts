@@ -26,12 +26,8 @@ const USG_SOURCE_KINDS = ['rulebook', 'usg_internal'];
 /**
  * An installation's effective version: the pinned one, or the template's latest.
  *
- * `pinned_version` is nullable and the schema has no constraint tying it to `track`, so a row that
- * says `pinned` without a version falls back to latest rather than resolving to NULL and matching
- * no version at all.
- *
- * TODO(verify): worth a `check (track <> 'pinned' or pinned_version is not null)` on A's schema —
- * a contract change, so it is their call.
+ * `agent_installations_pinned_version_check` guarantees a pinned row has a version; the fallback to
+ * latest stays as a guard.
  */
 const resolvedVersion = sql`case
   when ${agentInstallations.track} = 'pinned' and ${agentInstallations.pinnedVersion} is not null

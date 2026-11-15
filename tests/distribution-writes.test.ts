@@ -122,13 +122,6 @@ describe.skipIf(!probe)('distribution writes', () => {
     expect((await tx.execute(sql`select latest_version from agent_templates where id = ${TEMPLATE.eventPlanning}`))[0].latest_version).toBe(1);
     expect(await tx.execute(sql`select id from agent_template_versions where template_id = ${TEMPLATE.eventPlanning} and version = 2`)).toHaveLength(0);
   }));
-  it('also checks legacy null pins that the read path resolves to latest', () => inRolledBackApp(async tx => {
-    await distribute(await avery(), TEMPLATE.eventPlanning);
-    await tx.execute(sql`update agent_installations set track = 'pinned', pinned_version = null, usable_by = array['secretary']
-      where template_id = ${TEMPLATE.eventPlanning} and org_id = ${ORG.startup}`);
-    await expect(publishVersion(await avery(), TEMPLATE.eventPlanning, { ...draft, usableBy: ['president'] }))
-      .rejects.toMatchObject({ error: { code: 'clamp_violation' } });
-  }));
   it('allows a president to publish only an own-club template; validates drafts strictly', () => inRolledBackApp(async () => {
     await expect(publishVersion(await sam(), TEMPLATE.eventPlanning, draft)).rejects.toMatchObject({ error: { code: 'forbidden' } });
     await expect(publishVersion(await sam(), TEMPLATE.handoff, { ...draft, audience: 'members', usableBy: [] })).resolves.toMatchObject({ version: 2 });

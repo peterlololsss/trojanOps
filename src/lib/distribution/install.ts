@@ -114,7 +114,6 @@ export async function writeInstallation(
 /** Enabled and open to every signed-in student — the state Publish to all students owns. */
 const reachesCampus = (enabled: boolean, audience: string) => enabled && audience === 'public';
 
-
 /** Was this installation already on the campus directory before the patch? Clamped the same way a
  * read would clamp it, so a row the clamps now refuse counts as not public and the patch is
  * refused rather than waved through. */

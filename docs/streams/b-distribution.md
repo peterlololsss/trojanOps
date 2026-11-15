@@ -113,8 +113,8 @@ D2, D6, propagation, rejection rollback, permissions and the separate-connection
 `src/lib/lifecycle/transfer.ts`. It locks the club, refreshes the president's authority, ends the
 previous office and inserts a `source: 'manual'` membership in one transaction. Other memberships,
 installations and documents are unchanged. Repeating the current assignment preserves the row.
-The shared `audit('position.transfer')` writer is called after that transaction commits, following
-the existing service pattern; it has no transaction parameter. Audit details contain ids and a
+The shared `audit('position.transfer')` writer is called after that transaction commits; it could
+take the transaction (`audit(action, event, tx)`) to commit with it. Audit details contain ids and a
 changed flag. A failed replacement insert rolls back the old tenure and emits no success audit.
 
 `TODO(verify):` this succession service accepts only single-holder officer positions and current
@@ -125,8 +125,7 @@ Confirm these guardrails when building the admin form.
 The service never modifies `roster_state`. This preserves the original imported holders, so an
 unchanged roster still compares equal and must not override the manual assignment (§13). Stream D
 must compare incoming roster positions against `roster_state`, not current memberships, and should
-coordinate membership writes with this service's club-row lock. `TODO(verify):` D's
-`src/lib/lifecycle/import.ts` does not exist on this branch yet: the transfer tests verify the
-preserved baseline against the seed CSV, not a simulated or end-to-end roster sync. Add the full
-sync-after-transfer regression when that service lands. The transfer API and admin form remain
+coordinate membership writes with this service's club-row lock. D's
+`src/lib/lifecycle/import.ts` compares against `roster_state`; `tests/roster-import.test.ts` covers a
+sync after a manual transfer. The transfer API and admin form remain
 separate slices.
