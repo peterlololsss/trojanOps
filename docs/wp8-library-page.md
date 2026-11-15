@@ -1,7 +1,7 @@
 # WP-8 slice 3: document library page
 
-Branch: `c/wp8-library-page`, based on slice 2 (`23703ab`). The preceding slices are not yet on
-`origin/main` (`08ccd3a` when checked on November 14, 2026).
+Branch: `c/wp8-library-page`, synchronized with `origin/main` after PRs #7, #8 and #9 merged
+(`0483860`). The draft now includes the shared document-tier contract and isolated test sources.
 
 The page at `/org/[orgId]/documents` uses `getLibraryPageData` to load club metadata and
 `listLibraryDocuments` to load only the documents the viewer can read. Only the president of the
@@ -39,9 +39,12 @@ for that check. Automated service upload tests run in rollback transactions.
 - Nine Chrome interaction scenarios pass without browser exceptions. These include a real API
   denial, simulated network failure and simulated upload success; the browser checks create no documents.
 - Typecheck, lint, invariant greps and design greps pass. Reviewer found no must-fix issue.
-- `pnpm check` still fails on the two pre-existing `sources_pkey` conflicts at
-  `tests/migration.test.ts:49` and `:68`: 83 passed, one expected failure, two failed.
-  Stream A owns these fixes, already requested by slice 2. A PR still needs a green full check.
+- After synchronizing main, a fresh isolated `pnpm db:reset` and `pnpm check` pass with 115 tests,
+  including all database suites. The preceding PRs fixed the source-id collisions and tier mismatch.
 - Stream D request: provide the shared shadcn/TanStack table and its dependency. Neither exists
   in this checkout; this slice uses the existing semantic-table pattern without changing dependencies.
+- Current code review also requires narrowing the upload error response before rendering its
+  `message`. The existing `as ApiError` assertion accepts a non-string message that React cannot render.
+- Keep this PR in draft until both review findings are resolved. The new review was static;
+  the browser scenarios above are the author's earlier verification.
 - Google Fonts were unreachable during browser verification, so the shared shell used fallback fonts.
