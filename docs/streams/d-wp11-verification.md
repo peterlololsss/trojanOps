@@ -1,5 +1,8 @@
 # WP-11 implementation and verification
 
+Historical verification before main `414eb83`. See [post-main integration](d-main-integration.md)
+for current dependency status and the fresh combined check.
+
 Stream D's directory, public-agent run page and My agents are implemented against the published
 interfaces. Full D3/D4 demo acceptance still requires the owner implementations listed below.
 

@@ -1,5 +1,8 @@
 # WP-10 implementation and verification
 
+Historical verification before main `414eb83`. See [post-main integration](d-main-integration.md)
+for current dependency status and the fresh combined check.
+
 Stream D's connector registry, roster importer, integration panel and frozen sync route are
 implemented. Full D1 acceptance remains blocked by the Stream B provisioning/seed stubs.
 This slice does not substitute for those services or claim that an agent was installed.

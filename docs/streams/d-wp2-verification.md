@@ -1,5 +1,8 @@
 # WP-2 implementation and verification
 
+Historical verification before main `414eb83`. See [post-main integration](d-main-integration.md)
+for current dependency status and the fresh combined check.
+
 ## Design brief
 
 The authoritative design system is `.claude/agents/ui-designer.md`. The shell serves students,

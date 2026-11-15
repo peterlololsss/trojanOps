@@ -1,5 +1,8 @@
 # WP-12 delivery and verification
 
+Historical verification before main `414eb83`. See [post-main integration](d-main-integration.md)
+for current dependency status and the fresh combined check.
+
 The D-owned clock controls and demo preparation materials are delivered. WP-12 as a whole is
 **blocked**, not accepted: three complete D1–D8 rehearsals and the final narrated backup require
 the remaining P0 owner implementations. No full-demo recording or completed rehearsal is claimed.
@@ -19,7 +22,8 @@ All product, test and documentation files in this slice are new:
 - `docs/streams/d-wp12-{design,rehearsal,verification}.md`: design brief, continuous D1–D8 operator
   script, reset procedure, rehearsal ledger, video export/playback checklist and timed pitch.
 
-Work remains uncommitted on `d/wp2-shell-seed`. Previous WP-2/10/11 edits are preserved.
+The slice was originally verified uncommitted on `d/wp2-shell-seed`. The work packages are now
+separate commits; see the post-main integration record for current status.
 
 ## Behavior and boundaries
 

@@ -1,5 +1,8 @@
 # WP-12 rehearsal and recording runbook
 
+The dependency column below records the pre-main verification baseline. Before rehearsing, use
+[post-main integration](d-main-integration.md) for updated owner implementations and remaining gaps.
+
 Status: full rehearsal blocked by the P0 dependencies below. This is an executable operator
 script, not a receipt for three completed rehearsals. Use fictional demo data only.
 
@@ -22,7 +25,7 @@ Target: five minutes for the product walkthrough, plus the opening and closing b
 between beats. Preserve Lee's daily allowance: the one successful run in D3 consumes the last
 $0.01; D5's next public run must be blocked. Extra practice runs require a fresh reset.
 
-| Beat / target | Operator action | Evidence required | Current dependency |
+| Beat / target | Operator action | Evidence required | Dependency at pre-main verification |
 |---|---|---|---|
 | D1 / 35s | Avery → `/usg/integrations` → Sync roster; repeat once | Five Mock connectors, absolute sync time; Robotics provisioned with funding-precheck; existing clubs unchanged | D importer/panel real; B provisioning stub cannot establish required installations |
 | D2 / 40s | Avery → `/usg/templates`; distribute Event planning to all clubs. Sam → Startup catalog; attempt standard model | Five catalogs include required Funding pre-check and default Event planning; named economy cap rejects standard; installation.rejected audit | B pages/API/seeds incomplete; A durable audit absent |

@@ -66,4 +66,3 @@ describe('B: distribution', () => {
     expect(transferPosition).toHaveLength(4);
   });
 });
-

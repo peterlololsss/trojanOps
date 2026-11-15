@@ -75,8 +75,8 @@ The current slice provides:
 ### Remaining integration requests
 
 - **A / deps:** add TanStack Table in a separate deps PR for later data-table pages.
-- **A/B/C:** distribution, document and quota seed bodies remain owner stubs. Their presence lets
-  D's seed runner compose them; it does not mean the complete demo dataset has been populated.
+- **A/B/C:** distribution, document and quota seeds are integrated from main. See
+  `docs/streams/d-main-integration.md` for current verification and remaining demo dependencies.
 - Main `08ccd3a` supplies Radix and the Windows check/alias fixes. A's persona and active-org
   endpoints are present and consumed directly. No root config or lockfile was changed by D.
 
