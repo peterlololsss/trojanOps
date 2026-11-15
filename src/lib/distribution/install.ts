@@ -16,18 +16,29 @@ export const installationPatchSchema = z.object({
   limitMicro: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
 }).strict();
 export type InstallationPatch = z.infer<typeof installationPatchSchema>;
-export async function updateInstallation(actor: Actor, installationId: string, input: InstallationPatch): Promise<EffectiveAgent> {
-  return writeInstallation(actor, installationId, input);
+export async function updateInstallation(
+  actor: Actor, installationId: string, input: InstallationPatch, expectOrgId?: string,
+): Promise<EffectiveAgent> {
+  return writeInstallation(actor, installationId, input, false, expectOrgId);
 }
 
-/** Shared locked writer also used by Publish to all students. */
-export async function writeInstallation(actor: Actor, installationId: string, input: InstallationPatch, publishPublic = false): Promise<EffectiveAgent> {
+/** Shared locked writer also used by Publish to all students.
+ *
+ * `expectOrgId` is the club the caller believes the installation belongs to — the §14 path names
+ * it, so a URL that points at one club and an installation in another must not quietly act on the
+ * second. It is not the permission (that is `president` below); it only keeps the path honest. */
+export async function writeInstallation(
+  actor: Actor, installationId: string, input: InstallationPatch, publishPublic = false, expectOrgId?: string,
+): Promise<EffectiveAgent> {
   const limitMicro = await checkedWrite(actor, 'installation', installationId, async () => {
     const prepare = async (tx: Tx, apply: boolean, chosenLimit?: number) => {
       const denied = () => new AppError({ code: 'forbidden', message: 'Only the president acting in this club can change its agents.' });
       if (!isUuid(installationId)) throw publishPublic ? denied() : missing();
       const [original] = await tx.select().from(agentInstallations).where(eq(agentInstallations.id, installationId));
       if (!original) throw publishPublic ? denied() : missing();
+      // Same refusal as an unknown id, so a mismatched path cannot be used to probe which club
+      // an installation belongs to.
+      if (expectOrgId && original.orgId !== expectOrgId) throw publishPublic ? denied() : missing();
       president(actor, original.orgId);
       const template = await lockTemplate(tx, original.templateId); active(template);
       await lockClub(tx, original.orgId);
