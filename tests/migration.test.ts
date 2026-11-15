@@ -45,6 +45,14 @@ describe.skipIf(!sql)('roles and RLS migration', () => {
     expect(r).toEqual({ audit_mutable: false, usage_mutable: false, meta_read: true, meta_write: false });
   });
 
+  it('lets the app role delete from roster_state and from no other table', async () => {
+    const rows = await db<{ table_name: string }[]>`
+      with app_tables as materialized (select tablename from pg_tables where schemaname = 'public')
+      select tablename as table_name from app_tables
+      where has_table_privilege(format('public.%I', tablename), 'DELETE') order by tablename`;
+    expect(rows.map((r) => r.table_name)).toEqual(['roster_state']);
+  });
+
   it('lets only the managing president insert documents, into their own sources', async () => {
     const financeSource = randomUUID();
     const rulebookSource = randomUUID();

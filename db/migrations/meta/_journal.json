@@ -22,6 +22,13 @@
       "when": 1794708658222,
       "tag": "0002_document_tier_ceiling",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794719281292,
+      "tag": "0003_roster_state_delete",
+      "breakpoints": true
     }
   ]
 }
