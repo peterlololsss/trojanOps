@@ -1,39 +1,62 @@
-// Owner: C (WP-9, real by H10). STUB: builds the matrix from fixtures with explainAccess.
-import { AppError, type Actor, type Grant, type PreviewMatrix } from '../contracts';
+import { and, asc, eq, or } from 'drizzle-orm';
+import { requireUser } from '../api';
+import { grantsFor } from '../authz';
+import { AppError, type Actor, type EffectiveAgent, type Grant, type PreviewMatrix } from '../contracts';
+import { getDb } from '../db/client';
+import { documents, orgs, positions, sources } from '../db/schema';
+import { withActor } from '../db/with-actor';
 import { effectiveAgent } from '../distribution';
 import { explainAccess } from './access';
-import { FIXTURE_CLUB_POSITIONS, FIXTURE_DOCUMENTS } from './fixtures';
-import { DOCUMENT } from '@db/seed/ids';
 
-const POSITION_LABELS: Record<string, string> = {
-  president: 'President', treasurer: 'Treasurer', secretary: 'Secretary', admin: 'Admin', reviewer: 'Reviewer',
-};
-
-/** Who could read what through this installation. President of the installation's club only. */
-export async function previewAccess(viewer: Actor, installationId: string): Promise<PreviewMatrix> {
-  const agent = await effectiveAgent(installationId);
-  if (viewer.activeOrgId !== agent.orgId || !viewer.positions.includes('president')) {
-    throw new AppError({ code: 'forbidden', message: 'Only the club president can preview agent access.' });
+export async function requirePreviewPresident(viewer: Actor, orgId: string): Promise<Grant[]> {
+  requireUser(viewer);
+  const grants = await grantsFor(viewer.userId, orgId);
+  if (viewer.activeOrgId !== orgId || !grants.includes(`${orgId}:president`)) {
+    throw new AppError({ code: 'forbidden', message: 'Only the club president can preview agent access. Switch to that club first.' });
   }
-  const org = agent.orgId;
+  return grants;
+}
+
+async function buildMatrix(viewer: Actor, agent: EffectiveAgent): Promise<PreviewMatrix> {
+  const grants = await requirePreviewPresident(viewer, agent.orgId);
+  const db = getDb();
+  const sourceRows = await db.select({ id: sources.id }).from(sources)
+    .innerJoin(orgs, eq(orgs.id, sources.orgId))
+    .where(or(eq(sources.orgId, agent.orgId), and(eq(orgs.kind, 'usg'), eq(sources.kind, 'rulebook'))));
+  const heldPositions = await db.select({ slug: positions.slug, name: positions.name }).from(positions)
+    .where(eq(positions.orgId, agent.orgId)).orderBy(asc(positions.name), asc(positions.slug));
   const subjects: Array<{ key: string; label: string; grants: Grant[] }> = [
     { key: 'student', label: 'Any signed-in student', grants: ['*'] },
-    { key: 'member', label: 'Member', grants: ['*', `${org}:*`] },
-    ...(FIXTURE_CLUB_POSITIONS[org] ?? []).map((p) => ({
-      key: p,
-      label: POSITION_LABELS[p] ?? p,
-      grants: ['*', `${org}:*`, `${org}:${p}`] as Grant[],
+    { key: 'member', label: 'Member', grants: ['*', `${agent.orgId}:*`] },
+    ...heldPositions.filter((position) => position.slug !== 'member').map((position) => ({
+      key: position.slug === 'student' ? 'position:student' : position.slug,
+      label: position.name,
+      grants: ['*', `${agent.orgId}:*`, `${agent.orgId}:${position.slug}`] as Grant[],
     })),
   ];
-  const docs = FIXTURE_DOCUMENTS.filter((d) => d.orgId === org || d.id === DOCUMENT.usgFundingRules);
-  const cells: PreviewMatrix['cells'] = {};
-  for (const s of subjects) {
-    cells[s.key] = {};
-    for (const d of docs) cells[s.key][d.id] = explainAccess(s.grants, agent, d);
-  }
+  const rows = await withActor(viewer, { grants, sourceIds: sourceRows.map((source) => source.id) }, (tx) =>
+    tx.select({ id: documents.id, title: documents.title, tier: documents.tier,
+      sourceId: documents.sourceId, source: sources.name, readGrants: documents.readGrants })
+      .from(documents).innerJoin(sources, eq(sources.id, documents.sourceId))
+      .orderBy(asc(documents.title), asc(documents.id)));
   return {
     subjects: subjects.map(({ key, label }) => ({ key, label })),
-    documents: docs.map((d) => ({ id: d.id, title: d.title, tier: d.tier, source: d.sourceName })),
-    cells,
+    documents: rows.map(({ id, title, tier, source }) => ({ id, title, tier, source })),
+    cells: Object.fromEntries(subjects.map((subject) => [subject.key,
+      Object.fromEntries(rows.map((doc) => [doc.id, explainAccess(subject.grants, agent, doc)])),
+    ])),
   };
+}
+
+export async function previewAccess(viewer: Actor, installationId: string): Promise<PreviewMatrix> {
+  requireUser(viewer);
+  return buildMatrix(viewer, await effectiveAgent(installationId));
+}
+
+export async function previewForOrg(viewer: Actor, orgId: string, installationId: string | null): Promise<PreviewMatrix> {
+  requireUser(viewer);
+  if (!installationId) throw new AppError({ code: 'invalid', message: 'Choose an agent to preview.' });
+  const agent = await effectiveAgent(installationId);
+  if (agent.orgId !== orgId) throw new AppError({ code: 'not_found', message: 'This agent is not installed in this club.' });
+  return buildMatrix(viewer, agent);
 }

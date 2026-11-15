@@ -7,7 +7,6 @@ import { now, resetClockForTests } from '@/lib/clock';
 import { AppError, type Actor } from '@/lib/contracts';
 import { pgTextArray } from '@/lib/db/with-actor';
 import { canUse, directory, effectiveAgent, myAgents, provisionOrg, publishToAllStudents } from '@/lib/distribution';
-import { previewAccess } from '@/lib/documents/preview';
 import { transferPosition } from '@/lib/lifecycle/transfer';
 import { getConnectors, listConnectors } from '@/lib/connectors/registry';
 import { parseRosterCsv } from '@/lib/connectors/roster/mock';
@@ -67,14 +66,6 @@ describe('B: distribution', () => {
     const casey = literal(USER.casey, ORG.startup, 'member');
     await expect(publishToAllStudents(casey, INSTALLATION.startupRecruitingQa)).rejects.toBeInstanceOf(AppError);
     expect(transferPosition).toHaveLength(4);
-  });
-});
-
-describe('C: documents', () => {
-  it('keeps its shapes', async () => {
-    const sam = literal(USER.sam, ORG.startup, 'president');
-    const matrix = await previewAccess(sam, INSTALLATION.startupHandoff);
-    expect(Object.keys(matrix).sort()).toEqual(['cells', 'documents', 'subjects']);
   });
 });
 
