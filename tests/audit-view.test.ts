@@ -8,7 +8,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { AppError, type Actor } from '@/lib/contracts';
 import { auditEvents } from '@/lib/db/schema';
 import type { Tx } from '@/lib/db/client';
-import { effectiveAgent } from '@/lib/distribution';
+import { effectiveAgent, updateInstallation } from '@/lib/distribution';
 import { getAuditPageData, type AuditPageData, type AuditScope } from '@/lib/documents/audit-view';
 import type { AuditRow } from '@/lib/documents/audit-row';
 import { uploadDocument } from '@/lib/documents/library';
@@ -110,6 +110,11 @@ describe.skipIf(!sql)('getAuditPageData', () => {
 
     const startup = await page(USER.avery, ORG.usg, club(ORG.startup));
     expect(rowById(startup, accessId)).toBeDefined();
+    // The club view, opened by a USG admin, leaks the club's finance documents no more than /usg/audit.
+    const startupJson = JSON.stringify(startup);
+    expect(startupJson).not.toMatch(/Spring 2026 budget|Sponsor contacts/);
+    expect(startupJson).not.toContain(DOCUMENT.spring2026Budget);
+    expect(startupJson).not.toContain(DOCUMENT.sponsorContacts);
     expect(rowById(startup, archeryId)).toBeUndefined();
     expect(rowById(await page(USER.sam, ORG.startup, club(ORG.startup)), archeryId)).toBeUndefined();
 
@@ -125,13 +130,13 @@ describe.skipIf(!sql)('getAuditPageData', () => {
     expect(rowById(archery, accessId)).toBeUndefined();
   }));
 
-  it('D8: shows the club president a rejected widening with the agent and club', () => inRolledBackApp(async () => {
-    // As B's checkedWrite writes it for a clamp_violation on PATCH /installations/:id.
-    const rejectedId = await audit('installation.rejected', {
-      actorUserId: USER.sam, actingOrgId: ORG.startup, installationId: INSTALLATION.startupFundingPrecheck,
-      targetType: 'installation', targetId: INSTALLATION.startupFundingPrecheck,
-      details: { field: 'maxTier', allowed: 'officers', action: 'installation.update' },
-    });
+  it('D8: shows the club president a rejected widening with the agent and club', () => inRolledBackApp(async (tx) => {
+    // Through B's real write path, so the row is the one PATCH /installations/:id writes.
+    await expect(updateInstallation(await actorFor(USER.sam, ORG.startup), INSTALLATION.startupFundingPrecheck, { audience: 'public' }))
+      .rejects.toMatchObject({ error: { code: 'clamp_violation' } });
+    const [rejected] = await tx.select({ id: auditEvents.id }).from(auditEvents).where(and(
+      eq(auditEvents.action, 'installation.rejected'), eq(auditEvents.installationId, INSTALLATION.startupFundingPrecheck)));
+    const rejectedId = rejected.id;
     const agent = await effectiveAgent(INSTALLATION.startupFundingPrecheck);
     const expected = {
       action: 'installation.rejected', actionLabel: 'Agent change rejected',

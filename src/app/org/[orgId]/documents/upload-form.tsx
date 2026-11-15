@@ -6,10 +6,10 @@ import { AlertCircle, Check, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Tier } from '@/lib/contracts';
 import type { LibraryPageData } from '@/lib/documents/library-page';
+import { fieldClass } from '@/components/inspector/field';
 import { tierOptions } from '@/lib/documents/library-view';
 import { uploadErrorMessage } from '@/lib/documents/upload-error';
 
-export const fieldClass = 'h-9 w-full rounded-md border border-input bg-background px-3';
 
 export function UploadForm({ data }: { data: LibraryPageData }) {
   const router = useRouter();

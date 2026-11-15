@@ -11,7 +11,8 @@ import {
   changeFilter, formatPacific, initialQuery, tierLabels, tierOptions, viewLibrary,
 } from '@/lib/documents/library-view';
 import { DataTable } from '@/components/inspector/data-table';
-import { fieldClass, UploadForm } from './upload-form';
+import { fieldClass } from '@/components/inspector/field';
+import { UploadForm } from './upload-form';
 
 const features = tableFeatures({});
 const column = createColumnHelper<typeof features, LibraryDocument>();
