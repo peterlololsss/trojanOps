@@ -21,6 +21,7 @@ Stubs by H3.
 | `listAccessibleDocuments()`, `explainAccess()` | H5 |
 | `listLibraryDocuments()` | H6 |
 | `previewAccess()`, `<Inspector />`, `listBlockedDocuments()` (A wires it into gateway step 8) | H10 |
+| `<RunWorkspace />`: the run page's transcript, pending actions and inspector, for D's directory run page | H11 |
 
 ## You consume
 

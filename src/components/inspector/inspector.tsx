@@ -5,11 +5,10 @@ import { FileText, Folder, KeyRound, Lock } from 'lucide-react';
 import type { RunInspector } from '@/lib/contracts';
 import { accessDecisions, tierIcons, tierLabels } from './access-labels';
 import { Chip } from './chip';
+import { money } from './format';
 
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const money = (micro: number) => usd.format(micro / 1_000_000);
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/** One inspector section; the placeholder panel uses it too, so both keep the same headings. */
+export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="border-b border-border px-[16px] py-[16px] last:border-b-0">
       <h2 className="mb-[8px] text-[14px] font-semibold leading-5">{title}</h2>

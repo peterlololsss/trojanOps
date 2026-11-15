@@ -88,6 +88,7 @@ fixture data lives in the owner's `fixtures.ts`; delete it once the function rea
 | `previewAccess()` | `@/lib/documents/preview` | C | C | H10 |
 | `listBlockedDocuments()` | `@/lib/documents/access` | C | A (gateway step 8) | H10 |
 | `<Inspector />` | `@/components/inspector` | C | D (run pages) | H10 |
+| `<RunWorkspace />` (transcript, pending actions, inspector), `isDemoRuntime()` for its `demoRuntime` prop | `@/components/inspector`, `@/lib/documents/run-page` | C | D (`/directory/[installationId]`) | H11 |
 | `getConnectors()`, `listConnectors()`, `RosterSource` | `@/lib/connectors/registry` | D | A, B | H9 |
 | app shell, `src/components/ui/*` | `@/components/shell`, `@/components/ui/*` | D | all pages | H5 |
 
