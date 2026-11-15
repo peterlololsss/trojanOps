@@ -17,35 +17,106 @@ import {
   sources,
   usgClubPolicy,
 } from '../db/schema';
-import { composeEffectiveAgent } from './compose';
+import { clampInstallation, type ClampInput, type ClampResult } from './clamps';
+import { composeEffectiveAgent, type ComposeInput } from './compose';
 
 /** Source kinds that live in the USG org rather than the club (§8 clamps table). */
 const USG_SOURCE_KINDS = ['rulebook', 'usg_internal'];
 
 /**
- * An installation's effective version: the template's latest, or the pinned one.
- * `latest` resolves at read time, so a USG republish reaches every club that did not pin.
+ * An installation's effective version: the pinned one, or the template's latest.
+ *
+ * `pinned_version` is nullable and the schema has no constraint tying it to `track`, so a row that
+ * says `pinned` without a version falls back to latest rather than resolving to NULL and matching
+ * no version at all.
+ *
+ * TODO(verify): worth a `check (track <> 'pinned' or pinned_version is not null)` on A's schema —
+ * a contract change, so it is their call.
  */
-const resolvedVersion = sql`case when ${agentInstallations.track} = 'pinned'
+const resolvedVersion = sql`case
+  when ${agentInstallations.track} = 'pinned' and ${agentInstallations.pinnedVersion} is not null
   then ${agentInstallations.pinnedVersion} else ${agentTemplates.latestVersion} end`;
 
 export interface AgentFilter {
   installationId?: string;
   orgIds?: string[];
-  /** Only installations the club has switched on. */
+  /** Only agents a club has switched on, whose template is not retired. */
   enabledOnly?: boolean;
 }
 
+export interface LoadedAgent {
+  agent: EffectiveAgent;
+  orgName: string;
+}
+
 /**
- * Loads installations and composes each into the config a run would use. Returns them in a stable
- * order (club name, then agent name) so pages do not reshuffle between requests.
+ * Loads installations and composes each into the config a run would use, in a stable order (club
+ * name, then agent name) so pages do not reshuffle between requests.
+ *
+ * One unloadable installation never takes the list down with it: a row whose version cannot be
+ * resolved, or whose club is missing the policy the clamps need, is skipped with a warning rather
+ * than throwing — `directory()` serves the whole campus, so a single bad row must not 500 it.
  */
-export async function loadAgents(filter: AgentFilter): Promise<EffectiveAgent[]> {
-  // An id from a URL reaches us as free text. Postgres would reject a malformed uuid with a
-  // query error; callers expect "no such installation" instead.
+export async function loadAgents(filter: AgentFilter): Promise<LoadedAgent[]> {
+  // An id from a URL reaches us as free text. Postgres would reject a malformed uuid with a query
+  // error; callers expect "no such installation" instead.
   if (filter.installationId && !isUuid(filter.installationId)) return [];
   if (filter.orgIds?.some((id) => !isUuid(id))) return [];
 
+  const inputs = await loadComposeInputs(filter);
+
+  const loaded: LoadedAgent[] = [];
+  for (const { input, orgName } of inputs) {
+    try {
+      const agent = composeEffectiveAgent(input);
+      if (filter.enabledOnly && agent.status !== 'enabled') continue;
+      loaded.push({ agent, orgName });
+    } catch (err) {
+      // A clamp that now rejects a row written earlier, or a club with no usg_club_policy.
+      console.warn(`distribution: skipping installation ${input.installation.id}:`, err);
+    }
+  }
+  return loaded;
+}
+
+/** The composed config for one installation, or null when it does not resolve. */
+export async function loadAgent(installationId: string): Promise<EffectiveAgent | null> {
+  const [first] = await loadAgents({ installationId });
+  return first?.agent ?? null;
+}
+
+/**
+ * Runs the clamps against a change a club is proposing, without writing it. `publishToAllStudents`
+ * uses this so a rejected publish never reaches the database: I7 has the clamps run on every
+ * write, and a row written past them would make every later read throw.
+ */
+export async function clampProposedChange(
+  installationId: string,
+  override: ClampInput['installation'],
+): Promise<ClampResult | null> {
+  const [loaded] = await loadComposeInputs({ installationId });
+  if (!loaded) return null;
+  const { input } = loaded;
+  return clampInstallation({
+    version: {
+      audience: input.version.audience,
+      usableBy: input.version.usableBy,
+      maxTier: input.version.maxTier,
+      tools: input.version.tools,
+      modelClasses: input.version.modelClasses,
+      defaultModelClass: input.version.defaultModelClass,
+    },
+    installation: override,
+    club: input.club,
+  });
+}
+
+interface LoadedInput {
+  input: ComposeInput;
+  orgName: string;
+}
+
+async function loadComposeInputs(filter: AgentFilter): Promise<LoadedInput[]> {
   const db = getDb();
 
   const where = [
@@ -54,12 +125,16 @@ export async function loadAgents(filter: AgentFilter): Promise<EffectiveAgent[]>
     filter.enabledOnly ? eq(agentInstallations.enabled, true) : undefined,
   ].filter(Boolean);
 
+  // leftJoin, not inner: an installation whose version cannot be resolved must be reported, not
+  // quietly dropped from the club's catalog and the directory.
   const rows = await db
     .select({
       installationId: agentInstallations.id,
       orgId: agentInstallations.orgId,
       orgName: orgs.name,
       enabled: agentInstallations.enabled,
+      track: agentInstallations.track,
+      pinnedVersion: agentInstallations.pinnedVersion,
       instAudience: agentInstallations.audience,
       instUsableBy: agentInstallations.usableBy,
       promptAddendum: agentInstallations.promptAddendum,
@@ -68,6 +143,7 @@ export async function loadAgents(filter: AgentFilter): Promise<EffectiveAgent[]>
       slug: agentTemplates.slug,
       name: agentTemplates.name,
       templateStatus: agentTemplates.status,
+      latestVersion: agentTemplates.latestVersion,
       version: agentTemplateVersions.version,
       purpose: agentTemplateVersions.purpose,
       audience: agentTemplateVersions.audience,
@@ -82,7 +158,7 @@ export async function loadAgents(filter: AgentFilter): Promise<EffectiveAgent[]>
     })
     .from(agentInstallations)
     .innerJoin(agentTemplates, eq(agentTemplates.id, agentInstallations.templateId))
-    .innerJoin(
+    .leftJoin(
       agentTemplateVersions,
       and(
         eq(agentTemplateVersions.templateId, agentTemplates.id),
@@ -98,50 +174,62 @@ export async function loadAgents(filter: AgentFilter): Promise<EffectiveAgent[]>
   const ctx = await loadClubContext(rows.map((r) => r.orgId));
   const packs = await loadRulePacks(rows.map((r) => r.rulePackSlug).filter((s): s is string => s !== null));
 
-  return rows.map((r) =>
-    composeEffectiveAgent({
-      template: { slug: r.slug, name: r.name, status: r.templateStatus },
-      version: {
-        version: r.version,
-        purpose: r.purpose,
-        audience: r.audience,
-        usableBy: r.usableBy,
-        maxTier: r.maxTier,
-        tools: r.tools,
-        modelClasses: r.modelClasses,
-        defaultModelClass: r.defaultModelClass,
-        systemPrompt: r.systemPrompt,
+  const inputs: LoadedInput[] = [];
+  for (const r of rows) {
+    if (r.version === null) {
+      const wanted = r.track === 'pinned' ? r.pinnedVersion : r.latestVersion;
+      console.warn(
+        `distribution: installation ${r.installationId} (${r.slug}) pins version ${wanted}, which is not published`,
+      );
+      continue;
+    }
+    inputs.push({
+      orgName: r.orgName,
+      input: {
+        template: { slug: r.slug, name: r.name, status: r.templateStatus },
+        version: {
+          version: r.version,
+          purpose: r.purpose!,
+          audience: r.audience!,
+          usableBy: r.usableBy!,
+          maxTier: r.maxTier!,
+          tools: r.tools!,
+          modelClasses: r.modelClasses!,
+          defaultModelClass: r.defaultModelClass!,
+          systemPrompt: r.systemPrompt!,
+        },
+        installation: {
+          id: r.installationId,
+          orgId: r.orgId,
+          enabled: r.enabled,
+          audience: r.instAudience,
+          usableBy: r.instUsableBy,
+          promptAddendum: r.promptAddendum,
+          extraSourceIds: r.extraSourceIds,
+          modelClass: r.instModelClass,
+        },
+        club: {
+          policy: ctx.policy.get(r.orgId) ?? { allowedModelClasses: [], allowPublicAgents: false },
+          positionSlugs: ctx.positions.get(r.orgId) ?? [],
+          ownedSourceIds: ctx.ownedSources.get(r.orgId) ?? [],
+          // TODO(WP-7): the club's monthly limit lives in A's quota_limits and is only compared
+          // against an installation budget, which has no column yet, so no clamp reads it today.
+          quotaMicro: Number.MAX_SAFE_INTEGER,
+        },
+        baseSourceIds: resolveSourceKinds(r.sourceKinds!, r.orgId, ctx),
+        rulePack: r.rulePackSlug ? packs.get(r.rulePackSlug) : undefined,
       },
-      installation: {
-        id: r.installationId,
-        orgId: r.orgId,
-        enabled: r.enabled,
-        audience: r.instAudience,
-        usableBy: r.instUsableBy,
-        promptAddendum: r.promptAddendum,
-        extraSourceIds: r.extraSourceIds,
-        modelClass: r.instModelClass,
-      },
-      club: {
-        policy: ctx.policy.get(r.orgId) ?? { allowedModelClasses: [], allowPublicAgents: false },
-        positionSlugs: ctx.positions.get(r.orgId) ?? [],
-        ownedSourceIds: ctx.ownedSources.get(r.orgId) ?? [],
-        // TODO(WP-7): the club's monthly limit lives in A's quota_limits and is only compared
-        // against an installation budget, which has no column yet, so no clamp reads it today.
-        quotaMicro: Number.MAX_SAFE_INTEGER,
-      },
-      baseSourceIds: resolveSourceKinds(r.sourceKinds, r.orgId, ctx),
-      rulePack: r.rulePackSlug ? packs.get(r.rulePackSlug) : undefined,
-    }),
-  );
+    });
+  }
+  return inputs;
 }
 
 interface ClubContext {
   policy: Map<string, { allowedModelClasses: ModelClass[]; allowPublicAgents: boolean }>;
   positions: Map<string, string[]>;
   ownedSources: Map<string, string[]>;
-  /** org id → kind → source id, for both the club and USG. */
-  sourcesByKind: Map<string, Map<string, string>>;
+  /** org id → kind → every source of that kind, in a stable order. */
+  sourcesByKind: Map<string, Map<string, string[]>>;
   usgOrgId: string | null;
 }
 
@@ -155,13 +243,18 @@ async function loadClubContext(orgIds: string[]): Promise<ClubContext> {
     db.select().from(usgClubPolicy).where(inArray(usgClubPolicy.orgId, wanted)),
     db.select({ orgId: positions.orgId, slug: positions.slug }).from(positions).where(inArray(positions.orgId, wanted)),
     db
-      .select({ id: sources.id, orgId: sources.orgId, kind: sources.kind })
+      .select({ id: sources.id, orgId: sources.orgId, kind: sources.kind, slug: sources.slug })
       .from(sources)
-      .where(inArray(sources.orgId, wanted)),
+      .where(inArray(sources.orgId, wanted))
+      // `sources` is unique on (org_id, slug), not (org_id, kind), so a club may own several of a
+      // kind. Order them so a run reads the same documents on every request.
+      .orderBy(sources.slug),
   ]);
 
   const ctx: ClubContext = {
-    policy: new Map(policyRows.map((p) => [p.orgId, { allowedModelClasses: p.allowedModelClasses, allowPublicAgents: p.allowPublicAgents }])),
+    policy: new Map(
+      policyRows.map((p) => [p.orgId, { allowedModelClasses: p.allowedModelClasses, allowPublicAgents: p.allowPublicAgents }]),
+    ),
     positions: new Map(),
     ownedSources: new Map(),
     sourcesByKind: new Map(),
@@ -173,8 +266,8 @@ async function loadClubContext(orgIds: string[]): Promise<ClubContext> {
   }
   for (const s of sourceRows) {
     ctx.ownedSources.set(s.orgId, [...(ctx.ownedSources.get(s.orgId) ?? []), s.id]);
-    const byKind = ctx.sourcesByKind.get(s.orgId) ?? new Map<string, string>();
-    byKind.set(s.kind, s.id);
+    const byKind = ctx.sourcesByKind.get(s.orgId) ?? new Map<string, string[]>();
+    byKind.set(s.kind, [...(byKind.get(s.kind) ?? []), s.id]);
     ctx.sourcesByKind.set(s.orgId, byKind);
   }
   return ctx;
@@ -185,10 +278,14 @@ function resolveSourceKinds(kinds: string[], orgId: string, ctx: ClubContext): s
   const ids: string[] = [];
   for (const kind of kinds) {
     const owner = USG_SOURCE_KINDS.includes(kind) ? ctx.usgOrgId : orgId;
-    const id = owner ? ctx.sourcesByKind.get(owner)?.get(kind) : undefined;
-    // A club with no source of that kind simply contributes nothing — the agent reads less,
-    // rather than failing to load.
-    if (id) ids.push(id);
+    const found = owner ? ctx.sourcesByKind.get(owner)?.get(kind) : undefined;
+    if (found?.length) {
+      ids.push(...found);
+    } else {
+      // The agent reads less rather than failing to load — but say so, because §8's publish
+      // confirmation counts readable documents and a silent gap would understate it.
+      console.warn(`distribution: no '${kind}' source in org ${owner ?? '(no USG org)'}`);
+    }
   }
   return ids;
 }

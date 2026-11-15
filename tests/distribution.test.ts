@@ -1,12 +1,17 @@
 // Owner: B (WP-5). Invariant I7: distribution never widens. A template version is the ceiling and
 // usg_club_policy is a second ceiling above it; an installation may only narrow. These are the
 // acceptance check for D2's rejected widening, and they are pure — no database.
+import { sql } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 import { clampInstallation } from '@/lib/distribution/clamps';
-import { directory, effectiveAgent, myAgents } from '@/lib/distribution';
+import { directory, effectiveAgent, myAgents, publishToAllStudents } from '@/lib/distribution';
+import { loadAgents } from '@/lib/distribution/queries';
 import type { Audience, ModelClass, Tier } from '@/lib/contracts';
+import { getDb } from '@/lib/db/client';
+import { agentInstallations } from '@/lib/db/schema';
 import { INSTALLATION, ORG, USER } from '@db/seed/ids';
-import { appSql, closeAppDb } from './db';
+import type { Tx } from '@/lib/db/client';
+import { actorFor, appSql, closeAppDb, inRolledBackApp } from './db';
 
 const baseVersion = {
   audience: 'positions' as Audience,
@@ -320,4 +325,94 @@ describe.skipIf(!probe)('directory · enabled public agents only', () => {
       expect(listing.reasonLabel).toBe('All students');
     }
   });
+
+  // §8: retire blocks runs, so a retired agent must not be offered either. The deleted stub
+  // filtered on status; the query layer has to keep doing it.
+  it('withholds a retired template', () =>
+    inRolledBackApp(async (tx) => {
+      await tx.execute(sql`update agent_templates set status = 'retired' where slug = 'showcase-qa'`);
+      expect((await directory()).map((a) => a.templateSlug)).not.toContain('showcase-qa');
+    }));
+});
+
+describe.skipIf(!probe)('loadAgents · nothing disappears quietly', () => {
+  it('composes every seeded installation', async () => {
+    const [{ count }] = await getDb().select({ count: sql<number>`count(*)::int` }).from(agentInstallations);
+    expect((await loadAgents({})).length).toBe(count);
+  });
+
+  // pinned_version is nullable and no constraint ties it to track, so a row like this is
+  // reachable. It used to resolve to NULL, match no version, and vanish from every page.
+  it('falls back to the latest version when a pin names none', () =>
+    inRolledBackApp(async (tx) => {
+      await tx.execute(
+        sql`update agent_installations set track = 'pinned', pinned_version = null where id = ${INSTALLATION.startupHandoff}`,
+      );
+      const agent = await effectiveAgent(INSTALLATION.startupHandoff);
+      expect(agent.templateVersion).toBe(1);
+      expect((await myAgents(USER.casey))[0].agents.map((a) => a.templateSlug)).toContain('handoff');
+    }));
+});
+
+describe.skipIf(!probe)('publishToAllStudents · D3', () => {
+  const president = () => actorFor(USER.sam, ORG.startup);
+
+  /** Rows this test wrote, counted from a baseline — audit_events is append-only and shared. */
+  const auditedSince = async (tx: Tx, from: number, action: string) => {
+    const rows = await tx.execute<{ id: number }>(
+      sql`select id from audit_events where action = ${action} and id > ${from}`,
+    );
+    return rows.length;
+  };
+
+  const auditBaseline = async (tx: Tx) => {
+    const [{ max }] = await tx.execute<{ max: string }>(
+      sql`select coalesce(max(id), 0) as max from audit_events`,
+    );
+    return Number(max);
+  };
+
+  it('publishes, derives the public tier, and lands in the directory', () =>
+    inRolledBackApp(async (tx) => {
+      const from = await auditBaseline(tx);
+      const published = await publishToAllStudents(await president(), INSTALLATION.startupRecruitingQa);
+
+      expect(published.audience).toBe('public');
+      expect(published.maxTier).toBe('public'); // I4, derived not written
+      expect(published.status).toBe('enabled');
+      expect((await directory()).map((a) => a.templateSlug)).toContain('recruiting-qa');
+
+      expect(await auditedSince(tx, from, 'agent.publish_public')).toBe(1);
+    }));
+
+  // The row must not be written past the clamps: a public row its version cannot justify would
+  // throw out of every later read, taking the directory and every My agents page down with it.
+  it('refuses to widen a members-only agent, and leaves the row untouched', () =>
+    inRolledBackApp(async (tx) => {
+      const from = await auditBaseline(tx);
+      await expect(publishToAllStudents(await president(), INSTALLATION.startupHandoff)).rejects.toMatchObject({
+        error: { code: 'clamp_violation' },
+      });
+
+      const [row] = await tx.execute<{ audience: string | null }>(
+        sql`select audience from agent_installations where id = ${INSTALLATION.startupHandoff}`,
+      );
+      expect(row.audience).toBeNull();
+
+      // The campus-wide reads still work for everyone else.
+      expect(await directory()).toBeInstanceOf(Array);
+      expect(await myAgents(USER.casey)).toBeInstanceOf(Array);
+
+      expect(await auditedSince(tx, from, 'installation.rejected')).toBe(1);
+    }));
+
+  it('refuses a member who is not the president, and audits the refusal', () =>
+    inRolledBackApp(async (tx) => {
+      const from = await auditBaseline(tx);
+      const casey = await actorFor(USER.casey, ORG.startup);
+      await expect(publishToAllStudents(casey, INSTALLATION.startupRecruitingQa)).rejects.toMatchObject({
+        error: { code: 'forbidden' },
+      });
+      expect(await auditedSince(tx, from, 'authz.denied')).toBe(1);
+    }));
 });

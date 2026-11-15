@@ -1,7 +1,7 @@
 // Owner: B (WP-5, real by H6). The installation's effective configuration and who may use it.
-import { AppError, type CanUse, type EffectiveAgent } from '../contracts';
+import { AppError, type CanUse, type CanUseResult, type EffectiveAgent, type Grant } from '../contracts';
 import { grantsFor } from '../authz';
-import { loadAgents } from './queries';
+import { loadAgent } from './queries';
 
 /**
  * The installation's effective configuration: the template version its track resolves to, plus the
@@ -11,7 +11,7 @@ import { loadAgents } from './queries';
  * `status`, and the gateway's step 1 turns that into the refusal the user sees.
  */
 export async function effectiveAgent(installationId: string): Promise<EffectiveAgent> {
-  const [agent] = await loadAgents({ installationId });
+  const agent = await loadAgent(installationId);
   if (!agent) throw new AppError({ code: 'not_found', message: 'This agent does not exist.' });
   return agent;
 }
@@ -23,10 +23,24 @@ export async function effectiveAgent(installationId: string): Promise<EffectiveA
  */
 export const canUse: CanUse = async (userId, agent) => {
   if (agent.audience === 'public') return { ok: true, reason: 'public' };
-  const grants = await grantsFor(userId, agent.orgId);
+  return canUseWithGrants(agent, await grantsFor(userId, agent.orgId));
+};
+
+/**
+ * The same rule against grants the caller already holds, so a page listing many agents for one
+ * club does not re-read that club's memberships per agent.
+ *
+ * The grants must be the ones computed **in `agent.orgId`** — that is what keeps Morgan, Archery's
+ * treasurer and a plain member of Startup, out of Startup's funding pre-check.
+ */
+export function canUseWithGrants(
+  agent: Pick<EffectiveAgent, 'audience' | 'orgId' | 'usableBy'>,
+  grants: Grant[],
+): CanUseResult {
+  if (agent.audience === 'public') return { ok: true, reason: 'public' };
   if (agent.audience === 'members') {
     return grants.includes(`${agent.orgId}:*`) ? { ok: true, reason: 'members' } : { ok: false };
   }
   const position = agent.usableBy.find((p) => grants.includes(`${agent.orgId}:${p}`));
   return position ? { ok: true, reason: { position } } : { ok: false };
-};
+}
