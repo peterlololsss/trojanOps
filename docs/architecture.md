@@ -52,7 +52,8 @@ production deploy.
   `DATABASE_OWNER_URL`; no route does.
 - **I3.** Grants are org-qualified strings recomputed on every request from active memberships in
   the active org: `*`, `<orgId>:*`, `<orgId>:<position>`. Never stored in a cookie or JWT; never
-  include positions held in other orgs.
+  include positions held in other orgs. Document-library reads recompute a separate scope for the
+  viewed org (§10, decision 16), containing only memberships held in that org.
 - **I4.** Run grants are capped by the agent's max tier: `public` → `['*']`; `members` →
   `userGrants ∩ ['*', '<orgId>:*']`; `officers` → `userGrants`. An agent whose audience is `public`
   always has max tier `public`.
