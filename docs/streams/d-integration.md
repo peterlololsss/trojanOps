@@ -50,61 +50,43 @@ Stubs by H3.
 > `docs/streams/d-integration.md`. Plan WP-2: seed runner and personas, the app shell, and the
 > restyled shadcn components. Edit only stream D paths. Show me the plan first.
 
-## WP-2 current delivery
+## Component notes
 
-The current slice provides:
+- Import each primitive from its file under `@/components/ui/`.
+- `Checkbox` takes native input props (`checked`, `onChange`), not Radix props.
+- `Progress` needs an accessible label at its call site; `Skeleton`'s parent supplies the readable
+  loading status.
+- `Dialog` and `Sheet` content need a Title and Description, or an explicit
+  `aria-describedby={undefined}`.
+- `Table` is the semantic base, not a TanStack Data Table.
+- `tests/seed-db.test.ts` expects a freshly reset database, before a roster sync or manual transfer.
 
-- Atomic seed orchestration: all five area seeds run in one transaction, in foreign-key order.
-  Organizations, personas and the CSV keep the WP-0 fixed ids and §15 data.
-- A shared AppShell with scope-specific side navigation, nested-route selection, a skip link,
-  demo-only Persona menu and the required footer. The masthead uses A's session endpoints for
-  persona, active-club and sign-out changes, with pending feedback and retryable errors.
-  Management links follow the active actor; request authorization remains with A/B/C services.
-- Dependency-free UI primitives: Button, Input, Textarea, Label, Checkbox, Table, Badge, Card,
-  Alert, Skeleton, Progress and Separator. Import each from its file under
-  `@/components/ui/`. Checkbox uses native input props (`checked`, `onChange`), not Radix
-  props. Progress requires an accessible label at its call site; Skeleton's parent supplies
-  the readable loading status. Table is the semantic base, not a TanStack Data Table.
-- Radix-backed DropdownMenu, Popover, Select, Dialog, Sheet, Switch and RadioGroup, restyled
-  with the shared tokens. Dialog and Sheet content require a Title and Description (or an
-  explicit `aria-describedby={undefined}` when there is no description). All retain Radix
-  focus handling. Session menus wait for matching server confirmation before navigation.
-- Seed specification tests and pure navigation tests. The optional `seed-db.test.ts` suite
-  expects a freshly reset database, before roster sync or a manual transfer.
+## Demo reset
 
-### Remaining integration requests
+1. Set `DEMO_MODE=1`, `DEMO_NOW=2026-11-15T10:00:00-08:00` and `AGENT_RUNTIME=mock`.
+2. Stop the app, run `pnpm db:reset` (owner URL, CLI only), then restart `pnpm dev`. The clock is
+   process-local and restarts at `DEMO_NOW`; a clock jump changes time only and never replaces a
+   reset. Do not jump dates during D1–D8.
+3. Start at `/` as Avery. Lee's daily allowance lasts one successful public run (D3); a second
+   practice run needs a fresh reset.
+
+## D1–D8 runbook
+
+| Beat | Steps |
+|---|---|
+| D1 | Avery → `/usg/integrations` → Sync roster, twice. Five Mock connectors; Robotics provisioned; existing clubs unchanged |
+| D2 | Avery → `/usg/templates`, distribute Event planning. Sam → Startup catalog; attempting the standard model is rejected |
+| D3 | Sam publishes Recruiting Q&A. Lee → `/directory` → one run; the Inspector shows public sources only |
+| D4 | Casey, then Taylor → `/me/agents`; Sam → Startup permission preview |
+| D5 | Sam sets Casey to $0.00; Casey's run is blocked. Lee's second public run is blocked |
+| D6 | Avery publishes usg-funding v2 at $10,000; Taylor's funding-precheck names v2 |
+| D7 | Sam transfers Treasurer Taylor → Jordan; compare My agents; Avery syncs, nothing changes |
+| D8 | Avery → `/usg/audit`; Sam → club audit. Metadata only; unreadable titles read "Restricted document" |
+
+Say "mock runtime" and keep the Mock labels visible. If a real agent misbehaves, restart with
+`AGENT_RUNTIME=mock`.
+
+## Open requests
 
 - **A / deps:** add TanStack Table in a separate deps PR for later data-table pages.
-- **A/B/C:** distribution, document and quota seeds are integrated from main. See
-  `docs/streams/d-main-integration.md` for current verification and remaining demo dependencies.
-- Main `08ccd3a` supplies Radix and the Windows check/alias fixes. A's persona and active-org
-  endpoints are present and consumed directly. No root config or lockfile was changed by D.
-
-### Validation of this slice
-
-- `pnpm check` passed against a freshly migrated and seeded PostgreSQL 17.12 database:
-  typecheck, lint, all 71 tests passed with zero skips, and invariant/design greps passed.
-  No alternate test config was used. The earlier DB-free run passed 28 tests and skipped 43.
-- Real Next.js `/` returns 200 with DEMO_MODE=0; the shell has a 48px masthead, 24px content
-  padding and Source Sans 3. Persona data and switching were checked in a temporary browser
-  harness importing the real shell components with fixture HTTP responses and router state.
-- Browser checks passed for rejected-session preservation, retry, pending-request exclusion,
-  club refresh, Lee's student-only scopes, sign-out, and 390px shell reflow. Shared Radix
-  components passed keyboard selection, Escape/focus return, modal focus containment, control
-  state, disabled state and 390px overlay bounds checks.
-- Frozen dependency installation passed with bounded memory/concurrency. This host's bundled
-  pnpm reports 11.25.0, while the manifest declares 12.18.0; the latter was not verified.
-- PostgreSQL verification used an isolated portable instance on `127.0.0.1:55432`, with
-  `wp2_verify` for reset/check/live sessions and `wp2_rollback` for a forced seed failure.
-  The app role is non-superuser `trojanops_app` without BYPASSRLS; documents and runs have
-  forced RLS. Seed counts are 4 orgs, 8 users, 9 active memberships, 2 cohort entries and 7
-  roster rows. A duplicate-persona failure left no earlier organization/position rows committed.
-- Fourteen live browser checks passed with real session endpoints, browser cookies and database
-  memberships: Morgan's two club contexts persist after navigation, Casey cannot switch to
-  Archery, Sam/Avery get their management scopes, Lee has student scopes only, and sign-out
-  persists. Invalid persona, malformed JSON and signed-out club requests return 404/400/401.
-- `/org/[orgId]` currently returns 404 because the Stream B page is not implemented. Session
-  switching and shell navigation were verified independently of that destination's content.
-  Full D1-D8 acceptance still requires the other streams' seed and page implementations.
-
-See `docs/streams/d-wp2-verification.md` for scope and acceptance cases.
+- **A:** `AppError` has no server-error code, so a failed roster audit surfaces as `invalid` (400).
