@@ -3,33 +3,18 @@
 import Link from 'next/link';
 import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, CircleAlert, CircleX, RefreshCw } from 'lucide-react';
+import { Check, ChevronRight, CircleAlert, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { DemoSummary } from '@/components/ui/demo-summary';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import type { ConnectorKind, ConnectorStatus } from '@/lib/contracts';
+import { connectorLabels, health, syncTimeFormat, type ConnectorRow } from './connector-status';
 import { RosterSyncError, syncRoster, type RosterSyncResult } from './sync-request';
 
-type ConnectorRow = Omit<ConnectorStatus, 'lastSyncAt'> & { readonly lastSyncAt: string | null };
-const labels: Record<ConnectorKind, string> = {
-  identity: 'Identity', roster: 'Roster', documents: 'Documents', llm: 'Language model', applications: 'Applications',
-};
-const operation: Record<ConnectorKind, string> = {
-  identity: 'At sign-in', roster: 'Manual sync', documents: 'Manual uploads', llm: 'Demo answers', applications: 'Run-page confirmation',
-};
-const health = {
-  ok: { label: 'OK', Icon: Check, variant: 'success' },
-  degraded: { label: 'Degraded', Icon: CircleAlert, variant: 'attention' },
-  down: { label: 'Down', Icon: CircleX, variant: 'danger' },
-} as const;
-const dateFormat = new Intl.DateTimeFormat('en-US', {
-  dateStyle: 'medium', timeStyle: 'long', timeZone: 'America/Los_Angeles',
-});
-
-export function IntegrationPanel({ connectors }: {
+export function IntegrationPanel({ connectors, clubs }: {
   readonly connectors: readonly ConnectorRow[];
+  readonly clubs: readonly { readonly id: string; readonly name: string }[];
 }) {
   const router = useRouter();
   const inFlight = useRef(false);
@@ -37,6 +22,7 @@ export function IntegrationPanel({ connectors }: {
   const [result, setResult] = useState<RosterSyncResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const unhealthy = connectors.filter((connector) => connector.status !== 'ok');
+  const lastRosterSync = connectors.find((connector) => connector.kind === 'roster')?.lastSyncAt ?? null;
 
   function sync() {
     if (inFlight.current) return;
@@ -66,21 +52,30 @@ export function IntegrationPanel({ connectors }: {
       <CircleAlert aria-hidden="true" />
       <div>
         <AlertTitle>Connector attention required</AlertTitle>
-        <AlertDescription>{unhealthy.map((connector) => `${labels[connector.kind]}: ${health[connector.status].label}`).join('; ')}. Retry the roster sync if it failed; contact an administrator for other connector issues.</AlertDescription>
+        <AlertDescription>{unhealthy.map((connector) => `${connectorLabels[connector.kind]}: ${health[connector.status].label}`).join('; ')}. Retry the roster sync if it failed; contact an administrator for other connector issues.</AlertDescription>
       </div>
     </Alert>}
     <div className="flex flex-wrap items-center justify-between gap-4">
-      <p className="text-muted-foreground">Preview connector data or manage clubs and quotas.</p>
-      <Button type="button" onClick={sync} disabled={pending} aria-busy={pending} className="min-w-36 border border-transparent disabled:border-input disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"><RefreshCw aria-hidden="true" />{pending ? 'Syncing roster' : 'Sync roster'}</Button>
+      <p className="text-muted-foreground">Open a club to review its members, documents and quota.</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm text-muted-foreground">Last roster sync: {lastRosterSync
+          ? <time dateTime={lastRosterSync} className="font-mono text-xs">{syncTimeFormat.format(new Date(lastRosterSync))}</time>
+          : 'Not synced'}</span>
+        <Button type="button" onClick={sync} disabled={pending} aria-busy={pending} className="min-w-36 border border-transparent disabled:border-input disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"><RefreshCw aria-hidden="true" />{pending ? 'Syncing roster' : 'Sync roster'}</Button>
+      </div>
     </div>
     <div aria-live="polite" aria-atomic="true">
       {pending && <p className="text-sm text-muted-foreground">Syncing club memberships and provisioning agents...</p>}
       {error && !pending && <Alert variant="destructive" role="none"><CircleAlert aria-hidden="true" /><div>
         <AlertTitle>Roster sync did not finish</AlertTitle><AlertDescription>{error}</AlertDescription>
       </div></Alert>}
-      {result && !pending && <section aria-labelledby="sync-result-heading" className="space-y-3">
-        <h2 id="sync-result-heading" className="flex items-center gap-2 text-xl font-semibold"><Check className="size-5 text-success" aria-hidden="true" />Roster sync complete</h2>
-        <p>{result.orgsCreated} clubs added; {result.positionsChanged} positions changed; {result.installationsCreated} agents installed.</p>
+    </div>
+    <Dialog open={result !== null && !pending} onOpenChange={(open) => { if (!open) setResult(null); }}>
+      {result && <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Check className="size-5 text-success" aria-hidden="true" />Roster sync complete</DialogTitle>
+          <DialogDescription>{result.orgsCreated} clubs added; {result.positionsChanged} positions changed; {result.installationsCreated} agents installed.</DialogDescription>
+        </DialogHeader>
         <Table>
           <TableHeader><TableRow><TableHead>Club</TableHead><TableHead>Import</TableHead><TableHead className="text-right">Position changes</TableHead><TableHead className="text-right">Agents installed</TableHead></TableRow></TableHeader>
           <TableBody>{result.clubs.map((club) => <TableRow key={club.orgId}>
@@ -88,37 +83,18 @@ export function IntegrationPanel({ connectors }: {
             <TableCell className="text-right tabular-nums">{club.positionsChanged}</TableCell><TableCell className="text-right tabular-nums">{club.installationsCreated}</TableCell>
           </TableRow>)}</TableBody>
         </Table>
-      </section>}
-    </div>
-    <section aria-labelledby="management-areas-heading" className="space-y-3">
-      <h2 id="management-areas-heading" className="text-xl font-semibold">Management areas</h2>
-      <Table>
-        <TableCaption>Platform-wide connectors and club settings. Demo ready is not a live health check; last sync applies to roster imports.</TableCaption>
-        <TableHeader><TableRow>
-          <TableHead>Area</TableHead><TableHead>Source</TableHead><TableHead>Status</TableHead>
-          <TableHead>Last sync</TableHead><TableHead>Operation</TableHead><TableHead>Action</TableHead>
-        </TableRow></TableHeader>
-        <TableBody>{connectors.map((connector) => {
-          const status = health[connector.status];
-          return <TableRow key={connector.kind}>
-            <TableHead scope="row">{labels[connector.kind]}</TableHead>
-            <TableCell><div className="flex items-center gap-2"><span>{connector.implementation}</span>{connector.isMock && <Badge>Mock</Badge>}</div></TableCell>
-            <TableCell><Badge variant={status.variant}><status.Icon aria-hidden="true" />{connector.isMock && connector.status === 'ok' ? 'Demo ready' : status.label}</Badge></TableCell>
-            <TableCell className="whitespace-nowrap font-mono text-xs">{connector.lastSyncAt
-              ? <time dateTime={connector.lastSyncAt}>{dateFormat.format(new Date(connector.lastSyncAt))}</time>
-              : <span className="font-sans text-sm text-muted-foreground">{connector.kind === 'roster' ? 'Not synced' : 'N/A'}</span>}</TableCell>
-            <TableCell className="whitespace-nowrap text-muted-foreground">{operation[connector.kind]}</TableCell>
-            <TableCell><Link href={`/usg/integrations?connector=${connector.kind}`} className={buttonVariants({ variant: 'secondary', size: 'sm' })} aria-label={`View ${labels[connector.kind].toLowerCase()} details`}>View details</Link></TableCell>
-          </TableRow>;
-        })}
-          <TableRow>
-            <TableHead scope="row">Clubs and quotas</TableHead>
-            <TableCell>Platform settings</TableCell><TableCell className="text-muted-foreground">Managed in app</TableCell>
-            <TableCell className="text-muted-foreground">N/A</TableCell><TableCell>Quotas and policy</TableCell>
-            <TableCell><Link href="/usg/clubs" className={buttonVariants({ variant: 'secondary', size: 'sm' })} aria-label="View clubs and quotas">View details</Link></TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </section>
+        <DialogFooter><DialogClose asChild><Button type="button">Close</Button></DialogClose></DialogFooter>
+      </DialogContent>}
+    </Dialog>
+    <Table aria-label="Clubs">
+      <TableCaption>{clubs.length} {clubs.length === 1 ? 'club' : 'clubs'}. Details are read-only; manage quotas and policy from Clubs.</TableCaption>
+      <TableHeader><TableRow><TableHead>Club</TableHead><TableHead className="w-0 text-right"><span className="sr-only">Action</span></TableHead></TableRow></TableHeader>
+      <TableBody>{clubs.length === 0
+        ? <TableRow><TableCell colSpan={2} className="p-6 text-center text-muted-foreground">No clubs yet. Sync the roster to import clubs.</TableCell></TableRow>
+        : clubs.map((club) => <TableRow key={club.id}>
+          <TableHead scope="row">{club.name}</TableHead>
+          <TableCell className="text-right"><Link href={`/usg/integrations?club=${club.id}`} className={buttonVariants({ variant: 'secondary', size: 'icon' })} aria-label={`View ${club.name} details`} title="View details"><ChevronRight aria-hidden="true" /></Link></TableCell>
+        </TableRow>)}</TableBody>
+    </Table>
   </div>;
 }

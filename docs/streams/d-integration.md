@@ -101,7 +101,7 @@ Stubs by H3.
 
 | Beat | Steps |
 |---|---|
-| D1 | Avery → `/usg/integrations` → Sync roster, twice. Five Mock connectors; Robotics provisioned; existing clubs unchanged |
+| D1 | Avery → `/usg/integrations` → Sync roster, twice. Robotics provisioned and listed; existing clubs unchanged |
 | D2 | Avery → `/usg/templates`, distribute Event planning. Sam → Startup catalog; attempting the standard model is rejected |
 | D3 | Sam publishes Recruiting Q&A. Lee → Directory → Startup Club → Agents → one run; the Inspector shows public sources only |
 | D4 | Casey, then Taylor → `/me/agents`; Sam → Startup permission preview |
@@ -117,43 +117,38 @@ Say "mock runtime" and keep the Mock labels visible. If a real agent misbehaves,
 
 - **A:** `AppError` has no server-error code, so a failed roster audit (which rolls the sync back) surfaces as `invalid` (400).
 
-## Connector CSV views and demo summaries
+## Per-club management details
 
-The **Management** overview (at the existing `/usg/integrations` URL) contains a **Clubs and quotas**
-row linking to the existing `/usg/clubs` console, plus all five connector rows with **View details** linking to
-`/usg/integrations?connector=<kind>`. The existing page handles the selection after USG-admin
-authorization. Each selection renders a full-page CSV projection and its own **AI summary · Demo**;
-the summary uses local text and current counts, not a model call. Back returns to the overview.
-The USG sidebar groups club quotas under Management rather than listing them separately. Management
-remains highlighted while the club-quota console is open. This changes navigation and labels only;
-club quotas, policy permissions and route contracts are unchanged.
+The **Management** overview (at the existing `/usg/integrations` URL) lists every club (not USG
+itself) with an arrow button (labelled **View details** for screen readers), linking to `/usg/integrations?club=<orgId>`. The existing page handles
+the selection after USG-admin authorization; an unknown, malformed or non-club id is a 404. The
+overview keeps **Sync roster** (pending and error feedback inline; the result per club opens in a
+dialog), the last roster sync time and
+the connector-attention banner. The USG sidebar groups club quotas under Management; Management stays
+highlighted while the `/usg/clubs` console is open.
 
-The datasets are actual current platform data, not fabricated CSV fixtures:
+A club's detail page starts with an **AI summary** block, left empty until WP-13. Below it, three
+collapsible blocks (native `<details>`, collapsed by default) show actual current data for that
+club only; each block header is the title alone:
 
-- Identity: current accounts and membership history, grouped by person and organization. Any
-  remaining active position means **Active member**; only ended positions means **Left
-  organization**. Ending one office does not count as leaving while another position remains
-  active. The table includes the last departure date for former memberships, and the summary
-  counts current and former person–organization relationships separately.
-- Roster: `RosterSource.fetch()` reads the current `db/seed/roster.csv`; source identifiers are
-  stripped, and counts distinguish people from multiple position rows.
-- Documents: C's document-library service recomputes grants and enforces RLS for each library.
-  Only readable metadata is projected, deduplicated across libraries; no document bodies are read.
-- Language model: the current model connector plus the latest 200 rows of `agent_runs_meta`,
-  selecting only person, billed club, recorded model, status, cost and timestamp. Run input/output
-  and document references are never selected. Mock records are identified as demo activity.
-- Applications: actual references from the internal submission queue in the current server
-  process, excluding arbitrary application payloads. This queue is not durable; no submissions
-  means an empty table. Run-page confirmation still does not invoke a submission executor.
+- Members: the club's members from membership history. Columns: person, positions, member
+  status, left on. Any remaining active position means **Active member**; only ended positions
+  means **Left organization**.
+- Documents: C's `listLibraryDocuments` recomputes grants and enforces RLS; only documents from
+  the club's own sources are kept. Metadata only; no document bodies are read.
+- Quotas: the club's row from B's `usgClubsView` (status, monthly limit, used,
+  remaining, model classes, public agents), with **Manage in Clubs** linking to `/usg/clubs`.
 
-`loadConnectorPreview` independently checks USG-admin authorization before reading any dataset.
-A failed source produces an error for that selection without exposing internal error details.
-Previewing never imports or changes records. **Sync roster** and its pending/error/result feedback
-remain separate actions on the overview; no new API route, contract or schema is introduced.
+The Roster, Language model and Applications views were removed; the roster CSV is read only by
+**Sync roster**, and no model run data appears on this page. `loadClubDetail` checks USG-admin
+authorization before reading any source, and reads each block separately, so a failed source shows an error
+for that block only, without internal error details. Viewing never imports or changes records; no
+new API route, contract or schema is introduced.
 
-`tests/connector-preview.test.ts` covers query selection, authorization, actual current accounts,
-roster failure isolation, RLS-filtered document metadata, private run-content exclusion and
-submission-reference projection. `tests/roster-preview.test.ts` covers accurate source counts.
+`tests/club-detail.test.ts` covers the identity grouping rules, administrator-only access, club-only
+listing and 404 ids, per-club filtering of every block, RLS-filtered document metadata, absence
+of model run data and failure isolation. `tests/roster-preview.test.ts` covers accurate source
+counts.
 
 The persona seed includes two ended membership examples: Lee formerly belonged to Dance Club;
 Casey formerly belonged to Archery Club and remains a Startup Club member. These historical rows

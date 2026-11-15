@@ -35,7 +35,7 @@ Demo beats (each runs on real platform logic; agents answer through the mock run
 
 | # | Beat | Acceptance check |
 |---|---|---|
-| D1 | Integration panel | `/usg/integrations` lists the five connectors, each "Mock", with last sync. "Sync roster" imports Robotics Club from `roster.csv` and provisions it with the templates already distributed (`funding-precheck`); existing clubs report 0 changes |
+| D1 | Integration panel | `/usg/integrations` lists the clubs with last roster sync. "Sync roster" imports Robotics Club from `roster.csv` and provisions it with the templates already distributed (`funding-precheck`); existing clubs report 0 changes |
 | D2 | USG distributes | Avery distributes `event-planning` (default) to all clubs; it appears in all six catalogs, HackSC and Robotics included. `funding-precheck` (required) is already there. Sam's attempt to give `event-planning` model class `standard` is rejected with the cap named and logged as `installation.rejected` |
 | D3 | Club publishes a public agent | Startup's `recruiting-qa` starts disabled. Sam clicks "Publish to all students"; the confirmation states who gains access and the installation limit. It appears on Startup Club's Agents tab in the directory; Lee (no club) opens it from there; the inspector lists Startup's public documents only |
 | D4 | Internal vs public scope | Casey's `/me/agents`: `handoff` and `recruiting-qa` under Startup Club. Taylor's adds `funding-precheck`. Sam's preview of `handoff`: Member → minutes allowed, budget "Not granted"; Treasurer → both; preview of `recruiting-qa`: "Any signed-in student" → recruiting FAQ only, minutes "Outside agent sources" |
@@ -604,9 +604,9 @@ Seeded templates (display names in UI copy):
 
 - USG rule text is not a connector: USG keeps it as rulebook documents in `/usg/documents`.
 - `connectors/registry.ts` picks each implementation from `CONNECTOR_*` and records it in
-  `connectors`. `/usg/integrations` shows kind, implementation, status and last sync.
-  The UI labels this page **Management** and includes a **Clubs and quotas** row linking to the
-  existing `/usg/clubs` console; both routes and their authorization rules stay the same.
+  `connectors`. The UI labels `/usg/integrations` **Management**: it lists the clubs with the last
+  roster sync, and `?club=<orgId>` shows one club's members, documents and quota. The quota block links to the existing
+  `/usg/clubs` console; both routes and their authorization rules stay the same.
 - "Sync roster" runs `importRoster()` (§13) and writes `audit('connector.sync', {changes})`.
 
 ## 10. Documents and permissions
