@@ -4,3 +4,7 @@ export { directory } from './directory';
 export { myAgents } from './my-agents';
 export { provisionOrg } from './provision';
 export { publishToAllStudents } from './publish';
+export { distribute } from './distribute';
+export { publishVersion, retire, versionDraftSchema, type VersionDraft } from './versions';
+export { updateInstallation, installationPatchSchema, type InstallationPatch } from './install';
+export { publishRulePack, rulePackDraftSchema } from './rule-packs';

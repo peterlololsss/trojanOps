@@ -9,6 +9,7 @@ import { agentInstallations, agentTemplates, agentTemplateVersions, orgCohorts, 
   positions, quotaLimits, sources, usgClubPolicy } from '../db/schema';
 import { audit } from '../gateway/audit';
 import { clampInstallation } from './clamps';
+import { lockQuotaBootstrap } from './write-support';
 
 const DEFAULT_SOURCES = [
   { slug: 'public', name: 'Public', kind: 'public' },
@@ -28,10 +29,11 @@ export async function provisionOrg(orgId: string, actor?: Actor): Promise<{ inst
   let installed: number;
   try {
     installed = await getDb().transaction(async tx => {
-      const [org] = await tx.select().from(orgs).where(eq(orgs.id, orgId)).for('update');
+      const [org] = await tx.select().from(orgs).where(eq(orgs.id, orgId)).for('no key update');
       if (org?.kind !== 'rso' || org.status !== 'active') throw notFound();
       const createdAt = now();
       const [policy] = await tx.select().from(usgClubPolicy).where(eq(usgClubPolicy.orgId, orgId));
+      await lockQuotaBootstrap(tx);
       const quotas = await tx.select().from(quotaLimits).where(inArray(quotaLimits.scope, ['platform', 'org']));
       const ownQuota = quotas.find(q => q.scope === 'org' && q.orgId === orgId);
       // §15 specifies $5 per club. Bootstrap writes the row directly: the optional actor can be
