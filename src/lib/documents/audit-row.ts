@@ -12,6 +12,7 @@ export const ACTION_LABELS: Record<AuditAction, string> = {
   'run.access': 'Run access',
   'tool.call': 'Tool call',
   'tool.confirm': 'Tool confirmed',
+  'tool.reject': 'Tool rejected',
   'authz.denied': 'Access denied',
   'quota.blocked': 'Quota blocked',
   'quota.limit.set': 'Quota limit set',
