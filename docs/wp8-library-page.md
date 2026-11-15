@@ -1,13 +1,18 @@
 # WP-8 slice 3: document library page
 
-Branch: `c/wp8-library-page`, synchronized with `origin/main` through PR #11 (`96a99e8`). The
-draft includes the shared document-tier contract, isolated test sources and real gateway audit writer.
+The page at `/org/[orgId]/documents` shows the documents the viewer can read in a club, with search, a
+tier filter and pagination, and a president-only upload form. It backs the permissions story (what a
+person can read in a club) rather than a numbered demo beat.
 
-The page at `/org/[orgId]/documents` uses `getLibraryPageData` to load club metadata and
-`listLibraryDocuments` to load only the documents the viewer can read. Only the president of the
-active club receives upload sources and officer-position choices. Upload uses the existing JSON
-API; Markdown is entered as text. Successful uploads refresh the authorized library rather than
-inserting the response into the table.
+- `getLibraryPageData` (`src/lib/documents/library-page.ts`) loads club metadata and calls
+  `listLibraryDocuments`, so only documents the viewer can read reach the page.
+- `viewLibrary` (`src/lib/documents/library-view.ts`) is the pure search, tier filter and pagination
+  function the table uses.
+- The table is TanStack Table (`@tanstack/react-table` v9) rendered by `data-table.tsx`, a
+  presentational component with no document knowledge.
+- Only the president of the active club receives upload sources and officer-position choices. Upload
+  uses the existing JSON API with Markdown entered as text; a successful upload refreshes the
+  authorized library instead of inserting the response into the table.
 
 ## Demo check
 
@@ -23,7 +28,7 @@ Start `pnpm dev`, choose a persona at `/`, then open
 | Lee | Recruiting FAQ and public USG funding rules only |
 | Search for an absent title, then Clear filters | Zero-result message, then the readable list returns |
 | Filter by tier | Count and rows reflect only matching readable documents |
-| Sam: choose Officers | Officer checkboxes; president always has access; unchecked means president only |
+| Sam: choose Officers | Checkboxes for secretary and treasurer only; the president always has access; unchecked means president only |
 | Change tier away from Officers and back | Previous officer selections are cleared |
 | Sam: upload title, source, tier and Markdown text | Pending status, then success and refreshed library |
 | Submit after session changes to Casey | API denial; entered title and text remain |
@@ -32,25 +37,13 @@ Start `pnpm dev`, choose a persona at `/`, then open
 | Narrow viewport | Table scrolls horizontally |
 
 An actual successful upload creates a document and audit event. Use a disposable demo database
-for that check. Automated service upload tests run in rollback transactions.
+for that check. Automated service upload tests run in rollback transactions. The seed has fewer than
+11 readable documents per club, so paging is covered by `tests/documents-library-view.test.ts`.
 
-## Validation and owner requests
+## Owner requests
 
-- Seven new authentication/database tests pass in `tests/documents-page.test.ts`.
-- Nine Chrome interaction scenarios pass without browser exceptions. These include a real API
-  denial, simulated network failure and simulated upload success; the browser checks create no documents.
-- Typecheck, lint, invariant greps and design greps pass. Reviewer found no must-fix issue.
-- With the upload error fix, a fresh isolated `pnpm db:reset` and `pnpm check` pass with
-  138 tests in nine files, including all database suites. The existing local database was not reset.
-- The upload error parsing finding is fixed: JSON is treated as `unknown`, and only a nonblank
-  string `message` is rendered. Invalid JSON, empty responses and malformed messages use the
-  status-based fallback. Fourteen regression tests and eight new Chrome response scenarios pass;
-  browser checks preserve entered text and create no documents.
-- The shared-table finding remains open. Latest fetched `origin/main` still provides only
-  `src/components/ui/button.tsx` and has no TanStack dependency. Stream D must provide the shared
-  shadcn/TanStack table and its import/props interface; Stream A must add the dependency in a
-  separate `deps` PR. Stream C can then replace the document table while retaining readable-only
-  rows, search/tier filters, pagination, timestamps, tier labels and empty states.
-- Keep this PR in draft until the shared-table finding is resolved. `AGENTS.md` rule 1 assigns
-  shared UI to D and root dependency files to A; this slice does not change those paths.
-- Google Fonts were unreachable during browser verification, so the shared shell used fallback fonts.
+- Stream D: promote `src/app/org/[orgId]/documents/data-table.tsx` to `src/components/ui` as the shared
+  Data Table. It takes a TanStack `table` instance plus `caption`, `numericColumns`, `monoColumns`,
+  `rowHeaderColumn`, `sorted`, `empty` and `minWidth`. C will switch its import once it lands. The
+  design brief also calls for skeleton rows, a bulk-action bar and a row-action menu, which it does not
+  have yet.

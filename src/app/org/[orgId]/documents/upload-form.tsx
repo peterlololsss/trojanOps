@@ -6,11 +6,9 @@ import { AlertCircle, Check, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Tier } from '@/lib/contracts';
 import type { LibraryPageData } from '@/lib/documents/library-page';
+import { tierOptions } from '@/lib/documents/library-view';
 import { uploadErrorMessage } from '@/lib/documents/upload-error';
 
-export const tierLabels: Record<Tier, string> = {
-  public: 'Public', members: 'Members', officers: 'Officers', usg_internal: 'USG internal',
-};
 export const fieldClass = 'h-9 w-full rounded-md border border-input bg-background px-3';
 
 export function UploadForm({ data }: { data: LibraryPageData }) {
@@ -77,8 +75,7 @@ export function UploadForm({ data }: { data: LibraryPageData }) {
             </label>
             <label className="block space-y-1"><span className="block font-semibold">Access tier</span>
               <select value={tier} onChange={(event) => setTier(event.target.value as Tier)} className={fieldClass}>
-                {Object.entries(tierLabels).filter(([value]) => value !== 'usg_internal' || data.org.kind === 'usg')
-                  .map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                {tierOptions(data.org.kind).map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
           </div>
@@ -88,7 +85,7 @@ export function UploadForm({ data }: { data: LibraryPageData }) {
                 : 'The president can read this document. Select additional officer positions below; leaving all unchecked limits access to the president.'}</p>
           {tier === 'officers' && (
             <fieldset className="space-y-2"><legend className="mb-1 font-semibold">Officer positions</legend>
-              {data.positions.map((position) => (
+              {data.positions.filter((position) => position.slug !== 'president').map((position) => (
                 <label key={position.slug} className="flex items-center gap-2">
                   <input type="checkbox" name="allowedPositions" value={position.slug} className="size-4 accent-primary" />
                   {position.name}
@@ -104,7 +101,7 @@ export function UploadForm({ data }: { data: LibraryPageData }) {
         <p role="status" className="flex items-start gap-2 text-muted-foreground">
           {pending ? 'Uploading document…' : success && <><Check aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />Document uploaded. The library shows documents your current positions can read.</>}
         </p>
-        <Button type="submit" aria-disabled={pending}><Upload aria-hidden />{pending ? 'Uploading…' : 'Upload document'}</Button>
+        <Button type="submit" disabled={pending}><Upload aria-hidden />{pending ? 'Uploading…' : 'Upload document'}</Button>
       </form>
     </details>
   );
