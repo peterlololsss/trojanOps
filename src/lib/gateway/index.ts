@@ -53,7 +53,7 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
 
   // 5. Accessible documents
   const runId = randomUUID();
-  const docs = await listAccessibleDocuments(actor, runGrants, agent.sourceIds);
+  const docs = await listAccessibleDocuments(actor, runGrants, agent);
   await audit('run.access', {
     actorUserId: userId, actingOrgId: actor.activeOrgId, runId, installationId,
     targetType: 'run', targetId: runId, details: { documentIds: docs.map((d) => d.id) },

@@ -1,19 +1,23 @@
-// Owner: C (WP-8). listAccessibleDocuments is a STUB that filters fixtures the way the RLS policy
-// does (real by H5, inside withActor). explainAccess is the §10 rule and stays pure.
+// Owner: C (WP-8). listAccessibleDocuments is the RLS query behind gateway step 5 (§10), read inside
+// withActor. explainAccess is the §10 rule and stays pure; tests/documents.test.ts holds them together.
+import { asc } from 'drizzle-orm';
 import type { AccessCell, AccessibleDocument, Actor, EffectiveAgent, Grant, Tier } from '../contracts';
-import { FIXTURE_DOCUMENTS } from './fixtures';
+import { documents } from '../db/schema';
+import { withActor } from '../db/with-actor';
 
 /** The documents a run may read: read_grants overlap runGrants and the source is one of the agent's
- * (gateway step 5). Real version: withActor(actor, { grants: runGrants, sourceIds }, …). */
+ * (gateway step 5), with the agent's max tier enforced by RLS. Oldest first, then by title: the
+ * order is stable across runs, and the mock runtime cites the first three. */
 export async function listAccessibleDocuments(
   actor: Actor,
   runGrants: Grant[],
-  sourceIds: string[],
+  agent: Pick<EffectiveAgent, 'sourceIds' | 'maxTier'>,
 ): Promise<AccessibleDocument[]> {
-  void actor;
-  return FIXTURE_DOCUMENTS
-    .filter((d) => sourceIds.includes(d.sourceId) && d.readGrants.some((g) => runGrants.includes(g as Grant)))
-    .map(({ id, title, tier, bodyMd }) => ({ id, title, tier, bodyMd }));
+  // No where clause: the documents_read policy is the filter, and a copy of it here would hide an RLS failure.
+  return withActor(actor, { grants: runGrants, sourceIds: agent.sourceIds, maxTier: agent.maxTier }, async (tx) =>
+    tx.select({ id: documents.id, title: documents.title, tier: documents.tier, bodyMd: documents.bodyMd })
+      .from(documents)
+      .orderBy(asc(documents.createdAt), asc(documents.title)));
 }
 
 export interface AccessDocument {

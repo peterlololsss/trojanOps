@@ -1,5 +1,7 @@
-// Owner: C. STUB data until WP-8 reads documents under RLS (real by H5). Mirrors §15; readGrants are
-// what the trigger in db/migrations/0001_roles_rls.sql computes.
+// Owner: C. STUB data behind listLibraryDocuments (until the WP-8 upload slice) and previewAccess
+// (until WP-9); delete it once both read the database. Mirrors the seed in db/seed/documents.ts, and
+// tests/documents.test.ts checks that it does; readGrants are what the documents_read_grants trigger
+// computes.
 import type { Tier } from '../contracts';
 import { DOCUMENT, ORG, SOURCE } from '@db/seed/ids';
 

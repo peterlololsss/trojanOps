@@ -40,7 +40,7 @@ const visible = (tx: Tx) => tx.execute<{ id: string }>(sql`select id from docume
 async function runVisibility(userId: string, activeOrgId: string | null, agent: Agent): Promise<string[]> {
   const actor = await actorFor(userId, activeOrgId);
   const grants = capGrants(actor.grants, agent.orgId, agent.maxTier);
-  return withActor(actor, { grants, sourceIds: agent.sourceIds }, visible);
+  return withActor(actor, { grants, sourceIds: agent.sourceIds, maxTier: agent.maxTier }, visible);
 }
 
 const { recruitingFaq: faq, minutes20261008: minutes, spring2026Budget: budget, usgFundingRules: rules } = DOCUMENT;
@@ -85,15 +85,16 @@ describe.skipIf(!probe)('withActor and RLS', () => {
   });
 
   it('keeps every setting local to its transaction', async () => {
-    type Settings = { pid: number; u: string | null; g: string | null; s: string | null; m: string | null };
+    type Settings = { pid: number; u: string | null; g: string | null; s: string | null; m: string | null; t: string | null };
     const read = sql`select pg_backend_pid() as pid, current_setting('app.user_id', true) as u,
       current_setting('app.grants', true) as g, current_setting('app.agent_sources', true) as s,
-      current_setting('app.manage_org', true) as m`;
-    // Sam is president, so all four settings are non-empty inside withActor.
+      current_setting('app.manage_org', true) as m, current_setting('app.max_tier', true) as t`;
+    // Sam is president, so all five settings are non-empty inside withActor.
     const sam = await actorFor(USER.sam, ORG.startup);
-    const inside = await withActor(sam, { sourceIds: AGENTS.handoff.sourceIds }, (tx) =>
+    const inside = await withActor(sam, { sourceIds: AGENTS.handoff.sourceIds, maxTier: 'officers' }, (tx) =>
       tx.execute<Settings>(read).then(([r]) => r));
     expect([inside.u, inside.g, inside.s, inside.m].every(Boolean)).toBe(true);
+    expect(inside.t).toBe('officers');
 
     // Read from the pool until a query lands on the backend that ran withActor; no read may carry
     // Sam's settings.
@@ -101,7 +102,7 @@ describe.skipIf(!probe)('withActor and RLS', () => {
     for (let burst = 0; burst < 20 && sameBackend === 0; burst++) {
       const rows = await Promise.all(Array.from({ length: 5 }, () => getDb().execute<Settings>(read).then(([r]) => r)));
       for (const r of rows) {
-        expect([r.u, r.g, r.s, r.m].every((v) => v === null || v === '')).toBe(true);
+        expect([r.u, r.g, r.s, r.m, r.t].every((v) => v === null || v === '')).toBe(true);
         if (r.pid === inside.pid) sameBackend++;
       }
     }
@@ -185,9 +186,10 @@ describe.skipIf(!probe)('withActor and RLS', () => {
     await inRolledBackApp(async (tx) => {
       const sam = await actorFor(USER.sam, ORG.startup);
       await withActor(sam, { sourceIds: [SOURCE.startup.public] }, async () => {});
-      const [r] = await tx.execute<{ g: string; m: string }>(
-        sql`select current_setting('app.grants', true) as g, current_setting('app.manage_org', true) as m`);
-      expect(r).toEqual({ g: '', m: '' });
+      const [r] = await tx.execute<{ g: string; m: string; t: string }>(
+        sql`select current_setting('app.grants', true) as g, current_setting('app.manage_org', true) as m,
+                   current_setting('app.max_tier', true) as t`);
+      expect(r).toEqual({ g: '', m: '', t: '' });
       await expect(withActor(sam, {}, () => withActor(sam, {}, async () => {}))).rejects.toThrow(/nested or concurrent/);
     });
   });
