@@ -495,9 +495,10 @@ export interface LLMProvider {              // used by the real runtime (WP-13)
 2. `canUse(actor.userId, agent)`. Otherwise `authz.denied`, 403 `forbidden`.
 3. `runGrants = capGrants(grantsFor(actor.userId, agent.orgId), agent.orgId, agent.maxTier)`.
 4. Quota: hold = the estimated cost (mock: a flat $0.01). Block when `spent + hold > limit` at any
-   level; a limit of 0 always blocks. Levels: platform; billed club (`agent.orgId`); installation;
-   member, when the user is an active member of the billed club; `student_daily`, for every
-   public-agent run. Blocked → `quota.blocked`, 429 `quota_exceeded` with `cap`; runtime not called.
+   level; a limit of 0 always blocks. Levels (checked in the order given in §11): platform; billed
+   club (`agent.orgId`); installation; member, when the user is an active member of the billed club;
+   `student_daily`, for every public-agent run. Blocked → `quota.blocked`, 429 `quota_exceeded` with
+   `cap`; runtime not called.
 5. `accessibleDocuments = listAccessibleDocuments(actor, runGrants, agent)` (C, via
    `withActor`); `audit('run.access', {documentIds})`.
 6. `runtime.run(agent, actor, input, {runId, accessibleDocuments})`.
@@ -627,10 +628,27 @@ Seeded templates (display names in UI copy):
   PT.
 - Levels: platform → club → member; per installation; `student_daily` for public-agent runs (set by
   USG). Every public installation has an installation limit.
-- `PUT /api/quota/limits` validates child ≤ parent and returns `clamp_violation` naming the parent.
+- `PUT /api/quota/limits` validates child ≤ parent (club ≤ platform; member and installation ≤ club;
+  `student_daily` has no parent) and returns `clamp_violation` naming the parent.
   `audit('quota.limit.set')`.
 - Mechanics: hold → settle (actual − hold) → stale holds released after 10 minutes, all as
   `ai_usage` rows; spent = sum since the period start.
+  - Amounts: a hold is +H, a settle is (actual − H), a release is −H. A finished run nets to its cost; a
+    failed or stale one nets to 0. A settle after a release writes +actual.
+  - A level with no limit row: platform, club and `student_daily` count as 0 (they block); member and
+    installation fall back to the club's limit.
+  - Checks run in this order and the first failure is reported: member, `student_daily`, installation,
+    club, platform. A blocked run writes `quota.blocked` and no run row.
+  - `setLimit` writes under an advisory lock; lowering a parent does not change its children, because a
+    run checks every level.
+- `POST /api/pending-actions/:id/confirm` (body `{}`): the user who ran the agent confirms, holding an
+  active membership in the action's club. A tool with an entry in `confirmerPositions`
+  (`gateway/tools.ts`) narrows that to the listed positions; a tool with no entry accepts any member
+  of the club. The run's active org is not required: a public agent can be run from another club.
+  It records `tool.confirm`; no write tool executes yet.
+- `RunResult.inspector.quotaRemainingMicro` holds `{[billed club name]: n}`, where n is the smallest
+  remaining amount over the levels that apply to the run (member, `student_daily`, installation, club,
+  platform).
 
 UI copy for `quota_exceeded`, by scope:
 
@@ -682,7 +700,7 @@ Every handler: `const actor = await getActor(req)` → one service call → JSON
 |---|---|---|---|
 | POST `/api/session/persona`, POST `/api/session/active-org`, GET `/api/me` | identity | `DEMO_MODE` / any | A |
 | POST `/api/agents/:installationId/runs` | `gateway.runAgent` | per audience | A |
-| POST `/api/pending-actions/:id/confirm` | `gateway.confirm` | a position allowed for that tool | A |
+| POST `/api/pending-actions/:id/confirm` (body `{}`) | `gateway.confirm` | the run's user, a member of the action's club (narrowed per tool) | A |
 | PUT `/api/quota/limits` | `quota.setLimit` | USG admin (platform, org, student_daily), president (member, installation) | A |
 | GET `/api/audit` | `audit.list` | president (own club), USG admin | A |
 | GET `/api/directory`, GET `/api/me/agents` | `distribution.directory`, `myAgents` | signed-in users | B |
@@ -763,7 +781,7 @@ D6 publishes v2 with the cap at $10,000. Evaluation of the rules belongs to WP-1
 - Every club may use `standard` and `economy` and publish public agents. `event-planning` v1 allows
   only `economy`.
 - Platform $50/month; each club $5/month; Casey $0.50/month; `student_daily` $0.05; Startup's
-  `recruiting-qa` installation $2.50/month.
+  `recruiting-qa` installation and Dance's `showcase-qa` installation $2.50/month.
 
 ## 16. Work packages
 
