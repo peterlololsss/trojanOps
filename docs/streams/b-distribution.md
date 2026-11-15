@@ -107,8 +107,8 @@ D2, D6, propagation, rejection rollback, permissions and the separate-connection
 `src/lib/lifecycle/transfer.ts`. It locks the club, refreshes the president's authority, ends the
 previous office and inserts a `source: 'manual'` membership in one transaction. Other memberships,
 installations and documents are unchanged. Repeating the current assignment preserves the row.
-The shared `audit('position.transfer')` writer is called after that transaction commits, following
-the existing service pattern; it has no transaction parameter. Audit details contain ids and a
+The shared `audit('position.transfer')` writer is called after that transaction commits; it could
+take the transaction (`audit(action, event, tx)`) to commit with it. Audit details contain ids and a
 changed flag. A failed replacement insert rolls back the old tenure and emits no success audit.
 
 `TODO(verify):` this succession service accepts only single-holder officer positions and current

@@ -113,8 +113,8 @@ describe.skipIf(!probe)('roster import', () => {
       await importRoster(actor);
       const before = (await listConnectors()).find((c) => c.kind === 'roster');
       const writer = auditLog.audit;
-      vi.spyOn(auditLog, 'audit').mockImplementation((action, event) => action === 'connector.sync' && event.details.succeeded === true
-        ? Promise.reject(new Error('audit unavailable')) : writer(action, event));
+      vi.spyOn(auditLog, 'audit').mockImplementation((action, event, t) => action === 'connector.sync' && event.details.succeeded === true
+        ? Promise.reject(new Error('audit unavailable')) : writer(action, event, t));
       await expect(importRoster(actor)).rejects.toThrow('audit unavailable');
       const after = (await listConnectors()).find((c) => c.kind === 'roster');
       expect(after).toMatchObject({ status: 'degraded', lastSyncAt: before?.lastSyncAt });
@@ -150,6 +150,8 @@ describe.skipIf(!probe)('roster import', () => {
       const rows = await getConnectors().roster.fetch();
       vi.spyOn(getConnectors().roster, 'fetch').mockResolvedValue(rows.filter((r) => r.orgSlug !== 'archery'));
       const before = await tx.select().from(rosterState).where(eq(rosterState.orgId, ORG.archery));
+      const activeArchery = () => tx.select().from(memberships).where(and(eq(memberships.orgId, ORG.archery), isNull(memberships.endedAt)));
+      const membersBefore = await activeArchery();
       const writer = auditLog.audit;
       vi.spyOn(auditLog, 'audit').mockImplementation((action, event, t) => action === 'roster.import' || (action === 'connector.sync' && event.details.succeeded === false)
         ? Promise.reject(new Error('audit unavailable')) : writer(action, event, t));
@@ -157,6 +159,7 @@ describe.skipIf(!probe)('roster import', () => {
         error: { message: 'The roster sync could not be recorded in the audit log, so no changes were applied. Retry the sync.' } });
       expect(before.length).toBeGreaterThan(0);
       expect(await tx.select().from(rosterState).where(eq(rosterState.orgId, ORG.archery))).toEqual(before);
+      expect(await activeArchery()).toEqual(membersBefore);
     });
   });
 });

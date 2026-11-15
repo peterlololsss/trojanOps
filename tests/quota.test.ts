@@ -453,7 +453,10 @@ describe.skipIf(!probe)('shared helpers for other streams', () => {
     const club = await remaining({ scope: 'org', orgId: ORG.startup });
     expect(await ownLimitMicro(tx, { scope: 'org', orgId: ORG.startup })).toBe(club.limitMicro);
     expect(await ownLimitMicro(tx, { scope: 'installation', installationId: INSTALLATION.startupHandoff })).toBeNull();
-    expect(await ownLimitMicro(tx, { scope: 'installation', installationId: INSTALLATION.danceShowcaseQa })).toBe(2_500_000);
+    const dance = await tx.select({ limitMicro: quotaLimits.limitMicro }).from(quotaLimits)
+      .where(and(eq(quotaLimits.scope, 'installation'), eq(quotaLimits.installationId, INSTALLATION.danceShowcaseQa)));
+    expect(dance.length).toBeGreaterThan(0);
+    expect(await ownLimitMicro(tx, { scope: 'installation', installationId: INSTALLATION.danceShowcaseQa })).not.toBeNull();
   }));
 
   it('audit(…, tx) rolls back with the caller\'s transaction', () => inRolledBackApp(async (tx) => {

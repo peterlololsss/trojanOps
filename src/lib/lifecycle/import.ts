@@ -134,7 +134,8 @@ async function reconcileRoster(rows: readonly RosterRow[], event: AuditEvent) {
     // The audit row commits with the roster changes: if it can't be written, nothing changes.
     try {
       await audit('roster.import', { ...event, details: counts }, tx);
-    } catch {
+    } catch (cause) {
+      console.error('roster import: the roster.import audit failed', cause);
       throw new AppError({ code: 'invalid', message: 'The roster sync could not be recorded in the audit log, so no changes were applied. Retry the sync.' });
     }
     return { ...counts, clubs };
