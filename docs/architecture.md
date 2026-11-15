@@ -255,7 +255,7 @@ create policy runs_own on agent_runs for all to trojanops_app
 - An `UPDATE ... WHERE` on `documents` must also pass `documents_read`, so the library sets
   `app.grants` and `app.agent_sources` before updating.
 - Agent runs set `app.agent_sources` to the agent's sources. The document library sets it to all
-  sources of the active org plus USG public sources.
+  sources of the viewed org plus USG public sources, with the actor's grants in that org.
 - `pnpm db:reset` drops the `public` and `drizzle` schemas; the role survives and the `do` block
   skips it.
 - Never add a `for all ... using (true)` policy: permissive policies are OR-ed.

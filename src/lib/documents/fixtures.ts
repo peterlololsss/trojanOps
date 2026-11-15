@@ -1,7 +1,6 @@
-// Owner: C. STUB data behind listLibraryDocuments (until the WP-8 upload slice) and previewAccess
-// (until WP-9); delete it once both read the database. Mirrors the seed in db/seed/documents.ts, and
-// tests/documents.test.ts checks that it does; readGrants are what the documents_read_grants trigger
-// computes.
+// Owner: C. STUB data behind previewAccess only (until WP-9); delete it once preview reads the
+// database. Mirrors the seed in db/seed/documents.ts, and tests/documents.test.ts checks that it does;
+// readGrants are what the documents_read_grants trigger computes.
 import type { Tier } from '../contracts';
 import { DOCUMENT, ORG, SOURCE } from '@db/seed/ids';
 
@@ -15,8 +14,6 @@ export interface FixtureDocument {
   readGrants: string[];
   bodyMd: string;
 }
-
-export const FIXTURE_UPLOADED_AT = new Date('2026-10-08T17:00:00Z');
 
 export const FIXTURE_DOCUMENTS: FixtureDocument[] = [
   {
@@ -65,14 +62,6 @@ export const FIXTURE_DOCUMENTS: FixtureDocument[] = [
     bodyMd: 'The spring showcase is on April 18 at Bovard Auditorium. Tickets are free for students.',
   },
 ];
-
-// Each club's library shows its own sources plus USG public sources.
-export const FIXTURE_LIBRARY_SOURCES: Record<string, string[]> = {
-  [ORG.usg]: [SOURCE.usg.rulebook, SOURCE.usg.usg_internal],
-  [ORG.startup]: [...Object.values(SOURCE.startup), SOURCE.usg.rulebook],
-  [ORG.archery]: [...Object.values(SOURCE.archery), SOURCE.usg.rulebook],
-  [ORG.dance]: [...Object.values(SOURCE.dance), SOURCE.usg.rulebook],
-};
 
 export const FIXTURE_CLUB_POSITIONS: Record<string, string[]> = {
   [ORG.usg]: ['admin', 'reviewer'],

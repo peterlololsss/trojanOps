@@ -7,7 +7,6 @@ import { now, resetClockForTests } from '@/lib/clock';
 import { AppError, type Actor } from '@/lib/contracts';
 import { pgTextArray } from '@/lib/db/with-actor';
 import { canUse, directory, effectiveAgent, myAgents, provisionOrg, publishToAllStudents } from '@/lib/distribution';
-import { listLibraryDocuments } from '@/lib/documents/library';
 import { previewAccess } from '@/lib/documents/preview';
 import { runAgent } from '@/lib/gateway';
 import { audit, listAudit } from '@/lib/gateway/audit';
@@ -91,7 +90,6 @@ describe('B: distribution', () => {
 describe('C: documents', () => {
   it('keeps its shapes', async () => {
     const sam = literal(USER.sam, ORG.startup, 'president');
-    expect(await listLibraryDocuments(sam, ORG.startup)).toEqual(expect.any(Array));
     const matrix = await previewAccess(sam, INSTALLATION.startupHandoff);
     expect(Object.keys(matrix).sort()).toEqual(['cells', 'documents', 'subjects']);
   });
