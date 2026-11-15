@@ -6,6 +6,7 @@ import type { RunInspector } from '@/lib/contracts';
 import { accessDecisions, tierIcons, tierLabels } from './access-labels';
 import { Chip } from './chip';
 import { money } from './format';
+import { creditLabel } from '@/lib/gateway/prices';
 
 /** One inspector section; the placeholder panel uses it too, so both keep the same headings. */
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -34,20 +35,20 @@ function Empty({ children }: { children: string }) {
   return <p className="py-[4px] text-muted-foreground">{children}</p>;
 }
 
-function Row({ children }: { children: React.ReactNode }) {
-  return <li className="flex min-h-[32px] items-center justify-between gap-[8px] border-b border-border py-[4px] last:border-b-0">{children}</li>;
+function Row({ children, highlighted }: { children: React.ReactNode; highlighted?: boolean }) {
+  return <li className={`flex min-h-[32px] items-center justify-between gap-[8px] border-b border-border py-[4px] last:border-b-0 ${highlighted ? 'bg-gold-25' : ''}`}>{children}</li>;
 }
 
-export function Inspector({ inspector }: { inspector: RunInspector }) {
+export function Inspector({ inspector, highlightedId }: { inspector: RunInspector; highlightedId?: string | null }) {
   const tierOf = new Map(inspector.permitted.map((d) => [d.id, d.tier]));
   const quota = Object.entries(inspector.quotaRemainingMicro);
 
   return (
-    <aside aria-label="Run inspector" className="w-[384px] shrink-0 border-l border-border bg-background text-[14px] leading-5">
+    <aside aria-label="Run inspector" className="w-full max-w-[384px] min-w-0 shrink-0 border-l border-border bg-background text-[14px] leading-5">
       <Section title="Run grants">
         {inspector.runGrants.length === 0 ? <Empty>This run had no grants.</Empty> : (
           <ul>
-            {inspector.runGrants.map((g) => (
+            {[...new Map(inspector.runGrants.map((g) => [g.label, g])).values()].map((g) => (
               <li key={g.grant} className="flex items-center gap-[8px] py-[4px]">
                 <KeyRound aria-hidden className="size-[16px] shrink-0 text-muted-foreground" />
                 <span>{g.label}</span>
@@ -75,7 +76,7 @@ export function Inspector({ inspector }: { inspector: RunInspector }) {
           {inspector.permitted.length === 0 ? <Empty>This run could read no documents.</Empty> : (
             <ul>
               {inspector.permitted.map((d) => (
-                <Row key={d.id}>
+                <Row key={d.id} highlighted={d.id === highlightedId}>
                   <span className="min-w-0 break-words">{d.title}</span>
                   <Chip icon={tierIcons[d.tier]}>{tierLabels[d.tier]}</Chip>
                 </Row>
@@ -90,7 +91,7 @@ export function Inspector({ inspector }: { inspector: RunInspector }) {
               {inspector.readInRun.map((d) => {
                 const tier = tierOf.get(d.id);
                 return (
-                  <Row key={d.id}>
+                  <Row key={d.id} highlighted={d.id === highlightedId}>
                     <span className="flex min-w-0 items-center gap-[8px]">
                       <FileText aria-hidden className="size-[16px] shrink-0 text-muted-foreground" />
                       <span className="break-words">{d.title}</span>
@@ -140,17 +141,18 @@ export function Inspector({ inspector }: { inspector: RunInspector }) {
           <dt className="text-muted-foreground">Billed club</dt>
           <dd className="text-right">{inspector.billedClub}</dd>
           <dt className="text-muted-foreground">Cost of this run</dt>
-          <dd className="text-right tabular-nums">{money(inspector.costMicro)}</dd>
+          <dd className="text-right tabular-nums">{creditLabel(inspector.costMicro)} ({money(inspector.costMicro)})</dd>
           {quota.map(([club, micro]) => (
             <div key={club} className="contents">
               <dt className="text-muted-foreground">{`Quota left · ${club}`}</dt>
-              <dd className="text-right tabular-nums">{money(micro)}</dd>
+              <dd className="text-right tabular-nums">{creditLabel(micro)} ({money(micro)})</dd>
             </div>
           ))}
         </dl>
         {quota.length > 0 && <p className="mt-[8px] text-[12px] leading-4 text-muted-foreground">The smallest amount left across the limits that apply to this run.</p>}
       </Section>
 
+      <Section title="History"><p>Earlier messages: not sent (demo runtime).</p></Section>
       <Section title="Audit">
         <dl className="grid grid-cols-[1fr_auto] gap-x-[16px]">
           <dt className="text-muted-foreground">Audit event</dt>

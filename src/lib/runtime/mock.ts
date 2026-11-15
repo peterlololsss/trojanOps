@@ -1,28 +1,34 @@
 // Owner: A. The mock runtime (§7): no model call. Lists the accessible documents, quotes the first
-// sentence of up to three, adds the rule-pack line, costs a flat $0.01.
+// sentence of up to three and adds the rule-pack line. Cost follows the chosen demo model class.
+import { z } from 'zod';
 import type { AgentRuntime } from '../contracts';
+import { priceMicro } from '../gateway/prices';
 
-export const MOCK_COST_MICRO = 10_000;
-
-const firstSentence = (text: string) => (text.match(/^.*?[.!?](\s|$)/)?.[0] ?? text).trim();
+function firstSentence(text: string): string {
+  const start = text.search(/^[^#\s].*/m);
+  const paragraph = text.slice(Math.max(0, start)).split(/\n\s*\n/)[0].trim();
+  return (paragraph.match(/^[\s\S]*?[.!?](?:\s|$)/)?.[0] ?? paragraph).trim();
+}
+/** A document above version 1 is named with its version, e.g. "USG Funding Department Guidelines (v2)". */
 const titled = (d: { title: string; version?: number }) => (d.version && d.version > 1 ? `${d.title} (v${d.version})` : d.title);
 
 export const mockRuntime: AgentRuntime = {
-  async run(agent, _actor, _input, { accessibleDocuments: docs }) {
+  async run(agent, _actor, input, { accessibleDocuments: docs }) {
+    const cited = docs.slice(0, 3);
     const lines = [
-      docs.length
-        ? `I can read ${docs.length} document${docs.length === 1 ? '' : 's'}: ${docs.map(titled).join(', ')}.`
-        : 'I cannot read any documents for this run.',
+      "**Placeholder answer.** The demo runtime doesn't call a model.",
+      cited.length ? 'Here is the first sentence of each cited document this run could read:' : 'This run has no permitted documents to cite.',
+      ...cited.map((d, i) => `${i + 1}. **${titled(d)}:** ${firstSentence(d.bodyMd)} [${i + 1}]`),
     ];
     if (agent.rulePack) {
-      const cap = (agent.rulePack.content as { annualCapUsd?: number }).annualCapUsd;
-      lines.push(`${agent.rulePack.label} v${agent.rulePack.version} · annual cap $${cap?.toLocaleString('en-US')}`);
+      const pack = z.object({ annualCapUsd: z.number() }).safeParse(agent.rulePack.content);
+      if (pack.success) lines.push(`${agent.rulePack.label} v${agent.rulePack.version} · annual cap $${pack.data.annualCapUsd.toLocaleString('en-US')}`);
     }
     return {
       reply: lines.join('\n\n'),
-      citations: docs.slice(0, 3).map((d) => ({ documentId: d.id, quote: firstSentence(d.bodyMd) })),
-      proposedActions: [],
-      usage: { model: 'mock', inputTokens: 0, outputTokens: 0, costMicro: MOCK_COST_MICRO },
+      citations: cited.map((d) => ({ documentId: d.id, quote: firstSentence(d.bodyMd) })),
+      proposedActions: agent.tools.includes('submit_to_queue') && /\bsubmit\b/i.test(input) ? [{ tool: 'submit_to_queue', args: {} }] : [],
+      usage: { model: `demo-${agent.modelClass}`, inputTokens: 0, outputTokens: 0, costMicro: priceMicro(agent.modelClass) },
     };
   },
 };

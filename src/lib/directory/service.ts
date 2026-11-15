@@ -301,7 +301,7 @@ async function quotaOf(orgId: string): Promise<QuotaUse> {
 /**
  * The annual cap and the funded-events limit from the latest published `usg-funding` pack, so a
  * published amendment shows here. Reads either pack shape: top-level values, or rule values by id.
- * TODO(verify): since decision 20, D6 amends the USG Funding Department Guidelines document, not the
+ * TODO(verify): since decision 26, D6 amends the USG Funding Department Guidelines document, not the
  * pack, so after D6 this still shows $8,000. Read the cap from the document or a USG setting instead.
  */
 async function fundingLimits(): Promise<FundingLimits> {

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Lock } from 'lucide-react';
 import { PageHeader } from '@/components/shell';
-import { getLibraryPageData } from '@/lib/documents/library-page';
+import { getKnowledgeLibrary } from '@/lib/documents/knowledge-library';
 import { getActor } from '@/lib/identity';
 import { DocumentLibrary } from './document-library';
 
@@ -20,7 +20,7 @@ export default async function DocumentsPage({ params }: { params: Promise<{ orgI
       </>
     );
   }
-  const data = await getLibraryPageData(actor, orgId);
+  const data = await getKnowledgeLibrary(actor, orgId);
   if (!data) notFound();
   return (
     <>

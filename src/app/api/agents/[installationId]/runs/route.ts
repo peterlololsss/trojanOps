@@ -5,6 +5,6 @@ import { parseBody, route } from '@/lib/api';
 import { runAgent } from '@/lib/gateway';
 
 export const POST = route<{ installationId: string }>(async ({ req, actor, params }) => {
-  const body = await parseBody(req, z.object({ input: z.string().trim().min(1).max(8000) }));
-  return runAgent(actor, params.installationId, body.input);
+  const body = await parseBody(req, z.object({ input: z.string().trim().min(1).max(8000), modelClass: z.enum(['economy', 'standard']).optional() }));
+  return runAgent(actor, params.installationId, body.input, { modelClass: body.modelClass });
 });

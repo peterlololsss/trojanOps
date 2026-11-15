@@ -1,73 +1,35 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AppError, type Actor } from '@/lib/contracts';
-import { INSTALLATION, USER } from '@db/seed/ids';
-
-vi.mock('@/lib/identity', () => ({ getActor: vi.fn() }));
-vi.mock('@/lib/gateway', () => ({ runAgent: vi.fn() }));
-
+import { renderToStaticMarkup } from 'react-dom/server';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getActor } from '@/lib/identity';
-import { runAgent } from '@/lib/gateway';
-import { submitPublicRun } from '@/app/directory/[installationId]/actions';
+import type { Actor } from '@/lib/contracts';
+import PublicAgentPage from '@/app/directory/[installationId]/page';
+import { INSTALLATION, USER } from '@db/seed/ids';
+import { appSql, closeAppDb } from './db';
 
+vi.mock('@/lib/identity', async (original) => ({ ...await original<typeof import('@/lib/identity')>(), getActor: vi.fn() }));
 const lee: Actor = { userId: USER.lee, activeOrgId: null, positions: [], grants: ['*'] };
-const question = () => {
-  const data = new FormData();
-  data.set('question', 'When is the showcase?');
-  return data;
-};
-const submit = (id: string, data = question()) => submitPublicRun(id, USER.lee, { status: 'idle' }, data);
+const probe = await appSql();
+await probe?.end();
+afterAll(async () => { if (probe) await closeAppDb(); });
+beforeEach(() => vi.mocked(getActor).mockResolvedValue(lee));
+const renderPage = async (installationId: string) => renderToStaticMarkup(await PublicAgentPage({ params: Promise.resolve({ installationId }) }));
 
-beforeEach(() => {
-  vi.resetAllMocks();
-  vi.mocked(getActor).mockResolvedValue(lee);
-});
-
-describe('public run submission boundary', () => {
-  it('rejects a signed-out submission before invoking the gateway', async () => {
-    vi.mocked(getActor).mockResolvedValue({ ...lee, userId: null, grants: [] });
-
-    const state = await submit(INSTALLATION.danceShowcaseQa);
-
-    expect(state).toMatchObject({ status: 'error', code: 'unauthenticated' });
-    expect(runAgent).not.toHaveBeenCalled();
+describe.skipIf(!probe)('shared directory chat', () => {
+  it('asks a signed-out viewer to sign in', async () => {
+    vi.mocked(getActor).mockResolvedValue({ ...lee, userId: null });
+    expect(await renderPage(INSTALLATION.danceShowcaseQa)).toContain('Sign in to run an agent');
   });
-
-  it('rejects a stale persona form before invoking the gateway', async () => {
-    vi.mocked(getActor).mockResolvedValue({ ...lee, userId: USER.casey });
-
-    const state = await submit(INSTALLATION.danceShowcaseQa);
-
-    expect(state).toMatchObject({ status: 'error', code: 'unauthenticated' });
-    expect(runAgent).not.toHaveBeenCalled();
+  it('loads the real public scope, models and allowance into the shared workspace', async () => {
+    const html = await renderPage(INSTALLATION.danceShowcaseQa);
+    expect(html).toContain('What Showcase Q&amp;A can read');
+    expect(html).toContain('Model: Economy');
+    expect(html).toContain('Only you can see what you ask');
+    expect(html).not.toContain('Sponsor contacts');
   });
-
-  it.each([INSTALLATION.startupHandoff, INSTALLATION.startupRecruitingQa, '00000000-0000-4000-8000-000000000000'])(
-    'refuses an installation absent from the current public directory (%s)', async (id) => {
-      const state = await submit(id);
-
-      expect(state).toMatchObject({ status: 'error', code: 'not_found' });
-      expect(runAgent).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(['   ', 'q'.repeat(8001)])('refuses an empty or oversized question', async (input) => {
-    const data = question();
-    data.set('question', input);
-
-    const state = await submit(INSTALLATION.danceShowcaseQa, data);
-
-    expect(state).toMatchObject({ status: 'error', code: 'invalid' });
-    expect(runAgent).not.toHaveBeenCalled();
-  });
-
-  it('preserves the gateway quota error and fresh actor at the public boundary', async () => {
-    vi.mocked(runAgent).mockRejectedValue(new AppError({
-      code: 'quota_exceeded', message: "You've reached today's limit for public agents ($0.05). It resets at midnight PT.",
-    }));
-
-    const state = await submit(INSTALLATION.danceShowcaseQa);
-
-    expect(state).toEqual({ status: 'error', code: 'quota_exceeded', message: "You've reached today's limit for public agents ($0.05). It resets at midnight PT." });
-    expect(runAgent).toHaveBeenCalledWith(lee, INSTALLATION.danceShowcaseQa, 'When is the showcase?');
+  it.each([INSTALLATION.startupHandoff, INSTALLATION.startupRecruitingQa])('does not expose a nonpublic or disabled agent (%s)', async (id) => {
+    const html = await renderPage(id);
+    expect(html).toContain('Agent unavailable');
+    expect(html).not.toContain('name="input"');
+    expect(html).not.toContain('What Club handoff can read');
   });
 });

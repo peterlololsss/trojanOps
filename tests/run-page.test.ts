@@ -85,7 +85,7 @@ describe.skipIf(!sql)('getRunPageData', () => {
 
   it('returns no run input or output', async () => {
     const data = await page(USER.sam, ORG.startup, ORG.startup, INSTALLATION.startupHandoff);
-    expect(Object.keys(data ?? {}).sort()).toEqual(['access', 'agent', 'demoRuntime', 'org']);
+    expect(Object.keys(data ?? {}).sort()).toEqual(['access', 'agent', 'demoRuntime', 'org', 'workspace']);
   });
 
   // The page's pre-check repeats gateway steps 1–2. It must say `ok` exactly when runAgent gets past
@@ -180,7 +180,7 @@ describe('run workspace state', () => {
     );
     expect(blocked.running).toBe(false);
     expect(blocked.error?.code).toBe('quota_exceeded');
-    expect(blocked.turns.map((t) => t.kind)).toEqual(['you']);
+    expect(blocked.turns.map((t) => t.kind)).toEqual(['you', 'note']);
     expect(runReducer(blocked, { type: 'submit', text: 'b' }).error).toBeNull();
     expect(runReducer(blocked, { type: 'dismiss_error' }).error).toBeNull();
   });
@@ -254,9 +254,9 @@ describe('run workspace requests', () => {
     const quota = { code: 'quota_exceeded', message: 'Your monthly AI quota in Startup Club is used up ($0.00 of $0.00). Ask your president to raise it.', cap: { scope: 'member' } };
     expect(await requestRun(stub(false, quota), 'i', 'x', 'fallback')).toEqual({ type: 'failed', error: quota });
     expect(await requestRun(stub(true, { runId: 'r' }), 'i', 'x', 'fallback')).toEqual({ type: 'failed', error: { code: 'invalid', message: 'fallback' } });
-    expect(await requestRun(stub(false, undefined), 'i', 'x', 'fallback')).toEqual({ type: 'failed', error: { code: 'invalid', message: 'fallback' } });
+    expect(await requestRun(stub(false, undefined), 'i', 'x', 'fallback')).toEqual({ type: 'failed', error: { code: 'invalid', message: 'fallback' }, retry: true });
     const down: FetchJson = async () => { throw new TypeError('Failed to fetch'); };
-    expect(await requestRun(down, 'i', 'x', 'fallback')).toEqual({ type: 'failed', error: { code: 'invalid', message: 'fallback' } });
+    expect(await requestRun(down, 'i', 'x', 'fallback')).toEqual({ type: 'failed', error: { code: 'invalid', message: 'fallback' }, retry: true });
   });
 
   it('confirms with an empty JSON body; a gateway refusal is final, a failed request can be retried', async () => {

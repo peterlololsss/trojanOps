@@ -18,7 +18,7 @@ import {
   usgClubPolicy,
 } from '../db/schema';
 
-import { composeEffectiveAgent, type ComposeInput } from './compose';
+import { composeEffectiveAgent, type ComposeInput, type ResolvedAgent } from './compose';
 
 /** Source kinds that live in the USG org rather than the club (§8 clamps table). */
 const USG_SOURCE_KINDS = ['rulebook', 'usg_internal'];
@@ -43,7 +43,8 @@ export interface AgentFilter {
 }
 
 export interface LoadedAgent {
-  agent: EffectiveAgent;
+  agent: ResolvedAgent;
+  memberModels: { readonly fixed: ModelClass | null; readonly defaultClass: ModelClass; readonly allowed: ModelClass[] };
   orgName: string;
   /** How hard USG pushes the template: a `required` agent cannot be switched off (§8). */
   distribution: 'required' | 'default' | 'optional';
@@ -81,6 +82,10 @@ export async function loadAgents(filter: AgentFilter): Promise<LoadedAgent[]> {
       if (filter.enabledOnly && agent.status !== 'enabled') continue;
       loaded.push({
         agent, orgName, distribution, updateAvailable,
+        memberModels: (() => {
+          const inherited = composeEffectiveAgent({ ...input, installation: { ...input.installation, modelClass: null } });
+          return { fixed: input.installation.modelClass, defaultClass: inherited.modelClass, allowed: inherited.allowedModelClasses };
+        })(),
         canPublishPublic: input.version.audience === 'public' && input.club.policy.allowPublicAgents,
       });
     } catch (err) {
@@ -106,7 +111,7 @@ export async function loadAgents(filter: AgentFilter): Promise<LoadedAgent[]> {
 
 /** The composed config for one installation, or null when it does not resolve. A clamp violation
  * on the row is thrown, not hidden. */
-export async function loadAgent(installationId: string): Promise<EffectiveAgent | null> {
+export async function loadAgent(installationId: string): Promise<ResolvedAgent | null> {
   const [first] = await loadAgents({ installationId });
   return first?.agent ?? null;
 }

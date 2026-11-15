@@ -490,15 +490,17 @@ export interface LLMProvider {              // used by the real runtime (WP-13)
 }
 ```
 
-## 7. Gateway: `runAgent(actor, installationId, input)`
+## 7. Gateway: `runAgent(actor, installationId, input, { modelClass? }?)`
 
 1. `agent = effectiveAgent(installationId)` (§8). Refuse retired templates and disabled
    installations with a reason. Runs need a signed-in user. Internal agents need
    `actor.activeOrgId = agent.orgId`; "Open" on `/me/agents` switches the active org first. Public
    agents can be run from the directory with any active org.
 2. `canUse(actor.userId, agent)`. Otherwise `authz.denied`, 403 `forbidden`.
+   An optional model class must belong to the resolved installation's allowed classes; otherwise
+   `authz.denied` with reason `model_class`, 422 `clamp_violation`, no hold and no runtime call.
 3. `runGrants = capGrants(grantsFor(actor.userId, agent.orgId), agent.orgId, agent.maxTier)`.
-4. Quota: hold = the estimated cost (mock: a flat $0.01). Block when `spent + hold > limit` at any
+4. Quota: hold = the estimated cost (mock: Economy $0.01 / 1 credit; Standard $0.03 / 3 credits). Block when `spent + hold > limit` at any
    level; a limit of 0 always blocks. Levels (checked in the order given in §11): platform; billed
    club (`agent.orgId`); installation; member, when the user is an active member of the billed club;
    `student_daily`, for every public-agent run. Blocked → `quota.blocked`, 429 `quota_exceeded` with
@@ -513,11 +515,13 @@ export interface LLMProvider {              // used by the real runtime (WP-13)
    or a USG admin, with titles resolved under the viewer's own RLS.
 
 Mock runtime (`runtime/mock.ts`):
-- The reply lists the accessible documents.
+- The reply is safe Markdown with numbered citations and an explicit placeholder label.
 - Citations quote the first sentence of up to three accessible documents.
 - A document above version 1 is named with its version, e.g. "USG Funding Department Guidelines (v2)".
-- With a rule pack, the reply adds "<label> v<version> · annual cap $<value>". No seeded template attaches one (decision 20).
-- Cost is a flat $0.01. No model call.
+- With a rule pack, the reply adds "<label> v<version> · annual cap $<value>". No seeded template attaches one (decision 26).
+- Cost follows `gateway/prices.ts`: Economy 1 credit, Standard 3 credits. No model call.
+- If `submit_to_queue` is enabled and the input asks to submit, propose it as a pending write;
+  the run's Treasurer or President must confirm. Confirmation records a decision, not execution.
 
 ## 8. Agent distribution
 
@@ -565,7 +569,7 @@ Clamps (`clamps.ts`):
 | `usable_by` | for a `positions` version, ⊆ the version's list; for a `members` or `public` version, any of the club's positions |
 | max tier | `public` audience ⇒ `public`; never above the version |
 | sources | version `source_kinds` resolved in the club (USG org for `rulebook`, `usg_internal`) plus extra sources owned by the club; RLS caps tiers at run time |
-| tools, model class | ⊆ the version; model class also ∩ `usg_club_policy.allowed_model_classes` |
+| tools, model class | ⊆ the version; model class also ∩ `usg_club_policy.allowed_model_classes`. A null installation override lets members choose within that intersection; a fixed override restricts every run to that class. |
 | installation quota | ≤ the club's quota |
 
 Seeded templates (display names in UI copy):
@@ -675,11 +679,11 @@ UI copy for `quota_exceeded`, by scope:
 
 | Scope | Message |
 |---|---|
-| `member` | "Your monthly AI quota in {club} is used up (${spent} of ${limit}). Ask your president to raise it." |
-| `org` | "{club} has used its monthly AI quota (${spent} of ${limit}). USG can raise it." |
-| `installation` | "{agent} has used its monthly budget in {club}." |
-| `student_daily` | "You've reached today's limit for public agents (${limit}). It resets at midnight PT." |
-| `platform` | "TrojanOps has reached this month's platform limit." |
+| `member` | "You've used this month's {credits} in {club}. They reset {date}. Ask your club president to raise your allowance." A zero limit says "Your allowance in {club} is 0 credits this month." |
+| `org` | "{club} has used its {credits} for this month. They reset {date}. USG can raise the club's budget." |
+| `installation` | "{agent} has used its {credits} for this month in {club}. They reset {date}. Ask the club president to raise its budget." |
+| `student_daily` | "You've used today's {credits} for public agents. They reset at midnight PT." |
+| `platform` | "TrojanOps has reached this month's platform limit. It resets {date}." |
 
 ## 12. Audit
 
@@ -720,7 +724,7 @@ Every handler: `const actor = await getActor(req)` → one service call → JSON
 | Method and path | Service | Who | Stream |
 |---|---|---|---|
 | POST `/api/session/persona`, POST `/api/session/active-org`, GET `/api/me` (returns `Actor`) | identity | `DEMO_MODE` / any | A |
-| POST `/api/agents/:installationId/runs` | `gateway.runAgent` | per audience | A |
+| POST `/api/agents/:installationId/runs` body `{ input, modelClass? }` | `gateway.runAgent` | per audience | A |
 | POST `/api/pending-actions/:id/confirm` (body `{}`) | `gateway.confirm` | the run's user, a member of the action's club (narrowed per tool) | A |
 | POST `/api/pending-actions/:id/reject` (body `{}`) | `gateway.reject` | the same as confirm | A |
 | PUT `/api/quota/limits` | `quota.setLimit` | USG admin (platform, org, student_daily), president (member, installation) | A |
@@ -740,7 +744,7 @@ Every handler: `const actor = await getActor(req)` → one service call → JSON
 | POST `/api/usg/connectors/roster/sync` | `lifecycle.importRoster` | USG admin | D |
 | POST `/api/demo/clock` | demo | `DEMO_MODE` only | D |
 
-Pages (22):
+Pages (25):
 
 | Page | Stream |
 |---|---|
@@ -754,10 +758,13 @@ Pages (22):
 | `/usg/documents`, `/usg/documents/[documentId]`: USG's documents, versions, publish a new version | C |
 | `/org/[orgId]/agents/[installationId]`: run + inspector + pending actions | C |
 | `/org/[orgId]/documents` | C |
+| `/org/[orgId]/documents/[documentId]`: readable chunks, Text and Access | C |
 | `/org/[orgId]/preview` | C |
+| `/org/[orgId]/preview/retrieval`: president-only permission-filtered demo scores | C |
 | `/org/[orgId]/audit` | C |
 | `/usg/audit` | C |
 | `/me/agents` | D |
+| `/me/usage`: own credits, run metadata and blocked attempts | D |
 | `/directory`: redirects to departments when acting in a club, else to clubs | D |
 | `/directory/clubs`: clubs; USG also sees status, monthly quota and USG funding | D |
 | `/directory/clubs/[orgId]?tab=`: club dashboard (about, events, members, officers, departments, agents); members, departments, member-only updates and each event's department and funding for the club's members and USG; quota, policy and funding totals for USG | D |
@@ -798,7 +805,7 @@ Pages (22):
 **USG Funding Department Guidelines** (`rulebook`, public): USG's public
 [Funding Department Guidelines](https://usg.usc.edu/branches/funding/), current as of 2026-10-21,
 §1–§7. D6 publishes v2 with the §3 annual maximum at $10,000. The `usg-funding` rule pack stays
-seeded but no template attaches it (decision 20).
+seeded but no template attaches it (decision 26).
 
 **Policy and quota:**
 - Every club may use `standard` and `economy` and publish public agents. `event-planning` v1 allows
@@ -913,3 +920,29 @@ permissions and the preview, quota block, audit, transfer, the integration panel
 - Which LLM to plug in (WP-13).
 - Who owns each stream; deploy target (local Docker or a hosted URL).
 - Trojan AI Gateway API format and student access.
+
+## 20. Chat, credits and knowledge extension (2026-11-15)
+
+The run endpoint accepts `{ input, modelClass? }`; `modelClass` is Economy or Standard and is
+validated against the resolved installation before any hold. This is an additive request field;
+`RunResult`, `EffectiveAgent`, schema and migrations are unchanged. B's `ResolvedAgent` carries
+bounded model metadata for the UI. Economy holds and settles 10,000 micro-USD, Standard 30,000.
+Credits are presentation only: 1 credit = 10,000 micro-USD. Public runs still bill their club.
+All quota scopes, RLS, audit and human confirmation remain real; mock answers make no model call.
+
+Additional pages are `/me/usage` (D), `/org/[orgId]/documents/[documentId]` (C) and
+`/org/[orgId]/preview/retrieval` (C). Usage reads only the current user's private run metadata;
+manager citation counts read `agent_runs_meta` and never input or output. Both public directory
+and club agent pages use C's `RunWorkspace`. Its local transcript is never sent as context and
+does not survive navigation or a persona change. Citations recheck current permissions before
+showing a quote. Each old answer can select its own finished-run inspector.
+
+Knowledge document reads stay inside `withActor`. The library shows only readable titles;
+an unreadable and a nonexistent document return the same restricted view. Chunks inherit their
+document's tier and grants. Demo chunking (headings, at most 800 characters) and word-overlap
+ranking live in C's `fixtures.ts`; neither is called from the runtime. Upload index progress
+uses `clock.now()` and refreshes every 2 seconds for at most 60 seconds. Seeded documents are
+always ready. Retrieval tests reuse `previewAccess`, with real access reasons and no run charge.
+
+See `chat-knowledge-design.md` for the feature specification, `DESIGN.md` for layout and tokens,
+and `chat-knowledge-implementation.md` for delivery and verification evidence.

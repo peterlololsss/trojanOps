@@ -37,6 +37,7 @@ const position = (patch: Partial<ClubPosition> = {}): ClubPosition => ({
 });
 
 const agent = (patch: Partial<CatalogEntry> = {}): CatalogEntry => ({
+  memberModels: { fixed: null, defaultClass: 'standard', allowed: ['economy', 'standard'] },
   installationId: 'i-funding',
   templateSlug: 'funding-precheck',
   name: 'Funding pre-check',
@@ -152,7 +153,7 @@ describe("the club's own quota", () => {
 
   it("uses §11's club copy once the club's quota is gone", () => {
     expect(clubBudget(club({ clubSpentMicro: 5 * USD })).blocked)
-      .toBe('Startup Club has used its monthly AI quota ($5.00 of $5.00). USG can raise it.');
+      .toBe("Startup Club has used its 500 credits for this month. They reset Dec 1. USG can raise the club's budget.");
   });
 });
 

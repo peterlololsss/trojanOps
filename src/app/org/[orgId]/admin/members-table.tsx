@@ -10,6 +10,7 @@ import type { ClubAdmin, ClubMember } from '@/lib/distribution';
 import { DataTable } from '../documents/data-table';
 import { chip, memberBudget } from './admin-view';
 import { BudgetButton } from './budget-dialog';
+import { creditLabel } from '@/lib/gateway/prices';
 
 const features = tableFeatures({});
 const column = createColumnHelper<typeof features, ClubMember>();
@@ -64,6 +65,7 @@ export function MembersTable({ data }: { data: ClubAdmin }) {
         return (
           <span className="tabular-nums">
             {budget.limitLabel}
+            <span className="block text-sm text-muted-foreground">{creditLabel(row.original.limitMicro)}</span>
             {row.original.inherited && (
               <span className="text-muted-foreground"> from the club</span>
             )}
@@ -74,12 +76,12 @@ export function MembersTable({ data }: { data: ClubAdmin }) {
     column.display({
       id: 'spent',
       header: 'Spent',
-      cell: ({ row }) => memberBudget(row.original).spent,
+      cell: ({ row }) => <span>{memberBudget(row.original).spent}<span className="block text-sm text-muted-foreground">{creditLabel(row.original.spentMicro)}</span></span>,
     }),
     column.display({
       id: 'left',
       header: 'Left',
-      cell: ({ row }) => memberBudget(row.original).left,
+      cell: ({ row }) => <span>{memberBudget(row.original).left}<span className="block text-sm text-muted-foreground">{creditLabel(Math.max(0, row.original.limitMicro - row.original.spentMicro))}</span></span>,
     }),
     column.display({
       id: 'status',

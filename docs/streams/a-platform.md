@@ -1,5 +1,12 @@
 # Stream A: Platform core
 
+## Chat and credits delivery, 2026-11-15
+
+Delivered class-priced holds and mock settlement (Economy 1 credit, Standard 3), optional validated
+run model selection, real binding quota/reset context, current-user usage and manager-only cited
+counts. Prices live in `gateway/prices.ts`; services remain micro-USD and preserve I1-I15. No frozen
+contract, schema or migration changes. Funding submission is a pending human decision, not execution.
+
 **Owner:** TBD. You hold the contracts, the database and the gateway that every run passes through.
 Your paths are in `AGENTS.md`.
 
@@ -41,7 +48,7 @@ Stubs by H3, at their real paths.
 - RLS is silently bypassed by the owner role, by `SET` without `LOCAL`, and by `RETURNING` on RLS
   tables (§5).
 - `pnpm db:reset` must work twice in a row.
-- The mock costs a flat $0.01; a limit of 0 always blocks.
+- The mock costs $0.01 for Economy or $0.03 for Standard; a limit of 0 always blocks.
 - You are the only one who generates migrations.
 
 ## First prompt

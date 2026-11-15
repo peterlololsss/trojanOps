@@ -25,7 +25,7 @@ export async function retiredCatalogEntries(orgId: string): Promise<CatalogEntry
     const audience = r.audienceOverride ?? r.audience;
     const own = await ownInstallationLimit(getDb(), r.id);
     entries.push({ installationId: r.id, templateSlug: r.slug, name: r.name, purpose: r.purpose,
-      templateVersion: r.version, distribution: r.distribution, status: 'retired',
+      templateVersion: r.version, distribution: r.distribution, status: 'retired', memberModels: null,
       audience, usableBy: audience === 'positions' ? r.usableByOverride ?? r.usableBy : [],
       maxTier: r.audience === 'public' || audience === 'public' ? 'public' : r.maxTier,
       updateAvailable: r.track === 'pinned' && r.version < r.latest,

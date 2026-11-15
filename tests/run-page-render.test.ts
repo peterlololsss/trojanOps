@@ -52,13 +52,13 @@ const card = (status: ActionStatus) => renderToStaticMarkup(createElement(Pendin
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
 describe('run page markup', () => {
-  it('labels turns "You" and with the agent name, as plain text', () => {
+  it('labels speakers and makes AI answers navigable as headings', () => {
     const html = transcript();
     expect(html).toContain('>You</p>');
-    expect(html).toContain('>Club handoff</p>');
+    expect(html).toMatch(/<h2\b[^>]*>AI · Club handoff<\/h2>/);
     expect(html).toContain('What did the board decide last meeting?');
     expect(html).toContain('whitespace-pre-wrap');
-    expect(html).toContain('Read 1 document · $0.01');
+    expect(html).toContain('−1 credit · Read 1 of 1 permitted documents · Audit #1042');
   });
 
   it('escapes reply text instead of rendering HTML', () => {
@@ -81,7 +81,7 @@ describe('run page markup', () => {
     const html = transcript();
     expect(html).toContain('Sources for this answer');
     expect(html).toContain('Meeting minutes 2026-10-08');
-    expect(html).toContain('The board met on October 8.');
+    expect(html).toContain('aria-label="Source 1: Meeting minutes 2026-10-08"');
     expect(html).not.toContain('This citation is not in the inspector.');
     const none = transcript({ turns: [{ kind: 'agent', key: 'r', result: { ...result, citations: [] } }] });
     expect(none).toContain('This answer cites no documents.');

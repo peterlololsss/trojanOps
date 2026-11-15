@@ -2,11 +2,11 @@ import { asc, eq } from 'drizzle-orm';
 import { requireUser } from '../api';
 import { grantsFor } from '../authz';
 import { AppError, type Actor, type EffectiveAgent, type Grant, type PreviewMatrix } from '../contracts';
-import { getDb } from '../db/client';
-import { documents, positions, sources } from '../db/schema';
+import { documents, sources } from '../db/schema';
 import { withActor } from '../db/with-actor';
 import { effectiveAgent } from '../distribution';
 import { clubSourceIds, explainAccess } from './access';
+import { previewSubjects } from './preview-subjects';
 
 export async function requirePreviewPresident(viewer: Actor, orgId: string): Promise<Grant[]> {
   requireUser(viewer);
@@ -20,17 +20,7 @@ export async function requirePreviewPresident(viewer: Actor, orgId: string): Pro
 async function buildMatrix(viewer: Actor, agent: EffectiveAgent): Promise<PreviewMatrix> {
   const grants = await requirePreviewPresident(viewer, agent.orgId);
   const sourceIds = await clubSourceIds(agent.orgId);
-  const heldPositions = await getDb().select({ slug: positions.slug, name: positions.name }).from(positions)
-    .where(eq(positions.orgId, agent.orgId)).orderBy(asc(positions.name), asc(positions.slug));
-  const subjects: Array<{ key: string; label: string; grants: Grant[] }> = [
-    { key: 'student', label: 'Any signed-in student', grants: ['*'] },
-    { key: 'member', label: 'Member', grants: ['*', `${agent.orgId}:*`] },
-    ...heldPositions.filter((position) => position.slug !== 'member').map((position) => ({
-      key: position.slug === 'student' ? 'position:student' : position.slug,
-      label: position.name,
-      grants: ['*', `${agent.orgId}:*`, `${agent.orgId}:${position.slug}`] as Grant[],
-    })),
-  ];
+  const subjects = await previewSubjects(agent.orgId);
   const rows = await withActor(viewer, { grants, sourceIds }, (tx) =>
     tx.select({ id: documents.id, title: documents.title, tier: documents.tier,
       sourceId: documents.sourceId, source: sources.name, readGrants: documents.readGrants })

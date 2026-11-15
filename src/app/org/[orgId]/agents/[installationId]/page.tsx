@@ -57,7 +57,7 @@ export default async function AgentRunPage({ params }: { params: Promise<{ orgId
     <>
       <PageHeader title={agent.name} description={`${org.name} · ${agent.purpose}`} />
       {access.kind === 'ok' && (
-        <RunWorkspace installationId={agent.installationId} agentName={agent.name} demoRuntime={data.demoRuntime} />
+        <RunWorkspace key={`${actor.userId}:${actor.activeOrgId}:${agent.installationId}`} installationId={agent.installationId} agentName={agent.name} demoRuntime={data.demoRuntime} config={data.workspace} />
       )}
       {access.kind === 'switch_org' && (
         <Notice icon={Lock}>

@@ -2,6 +2,7 @@
 import { AppError, type CanUse, type CanUseResult, type EffectiveAgent, type Grant } from '../contracts';
 import { grantsFor } from '../authz';
 import { loadAgent } from './queries';
+import type { ResolvedAgent } from './compose';
 
 /**
  * The installation's effective configuration: the template version its track resolves to, plus the
@@ -10,7 +11,7 @@ import { loadAgent } from './queries';
  * It does not refuse a retired template or a switched-off installation — it reports them through
  * `status`, and the gateway's step 1 turns that into the refusal the user sees.
  */
-export async function effectiveAgent(installationId: string): Promise<EffectiveAgent> {
+export async function effectiveAgent(installationId: string): Promise<ResolvedAgent> {
   const agent = await loadAgent(installationId);
   if (!agent) throw new AppError({ code: 'not_found', message: 'This agent does not exist.' });
   return agent;

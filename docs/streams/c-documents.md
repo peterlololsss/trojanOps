@@ -1,5 +1,13 @@
 # Stream C: Documents and permissions
 
+## Chat and knowledge delivery, 2026-11-15
+
+Delivered the shared Dify-style chat window, safe Markdown/citations with current access checks,
+model prices and real allowance/reset context, playback/Stop, private in-memory transcript,
+older-run inspection and human-confirmation cards. Knowledge library, restricted document detail,
+inherited chunks, Text/Access views, demo indexing, president-only retrieval tests and upload
+access review use the existing RLS and access services. No real retrieval or model calls were added.
+
 **Owner:** TBD. You own what can be read and how that is shown: the document library, the access
 query behind every run, the permission preview, the run page with its inspector, and the audit
 views. Your paths are in `AGENTS.md`.

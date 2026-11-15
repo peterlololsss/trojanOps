@@ -12,11 +12,12 @@ import { orgs } from '../db/schema';
 import { remaining } from '../gateway/quota';
 import { canUseWithGrants } from './effective-config';
 import { reasonLabel } from './labels';
-import { loadAgents } from './queries';
+import { loadAgents, type LoadedAgent } from './queries';
 import { retiredCatalogEntries } from './retired-catalog';
 import { ownInstallationLimit } from './write-support';
 
 export interface CatalogEntry {
+  readonly memberModels: LoadedAgent['memberModels'] | null;
   installationId: string;
   templateSlug: string;
   name: string;
@@ -93,7 +94,7 @@ export async function catalog(actor: Actor, orgId: string): Promise<ClubCatalog 
   // Sequential, not Promise.all: each `remaining()` opens its own transaction, and concurrent
   // transactions would share one connection. A club has a handful of agents.
   const agents: CatalogEntry[] = [];
-  for (const { agent, distribution, updateAvailable, canPublishPublic } of loaded) {
+  for (const { agent, distribution, updateAvailable, canPublishPublic, memberModels } of loaded) {
     {
       // A switched-off or retired agent is listed but not offered: nobody can run it, so saying
       // "All members" next to it would be a lie.
@@ -102,6 +103,7 @@ export async function catalog(actor: Actor, orgId: string): Promise<ClubCatalog 
       // which would make the publish confirmation name the club's whole quota as this agent's.
       const own = await ownInstallationLimit(getDb(), agent.installationId);
       agents.push({
+        memberModels,
         installationId: agent.installationId,
         templateSlug: agent.templateSlug,
         name: agent.name,

@@ -16,7 +16,7 @@ export function toolKind(tool: string): ToolKind {
 // (WP-14). A tool with no entry can be confirmed by the run's own user while they hold any active
 // membership in the action's club: the person who asked for the action approves it, and the
 // per-tool entries narrow that to named positions.
-const CONFIRMERS: Record<string, string[]> = {};
+const CONFIRMERS: Record<string, string[]> = { submit_to_queue: ['treasurer', 'president'] };
 
 /** The positions that may confirm `tool`, or null when any member of the club may. */
 export function confirmerPositions(tool: string): string[] | null {

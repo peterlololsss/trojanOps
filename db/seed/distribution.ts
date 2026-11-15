@@ -15,9 +15,6 @@ import pack from '../../rules/packs/usg-funding.v1.json';
 // The rows WP-5 resolves from the database (src/lib/distribution/queries.ts).
 // Ids come from db/seed/ids.ts, which tests address these rows by.
 //
-// TODO(verify): every version seeds `tools: []`. §7 step 7 and C's WP-9
-// (pending actions) need at least one write tool — probably `submit_to_queue` on funding-precheck.
-// Adding it here changes what A's gateway sees, so it is a team call, not a quiet edit.
 
 export async function seedDistribution(db: SeedDb): Promise<void> {
   const createdAt = now();
@@ -128,14 +125,14 @@ export async function seedDistribution(db: SeedDb): Promise<void> {
       usableBy: ['treasurer', 'president'],
       maxTier: 'officers',
       sourceKinds: ['rulebook', 'finance'],
-      tools: [],
+      tools: ['submit_to_queue'],
       modelClasses: ['standard', 'economy'],
       defaultModelClass: 'standard',
       systemPrompt: ['You are Funding pre-check, a USG agent for club treasurers and presidents.',
         'Before the club submits a funding application on EngageSC, check the draft against the USG Funding Department Guidelines in the USG rulebook.',
         'For each budget line and date: say whether it passes, fails or needs a reviewer, cite the rule by section (for example "§5 Food per person"), and when it fails say exactly what to change.',
         'Use only the club’s own finance documents and the USG rulebook. Never approve or deny a request: USG reviewers decide.'].join('\n\n'),
-      // The funding rules are the USG rulebook document (decision 20); the usg-funding pack stays seeded, unattached.
+      // The funding rules are the USG rulebook document (decision 26); the usg-funding pack stays seeded, unattached.
       rulePackSlug: null,
       changelog: 'First version.',
       publishedBy: USER.avery,

@@ -9,6 +9,8 @@ import { AppError, type Actor, type Audience, type Tier } from '../contracts';
 import { getDb } from '../db/client';
 import { orgs, positions } from '../db/schema';
 import { canUse, effectiveAgent } from '../distribution';
+import { buildRunConfig } from './run-page-config';
+import type { ChatConfig } from './run-config';
 
 /**
  * - `ok`: the viewer can run it now.
@@ -36,7 +38,7 @@ export interface RunPageAgent {
   templateVersion: number;
 }
 
-export type RunPageData = { org: { id: string; name: string }; demoRuntime: boolean } & (
+export type RunPageData = { org: { id: string; name: string }; demoRuntime: boolean; workspace?: ChatConfig } & (
   | { access: { kind: 'not_member' }; agent: null }
   | { access: Exclude<RunAccess, { kind: 'not_member' }>; agent: RunPageAgent }
 );
@@ -98,16 +100,18 @@ export async function getRunPageData(viewer: Actor, orgId: string, installationI
   else if (agent.audience !== 'public' && viewer.activeOrgId !== orgId) access = { kind: 'switch_org' };
   else access = { kind: 'ok' };
 
+  const label = await audienceLabel(agent.audience, agent.usableBy, orgId);
   return {
     org,
     demoRuntime,
     access,
+    ...(access.kind === 'ok' ? { workspace: await buildRunConfig(viewer, agent, { club: org.name, audience: label }) } : {}),
     agent: {
       installationId: agent.installationId,
       name: agent.name,
       purpose: agent.purpose,
       audience: agent.audience,
-      audienceLabel: await audienceLabel(agent.audience, agent.usableBy, orgId),
+      audienceLabel: label,
       maxTier: agent.maxTier,
       templateVersion: agent.templateVersion,
     },

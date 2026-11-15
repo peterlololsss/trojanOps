@@ -51,13 +51,13 @@ describe('quotaMessage (§11)', () => {
   it('copies the §11 UI copy for every scope', () => {
     expect(usd(500_000)).toBe('$0.50');
     expect(quotaMessage('member', ctx)).toBe(
-      'Your monthly AI quota in Startup Club is used up ($0.50 of $0.50). Ask your president to raise it.');
+      "You've used this month's 50 credits in Startup Club. They reset Dec 1. Ask your club president to raise your allowance.");
     expect(quotaMessage('org', { ...ctx, spentMicro: 5_000_000, limitMicro: 5_000_000 })).toBe(
-      'Startup Club has used its monthly AI quota ($5.00 of $5.00). USG can raise it.');
-    expect(quotaMessage('installation', ctx)).toBe('Club handoff has used its monthly budget in Startup Club.');
+      "Startup Club has used its 500 credits for this month. They reset Dec 1. USG can raise the club's budget.");
+    expect(quotaMessage('installation', ctx)).toBe('Club handoff has used its 50 credits for this month in Startup Club. They reset Dec 1. Ask the club president to raise its budget.');
     expect(quotaMessage('student_daily', { ...ctx, limitMicro: 50_000 })).toBe(
-      "You've reached today's limit for public agents ($0.05). It resets at midnight PT.");
-    expect(quotaMessage('platform', ctx)).toBe("TrojanOps has reached this month's platform limit.");
+      "You've used today's 5 credits for public agents. They reset at midnight PT.");
+    expect(quotaMessage('platform', ctx)).toBe("TrojanOps has reached this month's platform limit. It resets Dec 1.");
   });
 });
 
@@ -253,7 +253,7 @@ describe.skipIf(!probe)('ai_usage ledger', () => {
       expect((await remaining(club)).spentMicro).toBe(decBefore); // December never sees the run
 
       const rows = await runRows(tx, h.runId);
-      expect(rows.map((r) => [r.kind, r.amountMicro])).toEqual([['hold', 10_000], ['settle', 15_000]]);
+      expect(rows.map((r) => [r.kind, r.amountMicro])).toEqual([['hold', 30_000], ['settle', -5_000]]);
       expect(rows[1].createdAt.getTime()).toBe(h.createdAt.getTime());
       setDemoNow(new Date('2026-11-30T23:59:45-08:00'));
       expect((await remaining(club)).spentMicro).toBe(novBefore + 25_000); // November holds all of it
@@ -324,9 +324,9 @@ describe.skipIf(!probe)('hold: levels and fallbacks (§7 step 4, §11)', () => {
     await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: spent });
     // Neither fallback level reports: the club's own check does.
     expect(await tryHold(funding, USER.taylor)).toEqual({ scope: 'org', limitMicro: spent, spentMicro: spent });
-    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: spent + 10_000 });
+    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: spent + 30_000 });
     expect(await tryHold(funding, USER.taylor)).toBe('held');
-    expect(await tryHold(funding, USER.taylor)).toEqual({ scope: 'org', limitMicro: spent + 10_000, spentMicro: spent + 10_000 });
+    expect(await tryHold(funding, USER.taylor)).toEqual({ scope: 'org', limitMicro: spent + 30_000, spentMicro: spent + 30_000 });
     expect((await tx.select().from(aiUsage).where(and(eq(aiUsage.userId, USER.taylor), eq(aiUsage.kind, 'hold')))).length).toBeGreaterThanOrEqual(1);
   }));
 
@@ -429,7 +429,7 @@ describe.skipIf(!probe)('hold: concurrent runs', () => {
     const spent = (await remaining(target)).spentMicro;
     const winners: QuotaHold[] = [];
     try {
-      await setLimit(sam, { ...target, limitMicro: spent + 10_000 });
+      await setLimit(sam, { ...target, limitMicro: spent + 30_000 });
       const results = await Promise.allSettled(
         Array.from({ length: 6 }, () => hold(agent, USER.casey, ORG.startup, crypto.randomUUID(), 'Startup Club')),
       );

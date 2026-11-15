@@ -14,7 +14,7 @@ import { runAgent } from '@/lib/gateway';
 import { audit, listAudit } from '@/lib/gateway/audit';
 import { periodStart } from '@/lib/gateway/period';
 import { remaining, setLimit } from '@/lib/gateway/quota';
-import { usd } from '@/lib/gateway/quota-messages';
+import { creditLabel } from '@/lib/gateway/prices';
 import { toolKind } from '@/lib/gateway/tools';
 import { mockRuntime } from '@/lib/runtime/mock';
 import { ACTIVE_ORG_COOKIE, PERSONA_COOKIE } from '@/lib/identity';
@@ -91,7 +91,7 @@ describe.skipIf(!probe)('runAgent', () => {
     expect(run.reply).toContain('USG Funding Department Guidelines');
     expect(run.inspector.rulePack).toBeUndefined();
     expect(run.inspector.runGrants.map((g) => g.label)).toContain('Startup Club · Treasurer');
-    expect(run.inspector).toMatchObject({ billedClub: 'Startup Club', costMicro: 10_000, templateVersion: 1 });
+    expect(run.inspector).toMatchObject({ billedClub: 'Startup Club', costMicro: 30_000, templateVersion: 1 });
     expect(run.inspector.sources.map((x) => x.name).sort()).toEqual(['Startup Club · Finance', 'USG rulebook']);
     expect(run.inspector.readInRun.map((d) => d.id).sort()).toEqual(run.citations.map((c) => c.documentId).sort());
     expect(run.pendingActions).toEqual([]);
@@ -106,7 +106,7 @@ describe.skipIf(!probe)('runAgent', () => {
     const [row] = await withActor(taylor, {}, (t) => t.select().from(agentRuns).where(eq(agentRuns.id, run.runId)));
     expect(row).toMatchObject({
       installationId: INSTALLATION.startupFundingPrecheck, orgId: ORG.startup, billedOrgId: ORG.startup,
-      userId: USER.taylor, input: 'Can we fund pitch night?', status: 'completed', model: 'mock', costMicro: 10_000,
+      userId: USER.taylor, input: 'Can we fund pitch night?', status: 'completed', model: 'demo-standard', costMicro: 30_000,
       templateVersion: 1, rulePackVersion: null,
       output: { reply: run.reply, citations: run.citations },
     });
@@ -143,7 +143,7 @@ describe.skipIf(!probe)('runAgent', () => {
     expect(access).toMatchObject({ actorUserId: USER.casey, actingOrgId: ORG.startup, installationId: INSTALLATION.startupHandoff });
     expect((access.details as { documentIds: string[] }).documentIds).toEqual(
       expect.arrayContaining([DOCUMENT.recruitingFaq, DOCUMENT.minutes20261008]));
-    expect(done.details).toEqual({ runId: run.runId, costMicro: 10_000 });
+    expect(done.details).toEqual({ runId: run.runId, costMicro: 30_000 });
     expect(done.id).toBe(run.inspector.auditEventId);
     for (const r of rows) expect(JSON.stringify(r.details)).not.toContain(input);
   }));
@@ -269,7 +269,7 @@ describe.skipIf(!probe)('runAgent quota (§7 step 4, §11)', () => {
       status: 429,
       error: {
         code: 'quota_exceeded',
-        message: expect.stringMatching(/^Your monthly AI quota in Startup Club is used up \(\$\d+\.\d\d of \$0\.00\)\. Ask your president to raise it\.$/),
+        message: 'Your allowance in Startup Club is 0 credits this month. Ask your club president to raise it.',
         cap: { scope: 'member', limitMicro: 0, spentMicro: expect.any(Number) },
       },
     });
@@ -290,7 +290,7 @@ describe.skipIf(!probe)('runAgent quota (§7 step 4, §11)', () => {
       status: 429,
       error: {
         code: 'quota_exceeded',
-        message: `You've reached today's limit for public agents (${usd(spent + 10_000)}). It resets at midnight PT.`,
+        message: `You've used today's ${creditLabel(spent + 10_000)} for public agents. They reset at midnight PT.`,
         cap: { scope: 'student_daily', limitMicro: spent + 10_000, spentMicro: spent + 10_000 },
       },
     });
@@ -309,20 +309,20 @@ describe.skipIf(!probe)('runAgent quota (§7 step 4, §11)', () => {
 
     await setLimit(sam, { scope: 'installation', installationId: funding, limitMicro: 0 });
     await expect(runAgent(taylor, funding, 'x')).rejects.toMatchObject({
-      status: 429, error: { message: expect.stringMatching(/ has used its monthly budget in Startup Club\.$/), cap: { scope: 'installation', limitMicro: 0 } },
+      status: 429, error: { message: 'Funding pre-check has used its 0 credits for this month in Startup Club. They reset Dec 1. Ask the club president to raise its budget.', cap: { scope: 'installation', limitMicro: 0 } },
     });
     await setLimit(sam, { scope: 'installation', installationId: funding, limitMicro: 2_500_000 });
 
     await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: 0 });
     await expect(runAgent(taylor, funding, 'x')).rejects.toMatchObject({
       status: 429,
-      error: { message: `Startup Club has used its monthly AI quota (${usd(clubSpent)} of $0.00). USG can raise it.`, cap: { scope: 'org', limitMicro: 0, spentMicro: clubSpent } },
+      error: { message: "Startup Club has used its 0 credits for this month. They reset Dec 1. USG can raise the club's budget.", cap: { scope: 'org', limitMicro: 0, spentMicro: clubSpent } },
     });
     await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: 5_000_000 });
 
     await setLimit(avery, { scope: 'platform', limitMicro: 0 });
     await expect(runAgent(taylor, funding, 'x')).rejects.toMatchObject({
-      status: 429, error: { message: "TrojanOps has reached this month's platform limit.", cap: { scope: 'platform', limitMicro: 0 } },
+      status: 429, error: { message: "TrojanOps has reached this month's platform limit. It resets Dec 1.", cap: { scope: 'platform', limitMicro: 0 } },
     });
 
     expect(runtime).not.toHaveBeenCalled();
@@ -331,7 +331,7 @@ describe.skipIf(!probe)('runAgent quota (§7 step 4, §11)', () => {
     expect(rows.map((r) => (r.details as { scope: string }).scope)).toEqual(['installation', 'org', 'platform']);
     expect(rows[0]).toMatchObject({ actorUserId: USER.taylor, installationId: funding, targetType: 'installation' });
     expect(rows[0].runId).toEqual(expect.any(String));
-    expect(rows[0].details).toEqual({ scope: 'installation', limitMicro: 0, spentMicro: expect.any(Number), holdMicro: 10_000 });
+    expect(rows[0].details).toEqual({ scope: 'installation', limitMicro: 0, spentMicro: expect.any(Number), holdMicro: 30_000 });
     // Blocked runs leave no run.access row and no input anywhere (I8).
     expect((await newAudit(tx, base)).filter((r) => r.action === 'run.access')).toEqual([]);
   }));
@@ -340,10 +340,10 @@ describe.skipIf(!probe)('runAgent quota (§7 step 4, §11)', () => {
     const avery = await actorFor(USER.avery, ORG.usg);
     const taylor = await actorFor(USER.taylor, ORG.startup);
     const spent = (await remaining({ scope: 'org', orgId: ORG.startup })).spentMicro;
-    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: spent + 19_999 });
-    await runAgent(taylor, INSTALLATION.startupFundingPrecheck, 'one'); // spent + 10,000 ≤ limit
-    await expect(runAgent(taylor, INSTALLATION.startupFundingPrecheck, 'two')).rejects.toMatchObject({ status: 429 }); // +20,000 > limit
-    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: spent + 20_000 });
+    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: spent + 59_999 });
+    await runAgent(taylor, INSTALLATION.startupFundingPrecheck, 'one');
+    await expect(runAgent(taylor, INSTALLATION.startupFundingPrecheck, 'two')).rejects.toMatchObject({ status: 429 });
+    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: spent + 60_000 });
     await runAgent(taylor, INSTALLATION.startupFundingPrecheck, 'three'); // exactly at the limit passes
     expect(runtime).toHaveBeenCalledTimes(2);
   }));
@@ -367,7 +367,7 @@ describe.skipIf(!probe)('runAgent quota (§7 step 4, §11)', () => {
     });
     const run = await runAgent(taylor, INSTALLATION.startupFundingPrecheck, 'x');
     const rows = await tx.select().from(aiUsage).where(eq(aiUsage.runId, run.runId)).orderBy(aiUsage.kind);
-    expect(rows.map((r) => [r.kind, r.amountMicro])).toEqual([['hold', 10_000], ['settle', 15_000]]);
+    expect(rows.map((r) => [r.kind, r.amountMicro])).toEqual([['hold', 30_000], ['settle', -5_000]]);
     expect(rows[0]).toMatchObject({ billedOrgId: ORG.startup, userId: USER.taylor, installationId: INSTALLATION.startupFundingPrecheck, isPublic: false });
     const after = await remaining({ scope: 'org', orgId: ORG.startup });
     expect(after.spentMicro).toBe(before.spentMicro + 25_000);
@@ -385,7 +385,7 @@ describe.skipIf(!probe)('runAgent quota (§7 step 4, §11)', () => {
 
     // A small installation budget is the smallest level for Taylor's run.
     const spent = (await remaining({ scope: 'installation', installationId: INSTALLATION.startupFundingPrecheck })).spentMicro;
-    await setLimit(sam, { scope: 'installation', installationId: INSTALLATION.startupFundingPrecheck, limitMicro: spent + 15_000 });
+    await setLimit(sam, { scope: 'installation', installationId: INSTALLATION.startupFundingPrecheck, limitMicro: spent + 35_000 });
     const taylor = await runAgent(await actorFor(USER.taylor, ORG.startup), INSTALLATION.startupFundingPrecheck, 'x');
     expect(taylor.inspector.quotaRemainingMicro).toEqual({ 'Startup Club': 5_000 });
 
@@ -425,7 +425,7 @@ describe.skipIf(!probe)('runAgent quota (§7 step 4, §11)', () => {
     const run = await runAgent(await actorFor(USER.taylor, ORG.startup), INSTALLATION.startupFundingPrecheck, 'x');
     expect(run.inspector.costMicro).toBe(0);
     const rows = await tx.select().from(aiUsage).where(eq(aiUsage.runId, run.runId)).orderBy(aiUsage.kind);
-    expect(rows.map((r) => [r.kind, r.amountMicro])).toEqual([['hold', 10_000], ['settle', -10_000]]);
+    expect(rows.map((r) => [r.kind, r.amountMicro])).toEqual([['hold', 30_000], ['settle', -30_000]]);
     expect((await remaining({ scope: 'org', orgId: ORG.startup })).spentMicro).toBe(before);
   }));
 

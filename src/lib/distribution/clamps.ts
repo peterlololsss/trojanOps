@@ -46,6 +46,7 @@ export interface ClampedConfig {
   maxTier: Tier;
   tools: string[];
   modelClass: ModelClass;
+  allowedModelClasses: ModelClass[];
   extraSourceIds: string[];
   quotaMicro: number | null;
 }
@@ -170,6 +171,7 @@ export function clampInstallation(input: ClampInput): ClampResult {
       // Tools have no override column (§5): they come from the version.
       tools: [...version.tools],
       modelClass,
+      allowedModelClasses: installation.modelClass ? [modelClass] : allowedClasses,
       extraSourceIds: [...extraSourceIds],
       quotaMicro,
     },

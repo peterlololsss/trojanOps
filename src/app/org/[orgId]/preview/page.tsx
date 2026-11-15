@@ -46,6 +46,7 @@ export default async function PreviewPage({ params, searchParams }: {
   return (
     <>
       <PageHeader title="Permission preview" description={`${data.org.name} · See which documents each position can read through an agent.`} />
+      <nav aria-label="Permission preview views" className="mb-6 flex gap-5 border-b border-border pb-3"><span aria-current="page" className="font-semibold">Access matrix</span><Link href={`/org/${orgId}/preview/retrieval`} className="text-primary underline">Retrieval test</Link></nav>
       {data.agents.length === 0 ? (
         <p className="rounded-md border border-border p-4">No agents are installed in {data.org.name} yet. Install an agent from the club catalog, then return to preview its access.</p>
       ) : (

@@ -42,3 +42,8 @@ export function periodStart(kind: 'month' | 'day', at: Date): Date {
   const { year, month, day } = ptParts(at);
   return ptMidnight(year, month, kind === 'month' ? 1 : day);
 }
+
+export function periodEnd(kind: 'month' | 'day', at: Date): Date {
+  const { year, month, day } = ptParts(at);
+  return kind === 'month' ? ptMidnight(year, month + 1, 1) : ptMidnight(year, month, day + 1);
+}

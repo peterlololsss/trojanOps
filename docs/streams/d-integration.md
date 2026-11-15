@@ -1,5 +1,12 @@
 # Stream D: Integration and demo
 
+## Chat and usage delivery, 2026-11-15
+
+Directory run pages now consume C's shared `RunWorkspace` and configuration. `/me/usage` shows
+real private metadata, allowances and blocked attempts, with no prompts or replies. The reusable
+Markdown renderer emits safe React elements with a link-protocol allowlist and numbered citation
+buttons outside code. Tailwind scans only `src` so local DB and browser files cannot trigger HMR.
+
 **Owner:** TBD. You own the look and the front door: app shell and shared components, connectors
 and the integration panel, the student pages (my agents, directory), seed people, and the demo
 itself. Your paths are in `AGENTS.md`.

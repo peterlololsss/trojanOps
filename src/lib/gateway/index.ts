@@ -5,7 +5,7 @@
 // transaction on its own pooled connection, and tests/db.ts runs them as savepoints of one.
 import { randomUUID } from 'node:crypto';
 import { eq, inArray } from 'drizzle-orm';
-import { AppError, type AccessibleDocument, type Actor, type AgentResult, type ApiError, type EffectiveAgent, type RunResult } from '../contracts';
+import { AppError, type AccessibleDocument, type Actor, type AgentResult, type ApiError, type EffectiveAgent, type ModelClass, type RunResult } from '../contracts';
 import { capGrants, grantLabels, grantsFor } from '../authz';
 import { now } from '../clock';
 import { getDb } from '../db/client';
@@ -32,7 +32,7 @@ async function sourceNames(ids: string[]): Promise<Array<{ id: string; name: str
   return ids.map((id) => ({ id, name: names.get(id) ?? 'Source' }));
 }
 
-export async function runAgent(actor: Actor, installationId: string, input: string): Promise<RunResult> {
+export async function runAgent(actor: Actor, installationId: string, input: string, options?: { readonly modelClass?: ModelClass }): Promise<RunResult> {
   if (!actor.userId) throw new AppError({ code: 'unauthenticated', message: 'Choose a persona to run agents.' });
   const userId = actor.userId;
   const event = { actorUserId: userId, actingOrgId: actor.activeOrgId, installationId };
@@ -42,7 +42,12 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
   };
 
   // 1. Effective agent. Internal agents run only with their club active; public ones from anywhere.
-  const agent = await effectiveAgent(installationId);
+  const resolved = await effectiveAgent(installationId);
+  const modelClass = options?.modelClass ?? resolved.modelClass;
+  if (!resolved.allowedModelClasses.includes(modelClass)) {
+    await deny({ code: 'clamp_violation', message: `${resolved.name} may run on ${resolved.allowedModelClasses.join(' or ')} only.` }, 'model_class');
+  }
+  const agent = { ...resolved, modelClass };
   const club = await orgName(agent.orgId);
   if (agent.status === 'retired') await deny({ code: 'forbidden', message: 'Retired by USG.' }, 'retired');
   if (agent.status === 'disabled') await deny({ code: 'forbidden', message: `${agent.name} is turned off in ${club}.` }, 'disabled');

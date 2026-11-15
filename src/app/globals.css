@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss" source("../");
 
 /* USC look: docs/decisions.md #10 and .claude/agents/ui-designer.md. Light theme only. */
 :root {

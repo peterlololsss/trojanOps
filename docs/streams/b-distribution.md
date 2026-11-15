@@ -1,5 +1,12 @@
 # Stream B: Distribution
 
+## Chat and allowance delivery, 2026-11-15
+
+Resolved agents expose template-and-policy-bounded model classes without changing `EffectiveAgent`.
+Administration shows dollars with credits, live credit conversion, zero-allowance confirmation,
+and Members choose / Economy only / Standard only through the existing installation PATCH service.
+Rejected widening remains an audited clamp violation. The funding seed exposes `submit_to_queue`.
+
 **Owner:** TBD. You own how agents reach clubs and students: templates, versions, installations,
 clamps, the directory and my agents, plus the club console and the USG templates console. Your paths
 are in `AGENTS.md`.
@@ -81,7 +88,7 @@ the club has a budget, gives the installation one and audits `agent.publish_publ
 | POST `/api/templates/:id/versions` | `publishVersion` | USG admin (global), president (own) |
 | POST `/api/usg/templates/:id/distribute` | `distribute` | USG admin |
 | POST `/api/usg/templates/:id/retire` | `retire` | USG admin |
-| POST `/api/usg/rule-packs/:slug/versions` | `publishRulePack` (not used by the UI, decision 20) | USG admin |
+| POST `/api/usg/rule-packs/:slug/versions` | `publishRulePack` (not used by the UI, decision 26) | USG admin |
 | POST `/api/orgs/:orgId/positions/:slug/transfer` | `transferPosition` | club president |
 
 Each handler is `getActor` → one service call → JSON or `ApiError`; permissions stay in the

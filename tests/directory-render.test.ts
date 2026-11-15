@@ -174,7 +174,8 @@ describe('club dashboard', () => {
       policy: { hasPolicy: false, allowPublicAgents: false, allowedModelClasses: [] },
     } });
     expect(html).toContain('Policy missing');
-    expect(html).toContain('Startup Club has used its monthly AI quota ($5.00 of $5.00). USG can raise it.');
+    expect(html).toContain('Startup Club has used its 500 credits for this month.');
+    expect(html).toContain("USG can raise the club&#x27;s budget.");
   });
 
   it('lays out About: contact, officer avatars, the description, updates and the next events', () => {

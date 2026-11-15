@@ -190,7 +190,7 @@ describe('<Inspector />', () => {
   it('renders the six sections in order with labels, never raw grants', () => {
     const html = render(base);
     expect([...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1]))
-      .toEqual(['Run grants', 'Sources', 'Documents', 'Versions', 'Billing', 'Audit']);
+      .toEqual(['Run grants', 'Sources', 'Documents', 'Versions', 'Billing', 'History', 'Audit']);
     expect(html).toContain('aria-label="Run inspector"');
     expect(html).toContain('Startup Club · Treasurer');
     expect(html).not.toContain(ORG.startup);

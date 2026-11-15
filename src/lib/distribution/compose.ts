@@ -38,7 +38,13 @@ export interface ComposeInput {
   rulePack?: EffectiveAgent['rulePack'];
 }
 
-export function composeEffectiveAgent(input: ComposeInput): EffectiveAgent {
+export interface ResolvedAgent extends EffectiveAgent {
+  readonly allowedModelClasses: ModelClass[];
+  readonly fixedByClub: boolean;
+  readonly limitedByTemplate: boolean;
+}
+
+export function composeEffectiveAgent(input: ComposeInput): ResolvedAgent {
   const { template, version, installation, club, baseSourceIds, rulePack } = input;
 
   const clamped = clampInstallation({
@@ -87,6 +93,9 @@ export function composeEffectiveAgent(input: ComposeInput): EffectiveAgent {
     sourceIds: [...new Set([...baseSourceIds, ...effective.extraSourceIds])],
     tools: effective.tools,
     modelClass: effective.modelClass,
+    allowedModelClasses: effective.allowedModelClasses,
+    fixedByClub: installation.modelClass !== null,
+    limitedByTemplate: club.policy.allowedModelClasses.some((c) => !version.modelClasses.includes(c)),
     systemPrompt: installation.promptAddendum
       ? `${version.systemPrompt}\n\n${installation.promptAddendum}`
       : version.systemPrompt,

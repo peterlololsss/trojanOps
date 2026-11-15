@@ -15,7 +15,7 @@ import { activeMemberships, isUsgAdmin } from '../authz';
 import { now } from '../clock';
 import { getDb, type Db, type Tx } from '../db/client';
 import { agentInstallations, aiUsage, orgs, quotaLimits } from '../db/schema';
-import { MOCK_COST_MICRO } from '../runtime/mock';
+import { priceMicro } from './prices';
 import { audit } from './audit';
 import { periodStart } from './period';
 import { quotaMessage, usd } from './quota-messages';
@@ -127,13 +127,13 @@ export async function remaining(target: QuotaTarget): Promise<QuotaRemaining> {
 }
 
 /** The non-blocking stale release a read does: skipped when a writer holds the lock. */
-async function releaseStaleHoldsIfFree(tx: Tx, at: Date): Promise<void> {
+export async function releaseStaleHoldsIfFree(tx: Tx, at: Date): Promise<void> {
   const [{ free }] = await tx.execute<{ free: boolean }>(sql`select pg_try_advisory_xact_lock(${QUOTA_LOCK}) as free`);
   if (free) await releaseStaleHolds(tx, at);
 }
 
 /** One level's limit and spend inside an open transaction (no stale release). */
-async function levelRemaining(tx: Tx, t: QuotaTarget, at: Date): Promise<QuotaRemaining> {
+export async function levelRemaining(tx: Tx, t: QuotaTarget, at: Date): Promise<QuotaRemaining> {
   let limit = (await limitRow(tx, t))?.limitMicro;
   if (limit === undefined && (t.scope === 'member' || t.scope === 'installation')) {
     const orgId = t.scope === 'member' ? t.orgId! : await installationOrg(tx, t.installationId!);
@@ -279,7 +279,7 @@ export interface QuotaHold {
 export async function hold(
   agent: EffectiveAgent, userId: string, actingOrgId: string | null, runId: string, club: string,
 ): Promise<QuotaHold> {
-  const holdMicro = MOCK_COST_MICRO;
+  const holdMicro = priceMicro(agent.modelClass);
   const at = now();
   const held: QuotaHold = {
     runId, holdMicro, billedOrgId: agent.orgId, userId, installationId: agent.installationId, isPublic: agent.audience === 'public',

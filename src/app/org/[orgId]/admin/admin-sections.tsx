@@ -6,6 +6,8 @@ import { AlertCircle, ArrowUpCircle, Check, CircleSlash, Lock } from 'lucide-rea
 import type { ClubAdmin } from '@/lib/distribution';
 import { audienceLabel, distributionLabels, statusLabels } from '../catalog/catalog-view';
 import { chip, clubBudget, panel, row } from './admin-view';
+import { creditLabel } from '@/lib/gateway/prices';
+import { ModelControl } from './model-control';
 
 export function SectionTitle({ id, children }: { id: string; children: React.ReactNode }) {
   return <h2 id={id} className="text-[20px] font-semibold leading-7">{children}</h2>;
@@ -35,6 +37,7 @@ export function ClubBudget({ data }: { data: ClubAdmin }) {
         </p>
       </div>
       <div className={`${panel} max-w-[640px] space-y-3 p-4`}>
+        <p className="text-sm text-muted-foreground">{creditLabel(data.clubSpentMicro)} used of {creditLabel(data.clubLimitMicro)} this month. 1 credit = $0.01.</p>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="tabular-nums">
             <span className="font-semibold">{budget.spent}</span>
@@ -72,7 +75,7 @@ export function ClubAgents({ data }: { data: ClubAdmin }) {
     <section aria-labelledby="club-agents" className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <SectionTitle id="club-agents">Agents in this club</SectionTitle>
+          <SectionTitle id="club-agents">Agents and models</SectionTitle>
           <p className="text-muted-foreground">
             Who each agent is for. Turning one on, or opening it to all students, happens in the catalog.
           </p>
@@ -109,6 +112,7 @@ export function ClubAgents({ data }: { data: ClubAdmin }) {
                 {statusLabels[agent.status]}
               </span>
               <p className="w-[56px] font-mono text-xs">v{agent.templateVersion}</p>
+              <ModelControl agent={agent} orgId={data.org.id} />
               <Link
                 href={`/org/${data.org.id}/catalog`}
                 className="text-primary underline"

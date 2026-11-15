@@ -22,7 +22,7 @@ export function navigationFor(actor: Actor, clubs: readonly Pick<MyAgentsClub, '
     ? [{ href: '/directory/departments', label: 'Departments' }, { href: '/directory/clubs', label: 'All clubs' }]
     : [{ href: '/directory/clubs', label: 'Clubs' }];
   const scopes: Scope[] = [
-    { href: '/me/agents', label: 'My agents', match: '/me', items: [{ href: '/me/agents', label: 'My agents' }] },
+    { href: '/me/agents', label: 'My agents', match: '/me', items: [{ href: '/me/agents', label: 'My agents' }, { href: '/me/usage', label: 'Usage' }] },
     { href: '/directory', label: 'Directory', match: '/directory', items: directoryItems },
   ];
   if (!actor.userId) return scopes;

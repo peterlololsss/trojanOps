@@ -8,6 +8,7 @@ import { agentInstallations, agentTemplates, agentTemplateVersions, orgCohorts, 
 import { listLibraryDocuments } from '../documents/library';
 import { audit } from '../gateway/audit';
 import { remaining } from '../gateway/quota';
+import { loadAgents } from './queries';
 
 export interface UsgTemplateRow {
   id: string; slug: string; name: string; distribution: 'required' | 'default' | 'optional';
@@ -32,6 +33,7 @@ export interface UsgTemplateView {
   positions: UsgPositionOption[]; usgDocuments: UsgSourceDocument[];
 }
 export interface UsgClub {
+  readonly modelAgents: Array<{ readonly name: string; readonly modelClass: ModelClass; readonly allowed: ModelClass[] }>;
   id: string; name: string; status: 'active' | 'inactive'; allowedModelClasses: ModelClass[];
   allowPublicAgents: boolean; hasPolicy: boolean; limitMicro: number; spentMicro: number; remainingMicro: number;
 }
@@ -110,7 +112,8 @@ export async function usgClubsView(actor: Actor): Promise<UsgClub[]> {
   for (const c of clubs) {
     const policy = policies.find(p => p.orgId === c.id);
     const quota = await remaining({ scope: 'org', orgId: c.id });
-    result.push({ id: c.id, name: c.name, status: c.status, hasPolicy: !!policy,
+    const modelAgents = (await loadAgents({ orgIds: [c.id], excludeRetired: true })).map(({ agent }) => ({ name: agent.name, modelClass: agent.modelClass, allowed: agent.allowedModelClasses }));
+    result.push({ id: c.id, name: c.name, status: c.status, hasPolicy: !!policy, modelAgents,
       allowedModelClasses: policy?.allowedModelClasses ?? [], allowPublicAgents: policy?.allowPublicAgents ?? false,
       limitMicro: quota.limitMicro, spentMicro: quota.spentMicro, remainingMicro: quota.remainingMicro });
   }

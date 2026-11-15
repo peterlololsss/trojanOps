@@ -1,107 +1,60 @@
 'use client';
 
-// Owner: C (WP-9). The run transcript (ui-designer.md "Agent run page"): it reads like a document, not
-// chat bubbles. Each turn has a small label ("You" or the agent name) and turns are separated by
-// 1px rules. Replies are plain text, never HTML. Pending actions follow the turn that proposed them.
-import { ChevronDown, ChevronRight, FileText } from 'lucide-react';
-import { useId, useState } from 'react';
-import type { RunResult } from '@/lib/contracts';
-import { money, readCount } from './format';
-import { PendingActionCard } from './pending-action-card';
-import { citedSources, type ActionStatus, type Turn } from './run-state';
+import Link from 'next/link';
+import { AlertCircle, Info } from 'lucide-react';
+import type { RunInspector } from '@/lib/contracts';
+import { Button } from '@/components/ui/button';
+import { AnswerTurn } from './answer-turn';
+import type { ActionStatus, Turn } from './run-state';
 
 export interface TranscriptProps {
-  turns: Turn[];
-  actions: Record<string, ActionStatus>;
-  agentName: string;
-  /** The mock runtime answered: replies are labelled "Demo runtime: placeholder answer". */
-  demoRuntime: boolean;
-  onConfirm?: (id: string) => void;
-  onReject?: (id: string) => void;
+  readonly turns: Turn[]; readonly actions: Record<string, ActionStatus>;
+  readonly agentName: string; readonly demoRuntime: boolean;
+  readonly onConfirm?: (id: string) => void; readonly onReject?: (id: string) => void;
+  readonly onRetry?: (input: string) => void; readonly onEdit?: (input: string) => void;
+  readonly installationId?: string; readonly orgId?: string;
+  readonly playingId?: string | null; readonly stoppedId?: string | null;
+  readonly onPlaybackDone?: () => void; readonly onInspect?: (documentId: string, runId: string) => void;
+  readonly onAnnounce?: (message: string) => void;
 }
 
-function TurnLabel({ children }: { children: string }) {
-  return <p className="mb-[4px] text-[12px] font-semibold leading-4 text-muted-foreground">{children}</p>;
-}
-
-function AgentTurn({ result, agentName, demoRuntime, actions, onConfirm, onReject }: {
-  result: RunResult;
-  agentName: string;
-  demoRuntime: boolean;
-  actions: Record<string, ActionStatus>;
-  onConfirm?: (id: string) => void;
-  onReject?: (id: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const listId = useId();
-  const sources = citedSources(result);
-  const Chevron = open ? ChevronDown : ChevronRight;
-
-  return (
-    <>
-      <TurnLabel>{agentName}</TurnLabel>
-      <p className="whitespace-pre-wrap break-words text-[16px] leading-6">{result.reply}</p>
-      <div className="mt-[8px] flex flex-wrap items-center gap-x-[12px] gap-y-[4px] text-[12px] leading-4">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={listId}
-          onClick={() => setOpen((v) => !v)}
-          className="inline-flex h-[24px] items-center gap-[4px] rounded-sm border border-input bg-background px-[8px] font-semibold hover:bg-accent"
-        >
-          <Chevron aria-hidden className="size-[12px] shrink-0" />
-          {demoRuntime ? 'Demo runtime: placeholder answer' : 'AI-generated'}
-        </button>
-        <span className="tabular-nums text-muted-foreground">{`${readCount(result.inspector.readInRun.length)} · ${money(result.inspector.costMicro)}`}</span>
-      </div>
-      <div id={listId} hidden={!open} className="mt-[8px] border-l-2 border-border pl-[12px]">
-        <h3 className="text-[12px] font-semibold leading-4 text-muted-foreground">Sources for this answer</h3>
-        {sources.length === 0 ? (
-          <p className="py-[4px] text-muted-foreground">This answer cites no documents.</p>
-        ) : (
-          <ul>
-            {sources.map((s, i) => (
-              <li key={`${s.documentId}-${i}`} className="py-[4px]">
-                <span className="flex items-center gap-[8px] font-semibold">
-                  <FileText aria-hidden className="size-[16px] shrink-0 text-muted-foreground" />
-                  <span className="break-words">{s.title}</span>
-                </span>
-                {s.quote && <q className="mt-[2px] block break-words pl-[24px] text-muted-foreground">{s.quote}</q>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      {result.pendingActions.map((a) => (
-        <PendingActionCard key={a.id} action={a} status={actions[a.id] ?? { status: 'pending' }} onConfirm={onConfirm} onReject={onReject} />
-      ))}
-    </>
-  );
-}
-
-export function Transcript({ turns, actions, agentName, demoRuntime, onConfirm, onReject }: TranscriptProps) {
-  if (turns.length === 0) {
-    return (
-      <div className="border-y border-border py-[16px]">
-        <p className="font-semibold">{`No runs yet. Write a message below to run ${agentName}.`}</p>
-        <p className="mt-[4px] text-muted-foreground">Each run checks your access first. The inspector then shows which documents the agent could read and what the run cost.</p>
-      </div>
-    );
+function changes(before: RunInspector | null, after: RunInspector): string[] {
+  if (!before) return [];
+  const notes: string[] = [];
+  const removed = [...new Set(before.runGrants.filter((g) => !after.runGrants.some((a) => a.grant === g.grant)).map((g) => g.label))];
+  if (removed.length) notes.push(`Your access changed since your last run: ${removed.join(', ')} no longer applies.`);
+  if (after.rulePack && before.rulePack?.version !== after.rulePack.version) notes.push(`${after.rulePack.label} is now v${after.rulePack.version}.`);
+  for (const doc of after.permitted) {
+    const old = before.permitted.find((d) => d.id === doc.id);
+    if (old && (doc.version ?? 1) > (old.version ?? 1)) notes.push(`${doc.title} is now v${doc.version}.`);
   }
-  return (
-    <ol aria-label="Transcript" className="border-b border-border">
-      {turns.map((turn) => (
-        <li key={turn.key} className="border-t border-border py-[16px]">
-          {turn.kind === 'you' ? (
-            <>
-              <TurnLabel>You</TurnLabel>
-              <p className="whitespace-pre-wrap break-words text-[16px] leading-6">{turn.text}</p>
-            </>
-          ) : (
-            <AgentTurn result={turn.result} agentName={agentName} demoRuntime={demoRuntime} actions={actions} onConfirm={onConfirm} onReject={onReject} />
-          )}
-        </li>
-      ))}
-    </ol>
-  );
+  if (before.templateVersion !== after.templateVersion) notes.push(`The agent was updated to template v${after.templateVersion}.`);
+  return notes;
+}
+
+export function Transcript(p: TranscriptProps) {
+  if (!p.turns.length) return <div className="border-y border-border py-4"><p className="font-semibold">No runs yet. Write a message below to run {p.agentName}.</p><p className="mt-1 text-muted-foreground">Each run checks your access first. The inspector then shows which documents the agent could read and what the run cost.</p></div>;
+  return <ol aria-label="Transcript" className="space-y-6">{p.turns.map((turn, index) => {
+    const previous = p.turns.slice(0, index).findLast((t) => t.kind === 'agent')?.result.inspector ?? null;
+    const question = p.turns.slice(0, index).findLast((t) => t.kind === 'you')?.text ?? '';
+    switch (turn.kind) {
+      case 'you':
+        return <li key={turn.key} className="flex justify-end"><div className="max-w-[85%] rounded-md bg-muted px-4 py-3"><p className="mb-1 text-right text-[12px] font-semibold leading-4 text-muted-foreground">You</p><p className="whitespace-pre-wrap break-words text-[16px] leading-6 [overflow-wrap:anywhere]">{turn.text}</p></div></li>;
+      case 'note': {
+        const input = question;
+        const blocked = ['quota_exceeded', 'forbidden', 'unauthenticated', 'clamp_violation', 'not_found'].includes(turn.error.code);
+        return <li key={turn.key} className="my-3 rounded-md border border-border bg-muted p-4" role="alert"><p className="flex items-center gap-2 font-semibold"><AlertCircle aria-hidden className="size-4 text-primary" />{turn.error.code === 'quota_exceeded' ? 'Blocked before the agent ran' : blocked ? 'Blocked by the access check' : "Couldn't get an answer"}</p><p className="mt-2">{turn.error.message}</p><p className="mt-1 text-sm text-muted-foreground">{blocked ? 'Nothing was charged.' : 'If the run went through, it was billed and recorded.'}</p>
+          {turn.error.code === 'unauthenticated' && <Link href="/" className="text-primary underline">Choose a persona</Link>}
+          {turn.retry && <Button type="button" variant="secondary" className="mt-2" onClick={() => p.onRetry?.(input)}>Try again</Button>}
+          {blocked && p.onEdit && <Button type="button" variant="ghost" onClick={() => p.onEdit?.(input)}>Edit message</Button>}
+        </li>;
+      }
+      case 'agent': {
+        const notes = changes(previous, turn.result.inspector);
+        return <li key={turn.key} className="mr-auto min-w-0 py-1">{notes.map((note) => <p key={note} className="mb-4 flex items-start gap-2 bg-muted p-3 text-sm"><Info aria-hidden className="mt-0.5 size-4 shrink-0" />{note}</p>)}<AnswerTurn result={turn.result} agentName={p.agentName} demoRuntime={p.demoRuntime} modelClass={turn.modelClass} actions={p.actions} onConfirm={p.onConfirm} onReject={p.onReject}
+          installationId={p.installationId} orgId={p.orgId} playing={p.playingId === turn.result.runId} stopped={p.stoppedId === turn.result.runId} onDone={p.onPlaybackDone} onInspect={p.onInspect ? (id) => p.onInspect?.(id, turn.result.runId) : undefined} onAnnounce={p.onAnnounce} />{p.onInspect && <Button type="button" variant="ghost" onClick={() => p.onInspect?.('', turn.result.runId)}>Show this run in inspector</Button>}</li>;
+      }
+      default: { const exhaustive: never = turn; return exhaustive; }
+    }
+  })}</ol>;
 }
