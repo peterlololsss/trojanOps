@@ -5,6 +5,7 @@ import { AppError, type Actor, type EffectiveAgent } from '../contracts';
 import { getDb } from '../db/client';
 import { agentInstallations } from '../db/schema';
 import { audit } from '../gateway/audit';
+import { remaining, setLimit } from '../gateway/quota';
 import { effectiveAgent } from './effective-config';
 import { clampProposedChange } from './queries';
 
@@ -20,16 +21,15 @@ const PUBLIC_OVERRIDE: { audience: 'public'; usableBy: string[] } = { audience: 
  * the campus (I7), and writing first would leave a row that no later read can clamp — which would
  * throw out of `directory()` and `myAgents()` for every student, not just this club.
  *
- * TODO(WP-7): §8 also wants an installation limit, defaulting to half the club's monthly quota,
- * so an outside student cannot drain the club's budget (decision 7). The limit lives in A's
- * quota_limits; `input.limitMicro` is accepted and ignored until WP-7 wires it.
+ * §8 also requires an installation limit, defaulting to half the club's monthly quota, so an
+ * outside student cannot drain the club's budget (decision 7). It is set *before* the row changes:
+ * if the limit is refused, nothing has been published.
  */
 export async function publishToAllStudents(
   actor: Actor,
   installationId: string,
   input: { limitMicro?: number } = {},
 ): Promise<EffectiveAgent> {
-  void input;
   const agent = await effectiveAgent(installationId);
 
   if (actor.activeOrgId !== agent.orgId || !actor.positions.includes('president')) {
@@ -67,6 +67,14 @@ export async function publishToAllStudents(
     });
   }
 
+  // A club with no limit row of its own yields 0 here, which would block the agent on every run.
+  // That is why §13 has provisionOrg create the club's default quota for a club the roster brings
+  // in; without it a newly provisioned club can publish an agent nobody can use.
+  const club = await remaining({ scope: 'org', orgId: agent.orgId });
+  const limitMicro = input.limitMicro ?? Math.floor(club.limitMicro / 2);
+
+  await setLimit(actor, { scope: 'installation', orgId: agent.orgId, installationId, limitMicro });
+
   await getDb()
     .update(agentInstallations)
     .set({ audience: PUBLIC_OVERRIDE.audience, usableBy: [], enabled: true })
@@ -81,7 +89,7 @@ export async function publishToAllStudents(
     installationId,
     targetType: 'installation',
     targetId: installationId,
-    details: { templateSlug: published.templateSlug, maxTier: published.maxTier },
+    details: { templateSlug: published.templateSlug, maxTier: published.maxTier, limitMicro },
   });
 
   return published;

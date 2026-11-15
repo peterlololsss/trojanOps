@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { clampInstallation } from '@/lib/distribution/clamps';
 import { directory, effectiveAgent, myAgents, publishToAllStudents } from '@/lib/distribution';
 import { loadAgents } from '@/lib/distribution/queries';
+import { remaining } from '@/lib/gateway/quota';
 import type { Audience, ModelClass, Tier } from '@/lib/contracts';
 import { getDb } from '@/lib/db/client';
 import { agentInstallations } from '@/lib/db/schema';
@@ -383,6 +384,28 @@ describe.skipIf(!probe)('publishToAllStudents · D3', () => {
       expect((await directory()).map((a) => a.templateSlug)).toContain('recruiting-qa');
 
       expect(await auditedSince(tx, from, 'agent.publish_public')).toBe(1);
+
+      // §8: half the club's monthly quota, so an outside student cannot drain the club.
+      const club = await remaining({ scope: 'org', orgId: ORG.startup });
+      const installation = await remaining({
+        scope: 'installation',
+        orgId: ORG.startup,
+        installationId: INSTALLATION.startupRecruitingQa,
+      });
+      expect(installation.limitMicro).toBe(Math.floor(club.limitMicro / 2));
+    }));
+
+  it('honours a limit the president chose instead of the default', () =>
+    inRolledBackApp(async () => {
+      await publishToAllStudents(await president(), INSTALLATION.startupRecruitingQa, {
+        limitMicro: 1_000_000,
+      });
+      const installation = await remaining({
+        scope: 'installation',
+        orgId: ORG.startup,
+        installationId: INSTALLATION.startupRecruitingQa,
+      });
+      expect(installation.limitMicro).toBe(1_000_000);
     }));
 
   // The row must not be written past the clamps: a public row its version cannot justify would
