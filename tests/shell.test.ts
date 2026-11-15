@@ -17,6 +17,16 @@ describe('WP-2 app shell', () => {
     expect(navigationFor(actor(null, null, []), [], false)).toHaveLength(2);
   });
 
+  it('opens the directory on departments in a club and on clubs everywhere else', () => {
+    const items = (a: Actor, usg = false) => navigationFor(a, clubs, usg).find((s) => s.label === 'Directory')?.items?.map((i) => [i.label, i.href]);
+    expect(items(actor(USER.taylor, ORG.startup, ['treasurer', 'member']))).toEqual([
+      ['Departments', '/directory/departments'], ['All clubs', '/directory/clubs'],
+    ]);
+    expect(items(actor(USER.avery, ORG.usg, ['admin']), true)).toEqual([['Clubs', '/directory/clubs']]);
+    expect(items(actor(USER.lee, null, []))).toEqual([['Clubs', '/directory/clubs']]);
+    expect(items(actor(null, null, []))).toEqual([['Clubs', '/directory/clubs']]);
+  });
+
   it('shows club management links only to the president', () => {
     const member = navigationFor(actor(USER.casey, ORG.startup, ['member']), clubs, false).find((s) => s.match.startsWith('/org/'))!;
     const president = navigationFor(actor(USER.sam, ORG.startup, ['president']), clubs, false).find((s) => s.match.startsWith('/org/'))!;

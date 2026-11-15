@@ -64,8 +64,8 @@ export function MyAgents({ home }: { home: ClubHome }) {
             <Lock aria-hidden className="mt-0.5 size-4 shrink-0" />
             <span>
               Members of {org.name} see the agents their club gives them here. Ask a {org.name} officer
-              to add you to the roster. Agents open to all students are in the{' '}
-              <Link href="/directory" className="text-primary underline">campus directory</Link>.
+              to add you to the roster. Agents open to all students are on{' '}
+              <Link href={`/directory/clubs/${org.id}?tab=agents`} className="text-primary underline">{org.name}&rsquo;s directory page</Link>.
             </span>
           </p>
         </Note>

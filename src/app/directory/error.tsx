@@ -1,20 +1,7 @@
 'use client';
 
-import { CircleAlert } from 'lucide-react';
-import { PageHeader } from '@/components/shell/page-header';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+import { DirectoryErrorState } from './_dashboard/error-state';
 
 export default function DirectoryError({ retry }: { readonly retry: () => void }) {
-  return <>
-    <PageHeader title="Directory" />
-    <Alert variant="destructive">
-      <CircleAlert aria-hidden="true" />
-      <div>
-        <AlertTitle>Could not load public agents</AlertTitle>
-        <AlertDescription>Check your connection and try again. If the problem continues, contact a USG administrator.</AlertDescription>
-        <Button variant="secondary" onClick={retry} className="mt-3">Try again</Button>
-      </div>
-    </Alert>
-  </>;
+  return <DirectoryErrorState title="Directory" failed="Could not load the directory" retry={retry} />;
 }

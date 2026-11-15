@@ -301,6 +301,11 @@ function resolveSourceKinds(kinds: string[], orgId: string, ctx: ClubContext): s
   return ids;
 }
 
+/** The latest published version of one rule pack, or null when none is published. */
+export async function latestPublishedPack(slug: string): Promise<EffectiveAgent['rulePack'] | null> {
+  return (await loadRulePacks([slug])).get(slug) ?? null;
+}
+
 /** Runs use the latest *published* version of a pack (§8 propagation), so D6's v2 takes effect. */
 async function loadRulePacks(slugs: string[]): Promise<Map<string, EffectiveAgent['rulePack']>> {
   if (slugs.length === 0) return new Map();
