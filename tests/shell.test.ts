@@ -13,13 +13,13 @@ const actor = (userId: string | null, activeOrgId: string | null, positions: str
 
 describe('WP-2 app shell', () => {
   it('gives students without a club only student scopes', () => {
-    expect(navigationFor(actor(USER.lee, null, []), []).map((s) => s.label)).toEqual(['My agents', 'Directory']);
-    expect(navigationFor(actor(null, null, []), [])).toHaveLength(2);
+    expect(navigationFor(actor(USER.lee, null, []), [], false).map((s) => s.label)).toEqual(['My agents', 'Directory']);
+    expect(navigationFor(actor(null, null, []), [], false)).toHaveLength(2);
   });
 
   it('shows club management links only to the president', () => {
-    const member = navigationFor(actor(USER.casey, ORG.startup, ['member']), clubs).find((s) => s.match.startsWith('/org/'))!;
-    const president = navigationFor(actor(USER.sam, ORG.startup, ['president']), clubs).find((s) => s.match.startsWith('/org/'))!;
+    const member = navigationFor(actor(USER.casey, ORG.startup, ['member']), clubs, false).find((s) => s.match.startsWith('/org/'))!;
+    const president = navigationFor(actor(USER.sam, ORG.startup, ['president']), clubs, false).find((s) => s.match.startsWith('/org/'))!;
     expect(member.items?.map((i) => i.label)).toEqual(['Overview', 'Catalog', 'Documents']);
     expect(president.items?.map((i) => i.label)).toEqual([
       'Overview', 'Catalog', 'Documents', 'Permission preview', 'Administration', 'Audit',
@@ -27,17 +27,22 @@ describe('WP-2 app shell', () => {
   });
 
   it('keeps the club scope on the active club for a cross-club member', () => {
-    const scopes = navigationFor(actor(USER.morgan, ORG.startup, ['member']), clubs);
+    const scopes = navigationFor(actor(USER.morgan, ORG.startup, ['member']), clubs, false);
     const club = scopes.find((s) => s.match.startsWith('/org/'))!;
     expect(club.label).toBe('Club: Startup Club');
     expect(club.match).toBe('/org/' + ORG.startup);
     expect(club.items?.some((i) => i.label === 'Administration')).toBe(false);
   });
 
+  it('shows no club scope while the active org is USG', () => {
+    const usg = [{ orgId: ORG.usg, orgName: 'USG', positionNames: [], agents: [] }];
+    expect(navigationFor(actor(USER.riley, ORG.usg, ['reviewer']), usg, true).some((s) => s.match.startsWith('/org/'))).toBe(false);
+  });
+
   it('does not show USG admin navigation to a reviewer or an admin role in another club', () => {
-    expect(navigationFor(actor(USER.riley, ORG.usg, ['reviewer']), []).some((s) => s.match === '/usg')).toBe(false);
-    expect(navigationFor(actor(USER.sam, ORG.startup, ['admin']), clubs).some((s) => s.match === '/usg')).toBe(false);
-    expect(navigationFor(actor(USER.avery, ORG.usg, ['admin']), []).find((s) => s.match === '/usg')?.items?.map((i) => i.label)).toEqual([
+    expect(navigationFor(actor(USER.riley, ORG.usg, ['reviewer']), [], true).some((s) => s.match === '/usg')).toBe(false);
+    expect(navigationFor(actor(USER.sam, ORG.startup, ['admin']), clubs, false).some((s) => s.match === '/usg')).toBe(false);
+    expect(navigationFor(actor(USER.avery, ORG.usg, ['admin']), [], true).find((s) => s.match === '/usg')?.items?.map((i) => i.label)).toEqual([
       'Templates', 'Clubs and quotas', 'Rule packs', 'Integrations', 'Audit',
     ]);
   });

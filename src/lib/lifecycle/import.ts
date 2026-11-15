@@ -1,5 +1,6 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { requireUser } from '../api';
+import { isUsgAdmin } from '../authz';
 import { now } from '../clock';
 import { getConnectors, recordRosterSync } from '../connectors/registry';
 import { AppError, type Actor, type RosterRow } from '../contracts';
@@ -22,14 +23,8 @@ export interface RosterImportResult {
 const invalid = (message: string) => new AppError({ code: 'invalid', message });
 
 export async function requireRosterAdmin(actor: Actor): Promise<void> {
-  const userId = requireUser(actor);
-  if (!actor.activeOrgId) throw new AppError({ code: 'forbidden', message: 'Only a USG administrator acting in USG can sync the roster.' });
-  const [admin] = await getDb().select({ id: memberships.id }).from(memberships)
-    .innerJoin(positions, and(eq(positions.id, memberships.positionId), eq(positions.orgId, memberships.orgId)))
-    .innerJoin(orgs, eq(orgs.id, memberships.orgId))
-    .where(and(eq(memberships.userId, userId), eq(memberships.orgId, actor.activeOrgId),
-      isNull(memberships.endedAt), eq(positions.slug, 'admin'), eq(orgs.kind, 'usg'), eq(orgs.status, 'active')));
-  if (!admin) throw new AppError({ code: 'forbidden', message: 'Only a USG administrator acting in USG can sync the roster.' });
+  requireUser(actor);
+  if (!(await isUsgAdmin(actor))) throw new AppError({ code: 'forbidden', message: 'Only a USG administrator acting in USG can sync the roster.' });
 }
 
 function groupRoster(rows: readonly RosterRow[]) {
@@ -59,7 +54,6 @@ async function reconcileRoster(rows: readonly RosterRow[]) {
     const existingOrgs = new Map((await tx.select().from(orgs)).map((o) => [o.slug, o]));
     const existingUsers = new Map((await tx.select().from(users)).map((u) => [u.externalId, u]));
     const baseline = await tx.select().from(rosterState);
-    const [permission] = await tx.execute<{ allowed: boolean }>(sql`select has_table_privilege(current_user, 'roster_state', 'DELETE') as allowed`);
     for (const [externalId, displayName] of incoming.people) {
       const user = existingUsers.get(externalId);
       if (user) {
@@ -100,9 +94,6 @@ async function reconcileRoster(rows: readonly RosterRow[]) {
         const removed = previousHolders.filter((u) => !desiredHolders.has(u));
         const added = [...desiredHolders].filter((u) => !previousHolders.includes(u));
         if (!removed.length && !added.length) continue;
-        if (removed.length > added.length && !permission?.allowed) {
-          throw invalid('This roster removes previous holders. Ask the platform owner to grant DELETE on roster_state, then retry. No roster changes were applied.');
-        }
         let [position] = await tx.select().from(positions).where(and(eq(positions.orgId, club.id), eq(positions.slug, positionSlug)));
         if (!position) {
           [position] = await tx.insert(positions).values({ orgId: club.id, slug: positionSlug,
@@ -150,7 +141,12 @@ export async function importRoster(actor: Actor): Promise<RosterImportResult> {
   try {
     const roster = await reconcileRoster(await getConnectors().roster.fetch());
     const { clubs, ...counts } = roster;
-    await audit('roster.import', { ...event, details: counts });
+    // audit() opens its own connection, so it cannot join the reconcile transaction; a failure here is reported, not rolled back.
+    try {
+      await audit('roster.import', { ...event, details: counts });
+    } catch {
+      throw new AppError({ code: 'invalid', message: 'The roster changed but the audit record could not be written. Run the sync again to reconcile.' });
+    }
     const provisioned: RosterImportResult['clubs'] = [];
     for (const club of clubs) {
       const { installed } = await provisionOrg(club.orgId, actor);
@@ -174,6 +170,8 @@ export async function importRoster(actor: Actor): Promise<RosterImportResult> {
         failures.push(recordError);
       }
     }
+    // An AppError already carries UI copy for route(); secondary recording failures must not hide it behind an opaque 500.
+    if (error instanceof AppError) throw error;
     throw failures.length === 1 ? error : new AggregateError(failures, error.message, { cause: error });
   }
 }

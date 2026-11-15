@@ -84,7 +84,7 @@ export function IntegrationPanel({ connectors }: { readonly connectors: readonly
     </Table>
     <div aria-live="polite" aria-atomic="true">
       {pending && <p className="text-sm text-muted-foreground">Syncing club memberships and provisioning agents...</p>}
-      {error && !pending && <Alert variant="destructive"><CircleAlert aria-hidden="true" /><div>
+      {error && !pending && <Alert variant="destructive" role="none"><CircleAlert aria-hidden="true" /><div>
         <AlertTitle>Roster sync did not finish</AlertTitle><AlertDescription>{error}</AlertDescription>
       </div></Alert>}
       {result && !pending && <section aria-labelledby="sync-result-heading" className="space-y-3">

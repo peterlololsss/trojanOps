@@ -1,5 +1,5 @@
 // Owner: D. Real PostgreSQL roster reconciliation; external source responses are arranged per case.
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { now } from '@/lib/clock';
 import { getConnectors, listConnectors } from '@/lib/connectors/registry';
@@ -121,20 +121,37 @@ describe.skipIf(!probe)('roster import', () => {
     });
   });
 
-  it('either applies removals with the required grant or rejects the entire roster mutation', async () => {
+  it('applies removals: a holder dropped from the source loses the position and the baseline row', async () => {
     await inRolledBackApp(async (tx) => {
       const actor = await actorFor(USER.avery, ORG.usg);
-      const [privilege] = await tx.execute<{ allowed: boolean }>(sql`select has_table_privilege(current_user, 'roster_state', 'DELETE') as allowed`);
       const rows = await getConnectors().roster.fetch();
       vi.spyOn(getConnectors().roster, 'fetch').mockResolvedValue(rows.filter((r) => !(r.orgSlug === 'startup' && r.externalUserId === 'casey')));
-      if (privilege?.allowed) {
-        await importRoster(actor);
-        expect(await tx.select().from(memberships).where(and(eq(memberships.userId, USER.casey), isNull(memberships.endedAt)))).toEqual([]);
-      } else {
-        await expect(importRoster(actor)).rejects.toMatchObject({ status: 400, error: { code: 'invalid' } });
-        expect(await tx.select().from(orgs).where(eq(orgs.slug, 'robotics'))).toEqual([]);
-        expect(await tx.select().from(memberships).where(and(eq(memberships.userId, USER.casey), isNull(memberships.endedAt)))).toHaveLength(1);
-      }
+      const result = await importRoster(actor);
+      expect(result.membershipsEnded).toBe(1);
+      expect(await tx.select().from(memberships).where(and(eq(memberships.userId, USER.casey), eq(memberships.orgId, ORG.startup), isNull(memberships.endedAt)))).toEqual([]);
+      expect(await tx.select().from(rosterState).where(and(eq(rosterState.orgId, ORG.startup), eq(rosterState.externalUserId, 'casey')))).toEqual([]);
+    });
+  });
+
+  it('applies removals: a club dropped from the source loses all of its baseline rows', async () => {
+    await inRolledBackApp(async (tx) => {
+      const actor = await actorFor(USER.avery, ORG.usg);
+      const rows = await getConnectors().roster.fetch();
+      vi.spyOn(getConnectors().roster, 'fetch').mockResolvedValue(rows.filter((r) => r.orgSlug !== 'archery'));
+      await importRoster(actor);
+      expect(await tx.select().from(rosterState).where(eq(rosterState.orgId, ORG.archery))).toEqual([]);
+      expect(await tx.select().from(memberships).where(and(eq(memberships.orgId, ORG.archery), isNull(memberships.endedAt)))).toEqual([]);
+    });
+  });
+
+  it('reports a clear error when the roster.import audit cannot be written after the reconcile', async () => {
+    await inRolledBackApp(async () => {
+      const actor = await actorFor(USER.avery, ORG.usg);
+      const writer = auditLog.audit;
+      vi.spyOn(auditLog, 'audit').mockImplementation((action, event) => action === 'roster.import' || (action === 'connector.sync' && event.details.succeeded === false)
+        ? Promise.reject(new Error('audit unavailable')) : writer(action, event));
+      await expect(importRoster(actor)).rejects.toMatchObject({ status: 400,
+        error: { message: 'The roster changed but the audit record could not be written. Run the sync again to reconcile.' } });
     });
   });
 });

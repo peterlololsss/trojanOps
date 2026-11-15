@@ -11,6 +11,7 @@ const setClock = route(async ({ req }) => {
 });
 
 export async function POST(req: Request, context: { params: Promise<Record<string, string>> }) {
+  // Intentionally gated only by DEMO_MODE (docs/architecture.md §14): demo controls need no persona.
   if (process.env.DEMO_MODE !== '1') {
     return Response.json({ code: 'not_found', message: 'Demo controls are unavailable.' }, { status: 404 });
   }

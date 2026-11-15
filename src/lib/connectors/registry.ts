@@ -74,6 +74,7 @@ export async function listConnectors(): Promise<ConnectorStatus[]> {
     status: 'ok' as const,
     createdAt: now(),
   }));
+  // A read that upserts the connector rows idempotently, so a fresh database lists all five.
   await getDb().insert(connectors).values(selected).onConflictDoUpdate({
     target: connectors.kind,
     set: { implementation: sql`excluded.implementation` },

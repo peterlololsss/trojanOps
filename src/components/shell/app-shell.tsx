@@ -1,3 +1,6 @@
+import { eq } from 'drizzle-orm';
+import { getDb } from '@/lib/db/client';
+import { orgs } from '@/lib/db/schema';
 import { getActor, listPersonas } from '@/lib/identity';
 import { personasEnabled } from '@/lib/identity/session';
 import { myAgents } from '@/lib/distribution';
@@ -8,12 +11,15 @@ import { ScopeSideNav } from './scope-side-nav';
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const actor = await getActor();
-  const clubs = actor.userId ? await myAgents(actor.userId) : [];
   const demoMode = personasEnabled();
   const personas = demoMode ? await listPersonas() : [];
   const current = personas.find((person) => person.userId === actor.userId);
-  const sessionClubs = current?.clubs ?? clubs;
-  const scopes = navigationFor(actor, sessionClubs);
+  // myAgents() only runs when the persona list does not already supply the clubs.
+  const sessionClubs = current?.clubs ?? (actor.userId ? await myAgents(actor.userId) : []);
+  const [activeOrg] = actor.activeOrgId
+    ? await getDb().select({ kind: orgs.kind }).from(orgs).where(eq(orgs.id, actor.activeOrgId))
+    : [];
+  const scopes = navigationFor(actor, sessionClubs, activeOrg?.kind === 'usg');
   return (
     <>
       <a href="#main-content" className="sr-only z-10 rounded-md bg-background px-4 py-2 text-primary focus:not-sr-only focus:absolute focus:left-4 focus:top-2">
