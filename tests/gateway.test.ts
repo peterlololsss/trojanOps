@@ -88,7 +88,7 @@ describe.skipIf(!probe)('runAgent', () => {
     const run = await runAgent(await actorFor(USER.taylor, ORG.startup), INSTALLATION.startupFundingPrecheck, 'Can we fund pitch night?');
     expect(run.inspector.permitted.map((d) => d.id).sort()).toEqual(
       [DOCUMENT.usgFundingRules, DOCUMENT.spring2026Budget, DOCUMENT.sponsorContacts].sort());
-    expect(run.reply).toContain('Demo rule pack v1 · annual cap $8,000');
+    expect(run.reply).toContain('USG Funding Guidelines 2026–27 v1 · annual cap $8,000');
     expect(run.inspector.runGrants.map((g) => g.label)).toContain('Startup Club · Treasurer');
     expect(run.inspector).toMatchObject({ billedClub: 'Startup Club', costMicro: 10_000, templateVersion: 1 });
     expect(run.inspector.sources.map((x) => x.name).sort()).toEqual(['Startup Club · Finance', 'USG rulebook']);
@@ -125,7 +125,7 @@ describe.skipIf(!probe)('runAgent', () => {
   it('fills inspector.blocked only for the club president or a USG admin (§7 step 8)', () => scenario(async () => {
     const sam = await runAgent(await actorFor(USER.sam, ORG.startup), INSTALLATION.startupHandoff, 'x');
     expect(sam.inspector.blocked).toEqual([
-      { id: DOCUMENT.usgFundingRules, title: 'USG funding rules (demo text)', reason: 'outside_sources' },
+      { id: DOCUMENT.usgFundingRules, title: 'USG Funding Department Guidelines', reason: 'outside_sources' },
     ]);
     const casey = await runAgent(await actorFor(USER.casey, ORG.startup), INSTALLATION.startupHandoff, 'x');
     expect(casey.inspector).not.toHaveProperty('blocked');

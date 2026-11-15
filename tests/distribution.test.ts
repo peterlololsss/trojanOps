@@ -320,7 +320,7 @@ describe('composeEffectiveAgent · version ⊗ installation', () => {
   });
 
   it('carries the rule pack through', () => {
-    const rulePack = { slug: 'usg-funding', version: 3, label: 'Demo rule pack', content: {} };
+    const rulePack = { slug: 'usg-funding', version: 3, label: 'USG Funding Guidelines 2026–27', content: {} };
     expect(composeEffectiveAgent(input({ rulePack })).rulePack).toEqual(rulePack);
   });
 

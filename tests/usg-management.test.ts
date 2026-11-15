@@ -35,6 +35,22 @@ describe.skipIf(!probe)('USG policy and template management', () => {
     const [{ count: after }] = await tx.execute<{ count: number }>(sql`select count(*)::int as count from audit_events where action = 'authz.denied'`);
     expect(after - before).toBe(3);
   }));
+  it('names the templates that use each rule pack and what the template page explains', () => inRolledBackApp(async tx => {
+    const actor = await avery();
+    const usedBy = async () => (await usgRulePacksView(actor)).find(p => p.slug === 'usg-funding')?.usedBy;
+    // Only templates whose version names the pack: Funding pre-check, not the review assistant.
+    expect((await usedBy())?.map(u => u.name)).toEqual(['Funding pre-check']);
+    expect((await usedBy())?.[0]).toMatchObject({ templateId: TEMPLATE.fundingPrecheck, version: 1, audience: 'positions', usableBy: ['treasurer', 'president'], installedCount: 3, global: true });
+    // A turned-off installation does not run the pack, so its club is not counted.
+    await tx.execute(sql`update agent_installations set enabled = false where id = ${INSTALLATION.archeryFundingPrecheck}`);
+    expect((await usedBy())?.[0].installedCount).toBe(2);
+    const list = await usgTemplatesView(actor);
+    expect(list.rulePacks).toEqual([{ slug: 'usg-funding', label: 'USG Funding Guidelines 2026–27', version: 1, ruleCount: 13 }]);
+    expect(list.templates.find(t => t.id === TEMPLATE.fundingPrecheck)).toMatchObject({ rulePackSlug: 'usg-funding', purpose: expect.stringContaining('funding request') });
+    const detail = await usgTemplateView(actor, TEMPLATE.fundingPrecheck);
+    expect(detail?.usgDocuments).toContainEqual({ kind: 'rulebook', title: 'USG Funding Department Guidelines', tier: 'public' });
+    expect(detail?.positions.map(p => p.slug)).toEqual(expect.arrayContaining(['president', 'treasurer']));
+  }));
   it('applies a compatible policy, audits it, and never widens a template model ceiling', () => inRolledBackApp(async tx => {
     await setClubPolicy(await avery(), ORG.archery, policy);
     expect((await effectiveAgent(INSTALLATION.archeryFundingPrecheck)).modelClass).toBe('economy');

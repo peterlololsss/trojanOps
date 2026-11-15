@@ -33,11 +33,11 @@ describe('auditCsv', () => {
 
   it('writes Restricted document for a title the viewer cannot read, and joins documents with "; "', () => {
     const csv = auditCsv([row({ documents: [
-      { id: 'd1', title: 'USG funding rules (demo text)' },
+      { id: 'd1', title: 'USG Funding Department Guidelines' },
       { id: null, title: null },
       { id: null, title: null },
     ] })]);
-    expect(csv).toContain(',USG funding rules (demo text); Restricted document; Restricted document,');
+    expect(csv).toContain(',USG Funding Department Guidelines; Restricted document; Restricted document,');
     expect(csv).not.toContain('d2');
   });
 

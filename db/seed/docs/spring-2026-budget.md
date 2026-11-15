@@ -11,7 +11,7 @@ Prepared by Taylor (treasurer) and approved by Sam (president). Demo text.
 
 ## By line
 
-- Catering: $2,400
+- Catering: $2,400 (Demo day, 60 expected guests)
 - Venue and audio-visual: $1,500
 - Speaker gifts and travel: $900
 - Printing and signage: $600
@@ -22,5 +22,5 @@ Prepared by Taylor (treasurer) and approved by Sam (president). Demo text.
 ## Notes
 
 - The total is under the USG annual cap of $8,000, and three events is under the limit of 4 per semester.
-- Catering quotes are estimates until the vendor confirms headcount two weeks before each event.
+- Catering quotes are estimates until the vendor confirms the Demo day headcount two weeks before the event.
 - Contingency is released only with the president's approval.

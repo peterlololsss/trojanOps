@@ -13,6 +13,6 @@ export default async function TemplatesPage() {
     if (!(error instanceof AppError) || !['forbidden', 'unauthenticated'].includes(error.error.code)) throw error;
     return <><PageHeader title="Agent templates" /><DeniedConsole /></>;
   }
-  return <><PageHeader title="Agent templates" description="Publish versions and distribute USG agents to active clubs." /><ConsoleNav />
+  return <><PageHeader title="Agent templates" description="Agents USG builds once for every club: what each one does, the rules it follows and where it is installed." /><ConsoleNav />
     <TemplatesTable key={`${actor.userId}:${actor.activeOrgId}`} data={data} /></>;
 }

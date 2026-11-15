@@ -36,7 +36,7 @@ Demo beats (each runs on real platform logic; agents answer through the mock run
 | D3 | Club publishes a public agent | Startup's `recruiting-qa` starts disabled. Sam clicks "Publish to all students"; the confirmation states who gains access and the installation limit. It appears in `/directory`; Lee (no club) opens it; the inspector lists Startup's public documents only |
 | D4 | Internal vs public scope | Casey's `/me/agents`: `handoff` (All members), `recruiting-qa` (All students). Taylor's adds `funding-precheck` (Treasurer, President). Sam's preview of `handoff`: Member → minutes allowed, budget "Not granted"; Treasurer → both; preview of `recruiting-qa`: "Any signed-in student" → recruiting FAQ only, minutes "Outside agent sources" |
 | D5 | Quota | Sam sets Casey's limit to $0.00 → Casey's next `handoff` run is blocked before the runtime is called. Lee (seeded with $0.04 today) runs `recruiting-qa` once ($0.01, billed to Startup); the next run hits the $0.05 student daily cap |
-| D6 | Rule pack update | Avery publishes `usg-funding` v2 (annual cap $8,000 → $10,000); the next `funding-precheck` run in any club shows "Demo rule pack v2 · annual cap $10,000" |
+| D6 | Rule pack update | Avery publishes `usg-funding` v2 (annual cap $8,000 → $10,000); the next `funding-precheck` run in any club shows "USG Funding Guidelines 2026–27 v2 · annual cap $10,000" |
 | D7 | Succession | Sam transfers treasurer from Taylor to Jordan. Taylor's `/me/agents` drops `funding-precheck`; Jordan's gains it; installations and documents are unchanged |
 | D8 | Audit | Every beat above is in the log, including the rejected widening. The USG view shows metadata only; documents the viewer can't read show as "Restricted document" |
 
@@ -620,7 +620,7 @@ Seeded templates (display names in UI copy):
   - Cells come from `explainAccess`.
 - Visibility contract (`tests/rls.test.ts`), as `trojanops_app`:
 
-| Actor · agent | Recruiting FAQ | Minutes | Spring budget | USG funding rules |
+| Actor · agent | Recruiting FAQ | Minutes | Spring budget | USG Funding Department Guidelines |
 |---|---|---|---|---|
 | Lee (no club) · `recruiting-qa` | yes | no | no | no |
 | Taylor (treasurer) · `recruiting-qa` | yes | no | no | no |
@@ -770,7 +770,7 @@ Pages (18):
 
 | Club | Source | Document | Tier |
 |---|---|---|---|
-| USG | `rulebook` | USG funding rules (demo text) | public |
+| USG | `rulebook` | USG Funding Department Guidelines | public |
 | USG | `usg_internal` | Reviewer notes | usg_internal |
 | Startup | `public` | Recruiting FAQ | public |
 | Startup | `minutes` | Meeting minutes 2026-10-08 | members |
@@ -780,12 +780,19 @@ Pages (18):
 | Archery | `finance` | Archery budget 2026 | officers: treasurer (+ president) |
 | Dance | `public` | Spring showcase info | public |
 
-**Rule pack** `usg-funding` v1 (`label: "Demo rule pack"`; `content` keys `annualCapUsd`,
-`fundedEventsPerSemester`, `vendorLeadTimeInstructionalWeeks`, `deadline`):
-- annual cap $8,000;
-- 4 funded events per semester;
-- 6 instructional weeks' lead time for approved vendors;
-- Wednesday 11:59 PM PT deadline.
+**Rule pack** `usg-funding` v1 (`label: "USG Funding Guidelines 2026–27"`) holds USG's public
+[Funding Department Guidelines](https://usg.usc.edu/branches/funding/), current as of 2026-10-21,
+as 13 rules. `content` keys:
+- `annualCapUsd` (8000): the mock runtime prints it;
+- `source`: title, publisher, `currentAsOf`, `retrievedAt`, links, `edits` (typos corrected);
+- `rules[]`: `{id, group, section, title, value?, unit?, check, quote, example, items?, note?,
+  amendedFrom?}`, grouped as deadlines, limits and not eligible. `check` is `precheck` or
+  `reviewer`; `quote` is the guideline text; `example` uses seed data (Startup's Demo day catering
+  at $40 a person, its "Speaker gifts" line). A published value that differs from USG's carries
+  `amendedFrom` with USG's value;
+- `changeNote`: the publisher's note for that version.
+
+The USG `rulebook` document carries the full guideline text.
 
 D6 publishes v2 with the cap at $10,000. Evaluation of the rules belongs to WP-14.
 

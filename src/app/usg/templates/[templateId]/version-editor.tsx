@@ -1,53 +1,183 @@
 'use client';
-import { useState, type FormEvent } from 'react';
+
+// Owner: B. "Edit configuration" on /usg/templates/[templateId]: every setting of the next version as a
+// choice with a one-line explanation, then a review of what differs and who it reaches. The POST body
+// to /api/templates/:id/versions is the same as before (version-draft.ts).
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { CircleAlert } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import type { Audience, ModelClass, Tier } from '@/lib/contracts';
 import type { UsgTemplateView } from '@/lib/distribution/usg-view';
-import { ErrorNotice, label, PendingButton, Section, selectClass, SuccessNotice, useConsoleMutation } from '../console-ui';
-const split = (value: string) => value.split(',').map(s => s.trim()).filter(Boolean);
+import { ErrorNotice, PendingButton, selectClass, SuccessNotice, useConsoleMutation } from '../console-ui';
+import { AUDIENCES, CLUB_TIERS, MODEL_CLASSES, MODEL_ORDER, SOURCE_KINDS, TIERS, TOOLS, toolOption } from '../template-config';
+import {
+  initialState, reachSentences, toBody, validate, versionChanges, type EditorField, type EditorState, type FieldChange,
+} from './version-draft';
 
-export function VersionEditor({ data }: { data: UsgTemplateView }) {
-  const latest = data.versions[0]; const [open, setOpen] = useState(false); const [error, setError] = useState<string | null>(null);
-  const [purpose, setPurpose] = useState(latest?.purpose ?? ''); const [audience, setAudience] = useState(latest?.audience ?? 'members');
-  const [usableBy, setUsableBy] = useState(latest?.usableBy.join(', ') ?? ''); const [maxTier, setMaxTier] = useState(latest?.maxTier ?? 'members');
-  const [sourceKinds, setSourceKinds] = useState(latest?.sourceKinds.join(', ') ?? ''); const [tools, setTools] = useState(latest?.tools.join(', ') ?? '');
-  const [modelClasses, setModelClasses] = useState(latest?.modelClasses ?? ['economy']); const [defaultModelClass, setDefaultModelClass] = useState(latest?.defaultModelClass ?? 'economy');
-  const [systemPrompt, setSystemPrompt] = useState(latest?.systemPrompt ?? ''); const [rulePackSlug, setRulePackSlug] = useState(latest?.rulePackSlug ?? ''); const [changelog, setChangelog] = useState('');
-  const mutation = useConsoleMutation();
-  const draft = { purpose: purpose.trim(), audience, usableBy: audience === 'positions' ? split(usableBy) : [], maxTier: audience === 'public' ? 'public' : maxTier,
-    sourceKinds: split(sourceKinds), tools: split(tools), modelClasses, defaultModelClass, systemPrompt, rulePackSlug: rulePackSlug.trim() || null, changelog };
+export interface VersionReviewProps { templateName: string; nextVersion: number; currentVersion: number | null; changes: FieldChange[]; reach: string[]; changelog: string }
+/** The review step: each setting that differs (before → after) and who the version reaches. */
+export function VersionReview({ templateName, nextVersion, currentVersion, changes, reach, changelog }: VersionReviewProps) {
+  return <div className="space-y-5">
+    <section aria-labelledby="version-review-changes" className="space-y-2">
+      <h3 id="version-review-changes" className="font-semibold">{currentVersion ? `What changes from version ${currentVersion}` : `First version of ${templateName}`}</h3>
+      <div className="rounded-md border border-border"><Table className="min-w-[560px]">
+        <TableHeader><TableRow className="hover:bg-transparent"><TableHead>Setting</TableHead><TableHead>{currentVersion ? `Now (v${currentVersion})` : 'Now'}</TableHead><TableHead>After (v{nextVersion})</TableHead></TableRow></TableHeader>
+        <TableBody>{changes.map(c => <TableRow key={c.field} className="align-top hover:bg-transparent">
+          <TableCell className="font-semibold">{c.field}</TableCell><TableCell className="text-muted-foreground">{c.before}</TableCell>
+          <TableCell>{c.after}{c.detail && <details className="mt-1"><summary className="cursor-pointer text-xs text-primary">Show new instructions</summary>
+            <p className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted p-2 text-xs leading-4">{c.detail}</p></details>}</TableCell>
+        </TableRow>)}</TableBody>
+      </Table></div>
+    </section>
+    {changelog.trim() && <p><span className="font-semibold">Change note:</span> {changelog.trim()}</p>}
+    <section aria-labelledby="version-review-reach" className="space-y-1">
+      <h3 id="version-review-reach" className="font-semibold">Who it reaches</h3>
+      {reach.map(s => <p key={s}>{s}</p>)}
+      <p className="text-muted-foreground">Versions cannot be edited after publishing. If a club’s own settings would fall outside this version, publishing stops and nothing changes.</p>
+    </section>
+  </div>;
+}
+
+function Field({ legend, hint, error, id, children }: { legend: string; hint: string; error?: string; id: string; children: ReactNode }) {
+  return <fieldset aria-describedby={`${id}-hint${error ? ` ${id}-error` : ''}`} className="space-y-2">
+    <legend className="font-semibold">{legend}</legend>
+    <p id={`${id}-hint`} className="text-muted-foreground">{hint}</p>
+    {children}
+    {error && <p id={`${id}-error`} className="flex items-center gap-1 text-primary"><CircleAlert aria-hidden="true" className="size-3 shrink-0" />{error}</p>}
+  </fieldset>;
+}
+function Choice({ id, title, description, tag, control }: { id: string; title: string; description: string; tag?: string; control: ReactNode }) {
+  return <div className="flex items-start gap-3 rounded-md border border-border px-3 py-2 has-[:checked]:border-input has-[:checked]:bg-muted has-[[data-state=checked]]:border-input has-[[data-state=checked]]:bg-muted">
+    <div className="flex h-5 items-center">{control}</div>
+    <div><label htmlFor={id} className="font-semibold">{title}</label>{tag && <Badge className="ml-2 align-middle">{tag}</Badge>}
+      <p id={`${id}-hint`} className="text-muted-foreground">{description}</p></div>
+  </div>;
+}
+const toggle = (values: string[], value: string, on: boolean) => on ? [...values.filter(v => v !== value), value] : values.filter(v => v !== value);
+
+export function VersionEditor({ data, editing, setEditing }: { data: UsgTemplateView; editing: boolean; setEditing: (value: boolean) => void }) {
+  const latest = data.versions.find(v => v.version === data.template.latestVersion) ?? data.versions[0];
+  const next = data.template.latestVersion + 1;
+  const [state, setState] = useState<EditorState>(() => initialState(latest));
+  const [errors, setErrors] = useState<Partial<Record<EditorField, string>>>({});
+  const [formError, setFormError] = useState<string | null>(null); const [open, setOpen] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null); const mutation = useConsoleMutation();
+  const ctx = { positions: data.positions, rulePacks: data.rulePacks };
+  const body = toBody(state); const changes = versionChanges(latest, body, ctx);
+  const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setState(s => ({ ...s, [key]: value }));
+
+  useEffect(() => { if (editing) heading.current?.focus(); }, [editing]);
+
+  const positionOptions = [...data.positions, ...state.usableBy.filter(slug => !data.positions.some(p => p.slug === slug)).map(slug => ({ slug, name: slug }))];
+  const toolOptions = [...TOOLS, ...state.tools.filter(slug => !TOOLS.some(t => t.slug === slug)).map(toolOption)];
+  // USG console templates are global, so USG internal notes stay out (kept only to let a stored choice be removed).
+  const sourceOptions = SOURCE_KINDS.filter(s => s.slug !== 'usg_internal' || state.sourceKinds.includes(s.slug));
+  const tierOptions: Tier[] = CLUB_TIERS.includes(state.maxTier) ? [...CLUB_TIERS] : [...CLUB_TIERS, state.maxTier];
+
   function review(event: FormEvent) {
-    event.preventDefault(); setError(null);
-    if (!modelClasses.length || !modelClasses.includes(defaultModelClass)) { setError('Allow at least one model class and choose an allowed default.'); return; }
-    if (audience === 'positions' && !split(usableBy).length) { setError('Name at least one position for this audience.'); return; }
-    if (split(sourceKinds).some(s => !['public', 'minutes', 'finance', 'archive', 'rulebook', 'usg_internal'].includes(s))) { setError('Use only the source kinds listed under Sources.'); return; }
+    event.preventDefault(); setFormError(null);
+    const found = validate(state); setErrors(found);
+    if (Object.keys(found).length) { setFormError('Some settings need a fix. Each one says what to change.'); return; }
+    if (latest && !changes.length) { setFormError(`Nothing differs from version ${latest.version} yet. Change a setting before publishing version ${next}.`); return; }
     mutation.clear(); setOpen(true);
   }
   function publish() {
     mutation.run(async () => {
-      const result = await mutation.request(`/api/templates/${data.template.id}/versions`, 'POST', draft) as { version: number };
-      return `Version ${result.version} published. Latest installations now use it; pinned installations keep their version.`;
-    }, () => setOpen(false));
+      const result = await mutation.request(`/api/templates/${data.template.id}/versions`, 'POST', body) as { version: number };
+      return `Version ${result.version} published. Clubs tracking Latest use it on their next run; pinned clubs keep their version.`;
+    }, () => { setOpen(false); setEditing(false); });
   }
-  return <Section title="Publish a version"><p className="text-muted-foreground">A new version is immutable. The next run of every installation tracking Latest uses it. Existing pins stay on their version.</p>
-    <form onSubmit={review} className="max-w-[800px] space-y-4"><div><label htmlFor="version-purpose" className="mb-1 block font-semibold">Purpose</label><Input id="version-purpose" value={purpose} onChange={e => setPurpose(e.target.value)} required /></div>
-      <div className="grid gap-4 md:grid-cols-2"><div><label htmlFor="version-audience" className="mb-1 block font-semibold">Audience</label><select id="version-audience" className={selectClass} value={audience} onChange={e => setAudience(e.target.value as typeof audience)}><option value="public">All students</option><option value="members">All members</option><option value="positions">Named positions</option></select></div>
-        <div><label htmlFor="version-tier" className="mb-1 block font-semibold">Max tier</label><select id="version-tier" className={selectClass} value={audience === 'public' ? 'public' : maxTier} onChange={e => setMaxTier(e.target.value as typeof maxTier)} disabled={audience === 'public'}><option value="public">Public</option><option value="members">Members</option><option value="officers">Officers</option></select></div></div>
-      {audience === 'positions' && <div><label htmlFor="version-positions" className="mb-1 block font-semibold">Position slugs</label><Input id="version-positions" value={usableBy} onChange={e => setUsableBy(e.target.value)} required /><p className="mt-1 text-muted-foreground">Comma separated, for example president, treasurer.</p></div>}
-      <div><label htmlFor="version-sources" className="mb-1 block font-semibold">Sources</label><Input id="version-sources" value={sourceKinds} onChange={e => setSourceKinds(e.target.value)} /><p className="mt-1 text-muted-foreground">Comma separated: public, minutes, finance, archive, rulebook. Sources resolve within each club; rulebook resolves in USG.</p></div>
-      <div><label htmlFor="version-tools" className="mb-1 block font-semibold">Tool slugs</label><Input id="version-tools" value={tools} onChange={e => setTools(e.target.value)} /><p className="mt-1 text-muted-foreground">Comma separated. Leave empty for no tools. Write tools still require human confirmation.</p></div>
-      <div className="grid gap-4 md:grid-cols-2"><fieldset><legend className="mb-2 font-semibold">Model classes</legend><div className="flex flex-wrap gap-4">{(['economy', 'standard'] as const).map(model => <label key={model} className="flex items-center gap-2"><input type="checkbox" checked={modelClasses.includes(model)} onChange={e => setModelClasses(e.target.checked ? [...modelClasses, model] : modelClasses.filter(m => m !== model))} />{label(model)}</label>)}</div></fieldset>
-        <div><label htmlFor="version-model" className="mb-1 block font-semibold">Default model</label><select id="version-model" className={selectClass} value={defaultModelClass} onChange={e => setDefaultModelClass(e.target.value as typeof defaultModelClass)}><option value="economy">Economy</option><option value="standard">Standard</option></select></div></div>
-      <div><label htmlFor="version-prompt" className="mb-1 block font-semibold">System prompt</label><Textarea id="version-prompt" value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} required rows={5} /></div>
-      <div><label htmlFor="version-rulepack" className="mb-1 block font-semibold">Rule pack</label><Input id="version-rulepack" value={rulePackSlug} onChange={e => setRulePackSlug(e.target.value)} /><p className="mt-1 text-muted-foreground">Optional slug, for example usg-funding. Runs use the latest published pack.</p></div>
-      <div><label htmlFor="version-changes" className="mb-1 block font-semibold">Change note</label><Textarea id="version-changes" value={changelog} onChange={e => setChangelog(e.target.value)} rows={2} /></div>
-      <ErrorNotice message={error} /><SuccessNotice message={mutation.success} /><Button type="submit">Review version {data.template.latestVersion + 1}</Button>
+  function cancel() { setState(initialState(latest)); setErrors({}); setFormError(null); setEditing(false); }
+
+  // Opened from the summary's "Edit configuration" button; nothing shows until then.
+  if (!editing) return mutation.success ? <SuccessNotice message={mutation.success} /> : null;
+  return <section id="edit-configuration" aria-labelledby="edit-configuration-title" className="space-y-4 rounded-md border border-border p-4">
+    <div><h2 id="edit-configuration-title" ref={heading} tabIndex={-1} className="text-xl font-semibold leading-7">Edit configuration</h2>
+      <p className="mt-1 text-muted-foreground">Changes publish as version {next}. Clubs tracking Latest get it on their next run; clubs that pinned a version keep theirs.</p></div>
+    <form onSubmit={review} noValidate className="max-w-[640px] space-y-6">
+      <div><Label htmlFor="version-purpose">Purpose</Label>
+        <Input id="version-purpose" value={state.purpose} onChange={e => set('purpose', e.target.value)} aria-invalid={!!errors.purpose} aria-describedby={`version-purpose-hint${errors.purpose ? ' version-purpose-error' : ''}`} />
+        <p id="version-purpose-hint" className="mt-1 text-muted-foreground">One sentence. Students see it on My agents and in each club’s catalog.</p>
+        {errors.purpose && <p id="version-purpose-error" className="mt-1 flex items-center gap-1 text-primary"><CircleAlert aria-hidden="true" className="size-3 shrink-0" />{errors.purpose}</p>}</div>
+
+      <Field id="version-audience" legend="Audience" hint="Who may open it in each club that has it installed.">
+        <RadioGroup value={state.audience} onValueChange={v => set('audience', v as Audience)} className="gap-2" aria-label="Audience">
+          {AUDIENCES.map(a => <Choice key={a.slug} id={`audience-${a.slug}`} title={a.name} description={a.description}
+            control={<RadioGroupItem id={`audience-${a.slug}`} value={a.slug} aria-describedby={`audience-${a.slug}-hint`} className="size-5" />} />)}
+        </RadioGroup>
+      </Field>
+
+      {state.audience === 'positions' && <Field id="version-positions" legend="Positions" hint="Each club fills these positions with its own people. Choosing Treasurer means whoever holds Treasurer in that club." error={errors.usableBy}>
+        <div className="grid gap-2 sm:grid-cols-2">{positionOptions.map(p => <label key={p.slug} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 has-[:checked]:border-input has-[:checked]:bg-muted">
+          <Checkbox checked={state.usableBy.includes(p.slug)} onChange={e => set('usableBy', toggle(state.usableBy, p.slug, e.target.checked))} />{p.name}</label>)}</div>
+      </Field>}
+
+      <div><Label htmlFor="version-prompt">Instructions</Label>
+        <p id="version-prompt-hint" className="mb-2 text-muted-foreground">The system prompt: what the agent is told before every request. Say who it serves, what to check, what to cite and what it must never do.</p>
+        <Textarea id="version-prompt" value={state.systemPrompt} onChange={e => set('systemPrompt', e.target.value)} rows={12} className="text-base leading-6" aria-invalid={!!errors.systemPrompt} aria-describedby={`version-prompt-hint${errors.systemPrompt ? ' version-prompt-error' : ''}`} />
+        {errors.systemPrompt && <p id="version-prompt-error" className="mt-1 flex items-center gap-1 text-primary"><CircleAlert aria-hidden="true" className="size-3 shrink-0" />{errors.systemPrompt}</p>}</div>
+
+      <Field id="version-sources" legend="Knowledge sources" hint="The kinds of documents it may look in. Club sources resolve inside each club; USG sources come from USG’s library." error={errors.sourceKinds}>
+        <div className="space-y-2">{sourceOptions.map(s => <Choice key={s.slug} id={`source-${s.slug}`} title={s.name} description={s.description} tag={s.owner === 'usg' ? 'USG library' : 'Each club'}
+          control={<Checkbox id={`source-${s.slug}`} aria-describedby={`source-${s.slug}-hint`} checked={state.sourceKinds.includes(s.slug)} onChange={e => set('sourceKinds', toggle(state.sourceKinds, s.slug, e.target.checked))} />} />)}</div>
+      </Field>
+
+      <Field id="version-tier" legend="Reads up to" hint="The max tier: the most sensitive documents it may read. It still never reads more than the person running it can.">
+        {state.audience === 'public' ? <p className="rounded-md border border-border px-3 py-2"><span className="font-semibold">Public only.</span> An agent for all students can read only public documents.</p>
+          : <><RadioGroup value={state.maxTier} onValueChange={v => set('maxTier', v as Tier)} className="gap-2" aria-label="Reads up to">
+            {tierOptions.map(t => <Choice key={t} id={`tier-${t}`} title={TIERS[t].name} description={TIERS[t].plain}
+              control={<RadioGroupItem id={`tier-${t}`} value={t} aria-describedby={`tier-${t}-hint`} className="size-5" />} />)}
+          </RadioGroup><p className="text-muted-foreground">USG internal is not offered here or under Knowledge sources: agents that USG distributes to clubs never read reviewers’ notes.</p></>}
+      </Field>
+
+      <div><Label htmlFor="version-rulepack">Rule pack</Label>
+        <p id="version-rulepack-hint" className="mb-2 text-muted-foreground">The USG policy this agent is built to apply. Each run uses the newest published version of the pack.</p>
+        <select id="version-rulepack" className={selectClass} value={state.rulePackSlug} onChange={e => set('rulePackSlug', e.target.value)} aria-describedby="version-rulepack-hint">
+          <option value="">None</option>
+          {data.rulePacks.map(p => <option key={p.slug} value={p.slug}>{`${p.label} (v${p.version}, ${p.ruleCount} rules)`}</option>)}
+          {state.rulePackSlug && !data.rulePacks.some(p => p.slug === state.rulePackSlug) && <option value={state.rulePackSlug}>{`${state.rulePackSlug} (no published version)`}</option>}
+        </select></div>
+
+      <Field id="version-tools" legend="Tools" hint="Actions it can take besides answering. Leave all unchecked for an agent that only answers. Every write waits for the user to confirm.">
+        <div className="space-y-2">{toolOptions.map(t => <Choice key={t.slug} id={`tool-${t.slug}`} title={t.name} description={t.description}
+          control={<Checkbox id={`tool-${t.slug}`} aria-describedby={`tool-${t.slug}-hint`} checked={state.tools.includes(t.slug)} onChange={e => set('tools', toggle(state.tools, t.slug, e.target.checked))} />} />)}</div>
+      </Field>
+
+      <Field id="version-models" legend="Model classes" hint="How strong a model runs it. Clubs choose among the classes you allow, within their USG policy." error={errors.modelClasses}>
+        <div className="grid gap-2 sm:grid-cols-2">{MODEL_ORDER.map(m => <Choice key={m} id={`model-${m}`} title={MODEL_CLASSES[m].name} description={MODEL_CLASSES[m].description}
+          control={<Checkbox id={`model-${m}`} aria-describedby={`model-${m}-hint`} checked={state.modelClasses.includes(m)} onChange={e => {
+            const classes = MODEL_ORDER.filter(x => x === m ? e.target.checked : state.modelClasses.includes(x));
+            setState(s => ({ ...s, modelClasses: classes, defaultModelClass: classes.includes(s.defaultModelClass) ? s.defaultModelClass : classes[0] ?? s.defaultModelClass }));
+          }} />} />)}</div>
+        <div className="max-w-xs"><Label htmlFor="version-model">Default model</Label>
+          <select id="version-model" className={selectClass} value={state.defaultModelClass} onChange={e => set('defaultModelClass', e.target.value as ModelClass)}>
+            {MODEL_ORDER.map(m => <option key={m} value={m}>{MODEL_CLASSES[m].name}{state.modelClasses.includes(m) ? '' : ' (not allowed)'}</option>)}</select></div>
+      </Field>
+
+      <div><Label htmlFor="version-changes">Change note</Label>
+        <Textarea id="version-changes" value={state.changelog} onChange={e => set('changelog', e.target.value)} rows={2} aria-describedby="version-changes-hint" />
+        <p id="version-changes-hint" className="mt-1 text-muted-foreground">Shown in the version history, for example “Cite §5 for every food line.”</p></div>
+
+      {formError && <Alert variant="destructive"><CircleAlert aria-hidden="true" /><div><AlertTitle>Cannot review yet</AlertTitle><AlertDescription>{formError}</AlertDescription></div></Alert>}
+      <div className="flex flex-wrap gap-2"><Button type="submit">Review version {next}</Button><Button type="button" variant="ghost" onClick={cancel}>Cancel</Button></div>
     </form>
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent><DialogHeader><DialogTitle>Publish version {data.template.latestVersion + 1}?</DialogTitle><DialogDescription>Review who this version is published for before it reaches installations tracking Latest.</DialogDescription></DialogHeader>
-      <p>{data.template.name} will be available to {audience === 'public' ? 'all signed-in students' : audience === 'members' ? 'all members of each club' : split(usableBy).map(label).join(', ')} where installed. It can read up to {label(draft.maxTier)} documents from its configured sources.</p>
-      <p className="text-muted-foreground">Pinned installations keep their version. Publication is rejected if an existing Latest installation would violate the new version.</p><ErrorNotice message={mutation.error} /><DialogFooter><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button><PendingButton pending={mutation.pending} onClick={publish}>Publish version</PendingButton></DialogFooter>
+
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-w-2xl">
+      <DialogHeader><DialogTitle>Publish version {next} of {data.template.name}?</DialogTitle>
+        <DialogDescription>Check what changes and who it reaches before it goes to clubs.</DialogDescription></DialogHeader>
+      <VersionReview templateName={data.template.name} nextVersion={next} currentVersion={latest?.version ?? null} changes={changes}
+        reach={reachSentences(body, data.template.installedCount, ctx)} changelog={state.changelog} />
+      <ErrorNotice message={mutation.error} />
+      <DialogFooter><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Back to edit</Button><PendingButton pending={mutation.pending} onClick={publish}>Publish version {next}</PendingButton></DialogFooter>
     </DialogContent></Dialog>
-  </Section>;
+  </section>;
 }

@@ -13,7 +13,7 @@ const USG_SOURCE_NAMES: Partial<Record<SourceKind, string>> = { rulebook: 'USG r
 const UPLOADED_BY: Record<Org, string | null> = { usg: USER.avery, startup: USER.sam, archery: null, dance: null };
 
 const DOCS: Array<{ id: string; org: Org; sourceId: string; title: string; tier: Tier; file: string }> = [
-  { id: DOCUMENT.usgFundingRules, org: 'usg', sourceId: SOURCE.usg.rulebook, title: 'USG funding rules (demo text)', tier: 'public', file: 'usg-funding-rules.md' },
+  { id: DOCUMENT.usgFundingRules, org: 'usg', sourceId: SOURCE.usg.rulebook, title: 'USG Funding Department Guidelines', tier: 'public', file: 'usg-funding-rules.md' },
   { id: DOCUMENT.reviewerNotes, org: 'usg', sourceId: SOURCE.usg.usg_internal, title: 'Reviewer notes', tier: 'usg_internal', file: 'reviewer-notes.md' },
   { id: DOCUMENT.recruitingFaq, org: 'startup', sourceId: SOURCE.startup.public, title: 'Recruiting FAQ', tier: 'public', file: 'recruiting-faq.md' },
   { id: DOCUMENT.minutes20261008, org: 'startup', sourceId: SOURCE.startup.minutes, title: 'Meeting minutes 2026-10-08', tier: 'members', file: 'minutes-2026-10-08.md' },

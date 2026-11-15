@@ -23,9 +23,9 @@ Start `pnpm dev`, sign in at `/` (e.g. `/?account=2` for Sam), then open
 |---|---|
 | Signed out | Sign-in link; no document table |
 | Sam | Six readable documents; upload form with four Startup sources |
-| Casey | FAQ, minutes, past events and USG funding rules; no budget/contact titles or upload form |
+| Casey | FAQ, minutes, past events and the USG Funding Department Guidelines; no budget/contact titles or upload form |
 | Morgan, with Archery active | Startup member documents; no Startup budget or Archery documents |
-| Lee | Recruiting FAQ and public USG funding rules only |
+| Lee | Recruiting FAQ and the public USG Funding Department Guidelines only |
 | Search for an absent title, then Clear filters | Zero-result message, then the readable list returns |
 | Filter by tier | Count and rows reflect only matching readable documents |
 | Sam: choose Officers | Checkboxes for secretary and treasurer only; the president always has access; unchecked means president only |

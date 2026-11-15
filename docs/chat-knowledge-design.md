@@ -375,7 +375,7 @@ on source 2)
 │ How much of the annual cap does the spring budget use?         │  │ ✓ Checked access · 4 grants  │
 │ ... first answer · Standard · −3 credits · Audit #418 ...      │  │ ✓ Read 3 of 3 permitted docs │
 │ ────────────────────────────────────────────────────────────── │  │ ✓ Paid by Startup Club ·     │
-│ ⓘ Demo rule pack is now v2.                                    │  │   3 credits · Audit #431     │
+│ ⓘ USG Funding Guidelines is now v2.                            │  │   3 credits · Audit #431     │
 │ ────────────────────────────────────────────────────────────── │  │ Run grants                   │
 │ You                                                            │  │   Any signed-in student      │
 │ And with the new cap?                                          │  │   Startup Club · Member      │
@@ -388,12 +388,13 @@ on source 2)
 │▌   for pitch night. [1]                                        │  │   Sponsor contacts [Officers]│
 │▌2. Spring 2026 budget: The spring budget is $6,200 across      │  │ ▌ Spring 2026 budget         │
 │▌   three events. [2]                                           │  │ ▌            [Officers]      │
-│▌3. USG funding rules (demo text): Each club may receive up to  │  │   USG funding rules (demo    │
-│▌   $8,000 in USG funding per year. [3]                         │  │   text)          [Public]    │
-│▌Demo rule pack v2 · annual cap $10,000                         │  │   Read in this run        3  │
+│▌3. USG Funding Department Guidelines: Individual               │  │  USG Funding Department      │
+│▌   organizations may receive a maximum of $8,000               │  │  Guidelines     [Public]     │
+│▌   from the USG Funding Department per year. [3]               │  │                              │
+│▌USG Funding Guidelines 2026–27 v2 · annual cap $10,000         │  │   Read in this run        3  │
 │▌Sources [1 Sponsor contacts · Officers]                        │  │ Versions                     │
 │▌        [2 Spring 2026 budget · Officers]                      │  │   Template v1                │
-│▌        [3 USG funding rules (demo text) · Public]             │  │   Demo rule pack v2          │
+│▌        [3 USG Funding Department Guidelines · Public]         │  │   USG Funding Guidelines v2  │
 │▌        ┌──────────────────────────────────────────────┐       │  │   Model Standard             │
 │▌        │ Source 2                                      │       │  │ Billing                      │
 │▌        │ Spring 2026 budget                [Officers]  │       │  │   Paid by    Startup Club    │
@@ -465,7 +466,7 @@ action (I6). The card is the existing one.
 │▌Funding pre-check  [Demo runtime: placeholder answer]          │  │ ✓ Paid by Startup Club ·     │
 │▌                           [lock] Uses Officers information    │  │   3 credits · Audit #436     │
 │▌Placeholder answer. ... three numbered lines ...               │  │ ...                          │
-│▌Demo rule pack v2 · annual cap $10,000                         │  │                              │
+│▌USG Funding Guidelines 2026–27 v2 · annual cap $10,000         │  │                              │
 │▌Sources [1 Sponsor contacts · Officers] [2 Spring 2026 ...]    │  │                              │
 │▌┌ Submit to queue ──────────────────────── [◷ Waiting for you] ┐│  │                              │
 │▌│ submit_to_queue                                             ││  │                              │
@@ -495,7 +496,7 @@ After D7 moves the treasurer position to Jordan, the gateway refuses Taylor's Co
 - **Starters:** a click fills the composer and focuses it. Starters disappear after the first run.
 - **Change notes** between two runs, from the two inspectors:
   - "Your access changed since your last run: Startup Club · Treasurer no longer applies."
-  - "Demo rule pack is now v2."
+  - "USG Funding Guidelines 2026–27 is now v2."
   - "Funding pre-check was updated to template v2."
 - **Copy** copies the answer's Markdown plus "Sources: 1. Sponsor contacts ...". The button reads
   "Copied" for two seconds.
@@ -549,9 +550,9 @@ document this run could read:
 
 1. **Sponsor contacts:** Two local sponsors have pledged support for pitch night. [1]
 2. **Spring 2026 budget:** The spring budget is $6,200 across three events. [2]
-3. **USG funding rules (demo text):** Each club may receive up to $8,000 in USG funding per year. [3]
+3. **USG Funding Department Guidelines:** Individual organizations may receive a maximum of $8,000 from the USG Funding Department per year. [3]
 
-Demo rule pack v1 · annual cap $8,000
+USG Funding Guidelines 2026–27 v1 · annual cap $8,000
 ```
 
 ## 6. Usage and allowance pages
@@ -745,7 +746,7 @@ What it produces on the seed:
 | Past events and venues | Members | 01 Introduction (147) · 02 Pitch night 2025 (267) · 03 Spring kickoff 2026 (169) · 04 Booking notes (180) |
 | Spring 2026 budget | Officers | 01 Introduction (164) · 02 By event (83) · 03 By line (166) · 04 Notes (264) |
 | Sponsor contacts | Officers | 01 Introduction (157) · 02 Sponsors (202) · 03 Handling (247) · 04 Handoff (80) |
-| USG funding rules (demo text) | Public | 01 Introduction (121) · 02 Limits (211) · 03 How a request is checked (314) · 04 Notes (112) |
+| USG Funding Department Guidelines | Public | 01 Introduction (495) · 02 §1 Application timeline (1998) · 03 §2 Application overview (3105) · 04 §3 Maximum funding (929) · 05 §4 Funding boards (3207) · 06 §5 General guidelines (1995) · 07 §6 Policy and denials (1475) · 08 §7 Approval and amendments (272) |
 
 - An upload is queued for 3s, then indexes one chunk every 2s, then is ready: a three-chunk
   document is ready about 9s after upload.
@@ -775,8 +776,8 @@ shortened here; the page shows "Startup Club · Minutes".
 │ │ Recruiting FAQ              │ Public   │ All students         │ ✓ Ready        │    5 │ 2 of 4 │     2 │
 │ │ Sponsor contacts            │ Finance  │ Treasurer, President │ ✓ Ready        │    4 │ 2 of 4 │     3 │
 │ │ Spring 2026 budget          │ Finance  │ Treasurer, President │ ✓ Ready        │    4 │ 2 of 4 │     3 │
-│ │ USG funding rules (demo     │ USG      │ All students         │ ✓ Ready        │    4 │ 1 of 4 │     3 │
-│ │ text)                       │ rulebook │                      │                │      │        │       │
+│ │ USG Funding Department      │ USG      │ All students         │ ✓ Ready        │    8 │ 1 of 4 │     3 │
+│ │ Guidelines                  │ rulebook │                      │                │      │        │       │
 │ └─────────────────────────────┴──────────┴──────────────────────┴────────────────┴──────┴────────┴───────┘
 │ Indexing updates every few seconds.                    (Uploaded column, "Nov 15, 2026, 10:51 AM PT") │
 ```
@@ -1136,7 +1137,7 @@ spend story; chat polish is secondary.
 | D3 | Lee on the directory: the scope line, "1 credit left today [80% used]", a starter, the model menu (Standard needs 3, so Lee switches to Economy), playback, a citation with "Public: readable by any signed-in student" |
 | D4 | Casey's answer is labelled "Uses Members information" and costs "−3 credits · 47 left"; Usage lists the run with its model, club and documents read. In the Retrieval test, the budget chunk is kept out for Member and comes first for Treasurer |
 | D5 | Lee's next message: "You've used today's 5 credits for public agents. They reset at midnight PT." Casey's, after Sam sets $0.00: "Your allowance in Startup Club is 0 credits this month. Ask Sam..." |
-| D6 | Between Taylor's two runs: "Demo rule pack is now v2" |
+| D6 | Between Taylor's two runs: "USG Funding Guidelines 2026–27 is now v2" |
 | D7 | Taylor's next run is refused in place; a later Confirm would be refused too |
 | D8 | `tool.call`, `tool.confirm` and `document.upload` join the audit log; Cited counts and Usage match the runs in it |
 | New | A pending write action confirmed by a person (I6); an upload whose receipt names who gains access, then indexes live |
@@ -1163,7 +1164,7 @@ Sequence, about eight minutes, with two browser windows (each keeps its own pers
 6. **Knowledge.** Sam uploads "Pitch night run of show". The review step names who gains access
    and which agents will read it. The row indexes live, and the document page shows three chunks
    that inherit Members.
-7. **D6.** In window 1, Taylor runs Funding pre-check ("Uses Officers information", "Demo rule pack
+7. **D6.** In window 1, Taylor runs Funding pre-check ("Uses Officers information", "USG Funding Guidelines 2026–27
    v1 · annual cap $8,000"). Avery publishes v2; Taylor's next run shows the change note and
    "$10,000".
 8. **Write action.** Taylor sends the "Submit the founder panel request..." starter and confirms

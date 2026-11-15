@@ -122,7 +122,7 @@ describe.skipIf(!sql)('listAccessibleDocuments under RLS', () => {
     expect(rows.map((r) => r.id)).toContain(DOCUMENT.reviewerNotes);
   });
 
-  // §10 visibility contract. Columns: Recruiting FAQ, Minutes, Spring budget, USG funding rules.
+  // §10 visibility contract. Columns: Recruiting FAQ, Minutes, Spring budget, USG Funding Department Guidelines.
   const columns = [DOCUMENT.recruitingFaq, DOCUMENT.minutes20261008, DOCUMENT.spring2026Budget, DOCUMENT.usgFundingRules];
   const yes = true;
   const no = false;

@@ -1,12 +1,179 @@
 {
   "slug": "usg-funding",
   "version": 1,
-  "label": "Demo rule pack",
-  "notice": "Demo values written for the AI@USC Hackathon. Not USG policy, and not endorsed by USC or USG.",
+  "label": "USG Funding Guidelines 2026–27",
+  "notice": "Copied from USG's public Funding Department Guidelines (current as of October 21, 2026). TrojanOps is a student project and is not affiliated with or endorsed by USG.",
   "content": {
     "annualCapUsd": 8000,
-    "fundedEventsPerSemester": 4,
-    "vendorLeadTimeInstructionalWeeks": 6,
-    "deadline": "Wednesday 11:59 PM PT"
+    "source": {
+      "title": "Funding Department Guidelines",
+      "publisher": "USC Undergraduate Student Government",
+      "currentAsOf": "2026-10-21",
+      "retrievedAt": "2026-11-15",
+      "url": "https://docs.google.com/document/d/1noJFJ4SxrFGD1Zm-6EqUHpXSIOUuFIL-gIobWXcXCt0/edit",
+      "pageUrl": "https://usg.usc.edu/branches/funding/",
+      "edits": "Two typos corrected: a repeated “six academic weeks” in §1 and “Restaurant diners” in §5."
+    },
+    "rules": [
+      {
+        "id": "weekly-window",
+        "group": "deadlines",
+        "section": "§1",
+        "title": "Weekly application window",
+        "value": "Wednesday 11:59 PM",
+        "check": "precheck",
+        "quote": "Funding applications will be open once a week on Wednesdays and close at 11:59 PM.",
+        "example": "A request finished on Thursday has to wait for the next Wednesday window."
+      },
+      {
+        "id": "vendor-lead-time",
+        "group": "deadlines",
+        "section": "§1",
+        "title": "Lead time with an approved USC vendor",
+        "value": 6,
+        "unit": "academic weeks before the first payment is due",
+        "check": "precheck",
+        "quote": "Applications must be submitted at least six academic weeks before the initial payment due date, for approved USC Vendors.",
+        "example": "If the caterer's first payment is due April 20, apply at least six academic weeks before that date."
+      },
+      {
+        "id": "travel-lead-time",
+        "group": "deadlines",
+        "section": "§1",
+        "title": "Lead time for travel",
+        "value": 9,
+        "unit": "academic weeks before the first payment is due",
+        "check": "precheck",
+        "quote": "Travel expenses must be made at least 9 academic weeks prior to the date of initial payment due date.",
+        "example": "Flights and a hotel for a conference need nine academic weeks; a request at six weeks is denied automatically."
+      },
+      {
+        "id": "no-break-events",
+        "group": "deadlines",
+        "section": "§1",
+        "title": "No events during breaks, study days or finals",
+        "check": "precheck",
+        "quote": "USG Funding does not process applications or provide funding for events during University holidays, breaks, study days, or finals.",
+        "example": "A study-day social is not eligible, whatever its budget."
+      },
+      {
+        "id": "incomplete-application",
+        "group": "deadlines",
+        "section": "§2",
+        "title": "Fixing an incomplete application",
+        "value": 2,
+        "unit": "business days",
+        "check": "reviewer",
+        "quote": "Incomplete applications will be returned to the applicant who must provide the necessary information within 2 business days.",
+        "example": "A missing vendor quote flagged on Monday must be sent by Wednesday, or the application is denied."
+      },
+      {
+        "id": "post-event-evaluation",
+        "group": "deadlines",
+        "section": "§1",
+        "title": "Post Event Evaluation",
+        "value": 3,
+        "unit": "business days after the event",
+        "check": "reviewer",
+        "quote": "All applicants must submit the Post Event Evaluation form found on the USG EngageSC page within three business days of the final day of the event.",
+        "example": "After a Friday event, the evaluation, with photos of members attending, is due Wednesday."
+      },
+      {
+        "id": "final-invoices",
+        "group": "deadlines",
+        "section": "§1",
+        "title": "Final invoices",
+        "value": 3,
+        "unit": "business days after the event",
+        "check": "reviewer",
+        "quote": "Final invoices must be submitted no later than three business days after the final day of the event.",
+        "example": "Late invoices can cost the club its future funding."
+      },
+      {
+        "id": "annual-cap",
+        "group": "limits",
+        "section": "§3",
+        "title": "Annual maximum per club",
+        "value": 8000,
+        "unit": "USD per year",
+        "check": "precheck",
+        "quote": "Individual organizations may receive a maximum of $8,000 from the USG Funding Department per year.",
+        "example": "Startup Club's spring budget plans $6,200. Another $2,000 request would take it past $8,000."
+      },
+      {
+        "id": "events-per-semester",
+        "group": "limits",
+        "section": "Funding page",
+        "title": "Funded events per semester",
+        "value": 4,
+        "unit": "events per semester",
+        "check": "precheck",
+        "quote": "Each RSO can have up to 4 events funded per semester as long as it remains under $8,000 from the USG Funding Department per year.",
+        "example": "Startup Club's spring plan has three events, so it has room for one more."
+      },
+      {
+        "id": "venue-personnel",
+        "group": "limits",
+        "section": "§3",
+        "title": "On-campus venue and personnel",
+        "value": 4000,
+        "unit": "USD for on-campus venue and personnel",
+        "check": "precheck",
+        "quote": "The USG Funding Department will provide funding for up to $4,000 of the total cost associated with on-campus venue rentals and personnel.",
+        "example": "Startup Club's $1,500 for venue and audio-visual is within the $4,000 limit."
+      },
+      {
+        "id": "food-per-person",
+        "group": "limits",
+        "section": "§5",
+        "title": "Food per person",
+        "value": 35,
+        "unit": "USD per person",
+        "check": "precheck",
+        "quote": "Food requests should not exceed a $35 per person maximum based on expected attendance, and raw food items requiring refrigeration or preparation are not eligible.",
+        "example": "Startup Club budgets $2,400 of catering for 60 expected Demo day guests: $40 a person, over the $35 limit."
+      },
+      {
+        "id": "lodging-per-night",
+        "group": "limits",
+        "section": "§5",
+        "title": "Lodging per night",
+        "value": 400,
+        "unit": "USD per room per night",
+        "check": "precheck",
+        "quote": "Rooms cannot exceed $400 per night.",
+        "example": "A $429-a-night conference hotel is over the limit. Every hotel request also needs a price comparison."
+      },
+      {
+        "id": "not-eligible",
+        "group": "not-eligible",
+        "section": "§5",
+        "title": "Expenses USG does not fund",
+        "check": "precheck",
+        "quote": "The following are not eligible for funding:",
+        "items": [
+          "Any reimbursements",
+          "Payments or donations to charity",
+          "Alcoholic beverages",
+          "Gifts and gift cards",
+          "Durable goods (Items that are not for one-time use such as electronics, uniforms, etc.)",
+          "Raw food items requiring refrigeration and/or preparation",
+          "Restaurant dinners",
+          "Rideshare costs (Uber, Lyft, Buses, Vans, Amtrak cabins, Car rentals, etc.)",
+          "Any refundable deposits and fees pertaining to cleaning/damage",
+          "Peer to Peer Payments (Airbnb, VRBO, PayPal, Zelle, CashApp, etc.)",
+          "Payments to talent or performers",
+          "Monthly Subscriptions/Payments",
+          "Events that include ticket sales",
+          "On-campus events that are not open to all students",
+          "Events occurring in private residences",
+          "International travel",
+          "Jewelry",
+          "Balloons"
+        ],
+        "example": "Startup Club's \"Speaker gifts and travel\" line ($900) includes gifts, which USG does not fund.",
+        "note": "Any items critical to the function of the program may be considered as an exception to this rule at the board’s discretion."
+      }
+    ]
   }
 }

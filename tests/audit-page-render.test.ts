@@ -38,7 +38,7 @@ const rows: AuditRow[] = [
   row({
     id: 1043, action: 'run.access', actionLabel: 'Run access',
     documents: [
-      { id: DOCUMENT.usgFundingRules, title: 'USG funding rules (demo text)' },
+      { id: DOCUMENT.usgFundingRules, title: 'USG Funding Department Guidelines' },
       { id: null, title: null },
       { id: null, title: null },
     ],
@@ -86,7 +86,7 @@ describe('audit table markup', () => {
   it('shows unreadable documents as "Restricted document" with a lock, never their title or id', () => {
     const html = render();
     expect(text(html)).toContain('Permitted (3):');
-    expect(text(html)).toContain('USG funding rules (demo text)');
+    expect(text(html)).toContain('USG Funding Department Guidelines');
     // Two restricted documents in the run.access row and the restricted upload target.
     expect(html.match(/Restricted document/g)).toHaveLength(3);
     // Each one: muted text, a lock icon, then the words.
@@ -182,7 +182,7 @@ describe('audit filters and export', () => {
     const lines = csv.trimEnd().split('\r\n');
     expect(lines).toHaveLength(3);   // header + Sam's two rows
     expect(lines[1]).toContain('Run access');
-    expect(lines[1]).toContain('USG funding rules (demo text); Restricted document; Restricted document');
+    expect(lines[1]).toContain('USG Funding Department Guidelines; Restricted document; Restricted document');
     expect(lines[2]).toContain('Document uploaded,Restricted document');
     expect(csv).not.toMatch(/Avery Chen|Club provisioned/);
     expect(auditExport(rows, initialAuditFilters, 'USG', '2026-11-15').filename).toBe('usg-audit-2026-11-15.csv');
@@ -204,7 +204,7 @@ describe.skipIf(!sql)('audit views over the seed (D8)', () => {
     const usg = await renderScope(USER.avery, ORG.usg, { kind: 'usg' });
     expect(text(usg)).toContain('Run access');
     expect(text(usg)).toContain('Permitted (3):');
-    expect(text(usg)).toContain('USG funding rules (demo text)');
+    expect(text(usg)).toContain('USG Funding Department Guidelines');
     expect(text(usg)).toContain('Restricted document');
     expect(usg).not.toMatch(/Spring 2026 budget|Sponsor contacts|Audit render sentinel/);
     expect(usg).not.toContain(DOCUMENT.spring2026Budget);

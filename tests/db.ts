@@ -140,7 +140,7 @@ interface FixtureDoc {
 
 // §15 documents. read_grants is left to the trigger.
 const FIXTURE_DOCS: FixtureDoc[] = [
-  { id: DOCUMENT.usgFundingRules, orgId: ORG.usg, sourceId: SOURCE.usg.rulebook, title: 'USG funding rules (demo text)', tier: 'public' },
+  { id: DOCUMENT.usgFundingRules, orgId: ORG.usg, sourceId: SOURCE.usg.rulebook, title: 'USG Funding Department Guidelines', tier: 'public' },
   { id: DOCUMENT.reviewerNotes, orgId: ORG.usg, sourceId: SOURCE.usg.usg_internal, title: 'Reviewer notes', tier: 'usg_internal' },
   { id: DOCUMENT.recruitingFaq, orgId: ORG.startup, sourceId: SOURCE.startup.public, title: 'Recruiting FAQ', tier: 'public' },
   { id: DOCUMENT.minutes20261008, orgId: ORG.startup, sourceId: SOURCE.startup.minutes, title: 'Meeting minutes 2026-10-08', tier: 'members' },

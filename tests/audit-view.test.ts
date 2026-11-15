@@ -72,7 +72,7 @@ describe.skipIf(!sql)('getAuditPageData', () => {
     expect(byId(row?.documents ?? [])).toEqual(byId([
       { id: null, title: null },
       { id: null, title: null },
-      { id: DOCUMENT.usgFundingRules, title: 'USG funding rules (demo text)' },
+      { id: DOCUMENT.usgFundingRules, title: 'USG Funding Department Guidelines' },
     ]));
     // Neither the title nor the id of an unreadable document reaches the page.
     const json = JSON.stringify(data);
@@ -92,7 +92,7 @@ describe.skipIf(!sql)('getAuditPageData', () => {
     const data = await page(USER.sam, ORG.startup, club(ORG.startup));
     expect(data).toMatchObject({ scope: { kind: 'club', orgId: ORG.startup }, org: { id: ORG.startup, name: 'Startup Club' }, clubs: [] });
     expect(byId(rowById(data, accessId)?.documents ?? [])).toEqual(byId([
-      { id: DOCUMENT.usgFundingRules, title: 'USG funding rules (demo text)' },
+      { id: DOCUMENT.usgFundingRules, title: 'USG Funding Department Guidelines' },
       { id: DOCUMENT.spring2026Budget, title: 'Spring 2026 budget' },
       { id: DOCUMENT.sponsorContacts, title: 'Sponsor contacts' },
     ]));

@@ -71,7 +71,7 @@ describe.skipIf(!sql)('listBlockedDocuments under RLS', () => {
       DOCUMENT.recruitingFaq, DOCUMENT.minutes20261008, DOCUMENT.pastEvents,
     ));
     const handoff = await blockedFor(sam, INSTALLATION.startupHandoff);
-    expect(handoff.blocked).toEqual([{ id: DOCUMENT.usgFundingRules, title: 'USG funding rules (demo text)', reason: 'outside_sources' }]);
+    expect(handoff.blocked).toEqual([{ id: DOCUMENT.usgFundingRules, title: 'USG Funding Department Guidelines', reason: 'outside_sources' }]);
   });
 
   it('gives a USG admin a list, empty when the run read everything in scope', async () => {
@@ -107,7 +107,7 @@ describe.skipIf(!sql)('listBlockedDocuments under RLS', () => {
         { id: DOCUMENT.pastEvents, title: null, reason: 'outside_sources' },
         { id: DOCUMENT.spring2026Budget, title: null, reason: 'outside_sources' },
         { id: DOCUMENT.sponsorContacts, title: null, reason: 'outside_sources' },
-        { id: DOCUMENT.usgFundingRules, title: 'USG funding rules (demo text)', reason: 'outside_sources' },
+        { id: DOCUMENT.usgFundingRules, title: 'USG Funding Department Guidelines', reason: 'outside_sources' },
       ]));
       expect(blocked?.at(-1)?.title).toBeNull();   // readable titles first
       expect(JSON.stringify(blocked)).not.toMatch(/Meeting minutes|Spring 2026 budget|Sponsor contacts|Past events/);
@@ -179,7 +179,7 @@ describe('<Inspector />', () => {
     permitted: [{ id: DOCUMENT.spring2026Budget, title: 'Spring 2026 budget', tier: 'officers' }],
     readInRun: [{ id: DOCUMENT.spring2026Budget, title: 'Spring 2026 budget' }],
     templateVersion: 1,
-    rulePack: { label: 'Demo rule pack', version: 1 },
+    rulePack: { label: 'USG Funding Guidelines 2026–27', version: 1 },
     billedClub: 'Startup Club',
     costMicro: 10_000,
     quotaRemainingMicro: { 'Startup Club': 4_990_000 },
@@ -196,7 +196,7 @@ describe('<Inspector />', () => {
     expect(html).not.toContain(ORG.startup);
     expect(html).toContain('Officers');
     expect(html).toContain('Template v1');
-    expect(html).toContain('Demo rule pack v1');
+    expect(html).toContain('USG Funding Guidelines 2026–27 v1');
     expect(html).toContain('$0.01');
     expect(html).toContain('Quota left · Startup Club');
     expect(html).toContain('$4.99');
@@ -212,10 +212,10 @@ describe('<Inspector />', () => {
 
   it('shows Restricted document for a null title, with the reason as icon and word', () => {
     const html = render({ ...base, blocked: [
-      { id: DOCUMENT.usgFundingRules, title: 'USG funding rules (demo text)', reason: 'outside_sources' },
+      { id: DOCUMENT.usgFundingRules, title: 'USG Funding Department Guidelines', reason: 'outside_sources' },
       { id: DOCUMENT.minutes20261008, title: null, reason: 'above_max_tier' },
     ] });
-    expect(html).toContain('USG funding rules (demo text)');
+    expect(html).toContain('USG Funding Department Guidelines');
     expect(html).toContain('Outside agent sources');
     expect(html).toContain('Restricted document');
     expect(html).toContain('Above agent max tier');
