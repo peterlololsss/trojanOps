@@ -2,7 +2,7 @@
 // users, memberships, positions and orgs have no RLS, so they are read with getDb() (I1 covers
 // documents and runs only).
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
-import type { Grant, Tier } from '../contracts';
+import type { Actor, Grant, Tier } from '../contracts';
 import { getDb } from '../db/client';
 import { memberships, orgs, positions, users } from '../db/schema';
 
@@ -107,6 +107,13 @@ export function capGrants(userGrants: Grant[], orgId: string, maxTier: Tier): Gr
     case 'usg_internal':
       return [...userGrants];
   }
+}
+
+/** True for a USG admin acting in USG: the admin position, held in the active org, which is USG. */
+export async function isUsgAdmin(actor: Actor): Promise<boolean> {
+  if (!actor.userId || !actor.activeOrgId || !actor.positions.includes('admin')) return false;
+  const [org] = await getDb().select({ kind: orgs.kind }).from(orgs).where(eq(orgs.id, actor.activeOrgId));
+  return org?.kind === 'usg';
 }
 
 /** Display labels for grants, e.g. "Startup Club · Treasurer", with names read from the DB. */

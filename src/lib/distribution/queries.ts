@@ -5,7 +5,7 @@
 // getDb(), the same way authz reads memberships.
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { isUuid } from '../authz';
-import type { EffectiveAgent, ModelClass } from '../contracts';
+import { AppError, type EffectiveAgent, type ModelClass } from '../contracts';
 import { getDb } from '../db/client';
 import {
   agentInstallations,
@@ -53,9 +53,11 @@ export interface LoadedAgent {
  * Loads installations and composes each into the config a run would use, in a stable order (club
  * name, then agent name) so pages do not reshuffle between requests.
  *
- * One unloadable installation never takes the list down with it: a row whose version cannot be
- * resolved, or whose club is missing the policy the clamps need, is skipped with a warning rather
- * than throwing — `directory()` serves the whole campus, so a single bad row must not 500 it.
+ * One unloadable installation never takes a list down with it: a row whose version cannot be
+ * resolved, or that a clamp now rejects, is skipped with a warning rather than throwing —
+ * `directory()` serves the whole campus, so a single bad row must not 500 it. Asking for one
+ * installation by id is different: the caller is about to act on it, so a clamp violation is
+ * thrown, in a generic form, instead of reading as "no such agent".
  */
 export async function loadAgents(filter: AgentFilter): Promise<LoadedAgent[]> {
   // An id from a URL reaches us as free text. Postgres would reject a malformed uuid with a query
@@ -72,6 +74,18 @@ export async function loadAgents(filter: AgentFilter): Promise<LoadedAgent[]> {
       if (filter.enabledOnly && agent.status !== 'enabled') continue;
       loaded.push({ agent, orgName });
     } catch (err) {
+      if (filter.installationId && err instanceof AppError && err.error.code === 'clamp_violation') {
+        // I7 runs the clamps at run time too: a version narrowed under an installation lands here.
+        // Any signed-in user can ask for an installation by id (the gateway composes it before the
+        // audience check), so nothing is audited and nothing internal leaves: the clamp's field,
+        // allowed values and message can name another club's sources and positions.
+        // `installation.rejected` belongs to the write paths.
+        console.warn(`distribution: installation ${input.installation.id} is outside its version:`, err.error);
+        throw new AppError({
+          code: 'clamp_violation',
+          message: 'This agent is configured beyond what its template allows, so it cannot run.',
+        });
+      }
       // A clamp that now rejects a row written earlier, or a club with no usg_club_policy.
       console.warn(`distribution: skipping installation ${input.installation.id}:`, err);
     }
@@ -79,7 +93,18 @@ export async function loadAgents(filter: AgentFilter): Promise<LoadedAgent[]> {
   return loaded;
 }
 
-/** The composed config for one installation, or null when it does not resolve. */
+/** The club that owns an installation, or null for an unknown or malformed id. */
+export async function installationOrgId(installationId: string): Promise<string | null> {
+  if (!isUuid(installationId)) return null;
+  const [row] = await getDb()
+    .select({ orgId: agentInstallations.orgId })
+    .from(agentInstallations)
+    .where(eq(agentInstallations.id, installationId));
+  return row?.orgId ?? null;
+}
+
+/** The composed config for one installation, or null when it does not resolve. A clamp violation
+ * on the row is thrown, not hidden. */
 export async function loadAgent(installationId: string): Promise<EffectiveAgent | null> {
   const [first] = await loadAgents({ installationId });
   return first?.agent ?? null;
@@ -212,8 +237,11 @@ async function loadComposeInputs(filter: AgentFilter): Promise<LoadedInput[]> {
           policy: ctx.policy.get(r.orgId) ?? { allowedModelClasses: [], allowPublicAgents: false },
           positionSlugs: ctx.positions.get(r.orgId) ?? [],
           ownedSourceIds: ctx.ownedSources.get(r.orgId) ?? [],
-          // TODO(WP-7): the club's monthly limit lives in A's quota_limits and is only compared
-          // against an installation budget, which has no column yet, so no clamp reads it today.
+          // TODO(verify): the club's monthly limit lives in A's quota_limits, and an installation's
+          // budget has no column of its own (it is a quota_limits row), so no clamp here reads it
+          // and this stays unbounded. WP-7's `updateInstallation` must not rely on this value: it
+          // passes the club limit from `remaining({scope:'org'})` to the clamp when it checks a
+          // proposed installation budget.
           quotaMicro: Number.MAX_SAFE_INTEGER,
         },
         baseSourceIds: resolveSourceKinds(r.sourceKinds!, r.orgId, ctx),

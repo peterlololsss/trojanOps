@@ -1,13 +1,12 @@
 // Owner: B. Shared write checks; all installation candidates use the same pure I7 clamps.
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { requireUser } from '../api';
-import { isUuid } from '../authz';
+import { isUuid, isUsgAdmin } from '../authz';
 import { now } from '../clock';
 import { AppError, type Actor, type AuditAction, type AuditEvent } from '../contracts';
-import type { Tx } from '../db/client';
+import { getDb, type Tx } from '../db/client';
 import { agentInstallations, agentTemplates, agentTemplateVersions, orgs, positions, quotaLimits, sources, usgClubPolicy } from '../db/schema';
 import { audit } from '../gateway/audit';
-import { remaining } from '../gateway/quota';
 import { clampInstallation, type ClampInput } from './clamps';
 
 export const invalid = (message: string) => new AppError({ code: 'invalid', message });
@@ -25,17 +24,15 @@ export async function checkedWrite<T>(actor: Actor, targetType: string, targetId
   try { return await fn(); } catch (err) {
     if (err instanceof AppError && ['forbidden', 'clamp_violation'].includes(err.error.code)) {
       const e = event(actor, targetType, targetId);
-      if (targetType === 'installation' && isUuid(targetId)) e.installationId = targetId;
+      if (targetType === 'installation' && isUuid(targetId)) {
+        const [found] = await getDb().select({ id: agentInstallations.id }).from(agentInstallations).where(eq(agentInstallations.id, targetId));
+        if (found) e.installationId = targetId;
+      }
       if (err.error.cap) e.details = { field: err.error.cap.field ?? '', allowed: err.error.cap.allowed as string | number | string[] };
       await audit(err.error.code === 'forbidden' ? 'authz.denied' : 'installation.rejected', e);
     }
     throw err;
   }
-}
-export async function isUsgAdmin(tx: Tx, actor: Actor): Promise<boolean> {
-  if (!actor.activeOrgId || !isUuid(actor.activeOrgId) || !actor.positions.includes('admin')) return false;
-  const [org] = await tx.select().from(orgs).where(eq(orgs.id, actor.activeOrgId));
-  return org?.kind === 'usg' && org.status === 'active';
 }
 export function president(actor: Actor, orgId: string): void {
   if (actor.activeOrgId !== orgId || !actor.positions.includes('president')) {
@@ -43,7 +40,7 @@ export function president(actor: Actor, orgId: string): void {
   }
 }
 export async function usgAdmin(tx: Tx, actor: Actor): Promise<void> {
-  if (!await isUsgAdmin(tx, actor)) throw new AppError({ code: 'forbidden', message: 'Only a USG admin can perform this action.' });
+  if (!await isUsgAdmin(actor)) throw new AppError({ code: 'forbidden', message: 'Only a USG admin can perform this action.' });
 }
 export async function lockTemplate(tx: Tx, id: string): Promise<Template> {
   if (!isUuid(id)) throw missing();
@@ -65,10 +62,9 @@ export async function versionFor(tx: Tx, template: Template, installation?: Pick
   return v;
 }
 export async function clubBudget(tx: Tx, orgId: string): Promise<number> {
-  const [q] = await tx.select().from(quotaLimits).where(and(eq(quotaLimits.scope, 'org'), eq(quotaLimits.orgId, orgId)));
-  // TODO(verify): A's WP-4 quota service is still an in-memory stub on this branch. Prefer the
-  // bootstrap row for a new club; remove the fallback once A's quota seed has landed.
-  return q?.limitMicro ?? (await remaining({ scope: 'org', orgId })).limitMicro;
+  const [q] = await tx.select().from(quotaLimits).where(and(eq(quotaLimits.scope, 'org'), eq(quotaLimits.orgId, orgId)))
+    .orderBy(desc(quotaLimits.setAt), desc(quotaLimits.createdAt)).limit(1);
+  return q?.limitMicro ?? 0;
 }
 export async function clampWrite(tx: Tx, orgId: string, version: ClampInput['version'], installation: ClampInput['installation']) {
   const [policy] = await tx.select().from(usgClubPolicy).where(eq(usgClubPolicy.orgId, orgId));
@@ -84,9 +80,15 @@ export async function clampWrite(tx: Tx, orgId: string, version: ClampInput['ver
   }
   return result.effective;
 }
+/** Shared protocol with A's quota writer; this only serializes bootstrap inserts.
+ * TODO(verify): ask A to export this lock helper so the advisory key has one definition. */
+export async function lockQuotaBootstrap(tx: Tx): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('trojanops:quota'))`);
+}
 /** New public installations need a budget in the same transaction as their creation (§11).
  * Existing limits stay intact; interactive changes are handled by quota.setLimit, never here. */
 export async function ensurePublicBudget(tx: Tx, actor: Actor, installationId: string, orgId: string) {
+  await lockQuotaBootstrap(tx);
   const [limit] = await tx.select().from(quotaLimits).where(and(eq(quotaLimits.scope, 'installation'), eq(quotaLimits.installationId, installationId)));
   if (!limit) { const at = now(); await tx.insert(quotaLimits).values({ scope: 'installation', orgId, installationId,
     limitMicro: Math.floor(await clubBudget(tx, orgId) / 2), setBy: actor.userId, setAt: at, createdAt: at }); }

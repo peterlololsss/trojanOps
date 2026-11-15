@@ -1,5 +1,5 @@
 // Owner: A (WP-4). Every agent run goes through runAgent (I5): §7 steps 1–3 and 5–8 on the DB.
-// Step 4 (quota) calls the hold/settle stubs in ./quota until slice 2.
+// Step 4 (quota) holds the estimated cost in ./quota before the run row exists, and settles it in step 8.
 //
 // DB calls run one after another, never nested or in parallel: each withActor is its own
 // transaction on its own pooled connection, and tests/db.ts runs them as savepoints of one.
@@ -15,7 +15,8 @@ import { canUse, effectiveAgent } from '../distribution';
 import { listAccessibleDocuments } from '../documents/access';
 import { getRuntime } from '../runtime';
 import { audit } from './audit';
-import { hold, remaining, settle, type QuotaHold } from './quota';
+import { headroom, hold, settle, type QuotaHold } from './quota';
+import { confirm } from './confirm';
 import { toolKind } from './tools';
 
 async function orgName(orgId: string): Promise<string> {
@@ -56,11 +57,11 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
   // 3. Grants, capped by max tier
   const runGrants = capGrants(await grantsFor(userId, agent.orgId), agent.orgId, agent.maxTier);
 
-  // 4. Quota hold (stub until slice 2), then the run row. The id is generated here: RETURNING would
+  // 4. Quota hold (blocks with quota_exceeded before the runtime), then the run row. The id is generated here: RETURNING would
   // need SELECT on the new row under RLS (§5). From here on, any failure marks the run failed and
   // releases the hold.
   const runId = randomUUID();
-  const held = await hold(agent, userId, runId);
+  const held = await hold(agent, userId, actor.activeOrgId, runId, club);
   const runEvent = { ...event, runId, targetType: 'run', targetId: runId };
   const done = { inserted: false, completed: false, settled: false };
   let docs: AccessibleDocument[];
@@ -92,6 +93,10 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
 
     // 6. Runtime
     result = await getRuntime().run(agent, actor, input, { runId, accessibleDocuments: docs });
+    costMicro = result.usage.costMicro ?? held.holdMicro;
+    if (!Number.isSafeInteger(costMicro) || costMicro < 0) {
+      throw new Error('The runtime reported a cost that is not a whole number of micro-dollars, zero or more.');
+    }
 
     // 7. Proposed actions: tools outside the agent's list are refused; write tools wait for a human (I6).
     pending = await queueActions(agent, userId, runEvent, result.proposedActions);
@@ -100,7 +105,6 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
     const accessible = new Set(docs.map((d) => d.id));
     citations = result.citations.filter((c) => accessible.has(c.documentId));
     cited = [...new Set(citations.map((c) => c.documentId))];
-    costMicro = result.usage.costMicro ?? held.holdMicro;
     const { reply, usage } = result;
     await withActor(actor, {}, (tx) => tx.update(agentRuns)
       .set({
@@ -114,7 +118,7 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
       })
       .where(eq(agentRuns.id, runId)));
     done.completed = true;
-    await settle(held, costMicro);
+    await settle(held, costMicro, usage.model);
     done.settled = true;
     auditEventId = await audit('agent.run', { ...runEvent, details: { runId, costMicro } });
   } catch (err) {
@@ -122,7 +126,7 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
     throw err;
   }
 
-  const clubQuota = await remaining({ scope: 'org', orgId: agent.orgId });
+  const quotaLeft = await headroom(agent, userId, held.isMember);
   return {
     runId,
     reply: result.reply,
@@ -138,7 +142,7 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
       rulePack: agent.rulePack ? { label: agent.rulePack.label, version: agent.rulePack.version } : undefined,
       billedClub: club,
       costMicro,
-      quotaRemainingMicro: { [club]: clubQuota.remainingMicro },
+      quotaRemainingMicro: { [club]: quotaLeft }, // the smallest remaining over the levels that apply to this run
       auditEventId,
     },
   };
@@ -195,4 +199,4 @@ async function queueActions(
   return queued;
 }
 
-export const gateway = { runAgent };
+export const gateway = { runAgent, confirm };

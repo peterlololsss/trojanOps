@@ -67,6 +67,8 @@ Rule-pack publication takes effect on the next funding-agent read, including pin
 
 Writes lock template → clubs in id order → installation. Non-key locks permit foreign-key reads
 from the separate quota transaction. Public publishing uses the same writer as installation edits.
-Interactive limits still use A's `quota.setLimit`; until PR #12 lands that dependency remains a
-stub, as noted in `write-support.ts`. Run `tests/distribution-writes.test.ts` against port 5433 for
+Quota bootstrap inserts share A's advisory lock to prevent duplicate limit rows.
+Interactive limits use A's DB-backed `quota.setLimit` outside the installation transaction; the
+writer then re-locks and re-clamps the fresh row before applying it. If that second check rejects,
+an unused quota update can remain, but an invalid installation cannot be written. Run `tests/distribution-writes.test.ts` against port 5433 for
 D2, D6, propagation, rejection rollback, permissions and the separate-connection quota FK check.

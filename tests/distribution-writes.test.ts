@@ -1,7 +1,7 @@
 // Owner: B. WP-5 writes: D2, propagation and retirement.
 import { sql } from 'drizzle-orm';
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import { distribute, publishVersion, publishRulePack, retire, updateInstallation, effectiveAgent, directory } from '@/lib/distribution';
+import { distribute, publishVersion, publishRulePack, retire, updateInstallation, publishToAllStudents, effectiveAgent, directory } from '@/lib/distribution';
 import * as quotaService from '@/lib/gateway/quota';
 import type { VersionDraft } from '@/lib/distribution/versions';
 import { INSTALLATION, ORG, SOURCE, TEMPLATE, USER } from '@db/seed/ids';
@@ -143,6 +143,19 @@ describe.skipIf(!probe)('distribution writes', () => {
     await tx.execute(sql`update quota_limits set limit_micro = 123 where scope = 'installation' and installation_id in (select id from agent_installations where template_id = ${TEMPLATE.eventPlanning})`);
     await distribute(await avery(), TEMPLATE.eventPlanning);
     expect((await tx.execute(sql`select q.limit_micro from quota_limits q join agent_installations i on i.id = q.installation_id where i.template_id = ${TEMPLATE.eventPlanning}`)).every(q => Number(q.limit_micro) === 123)).toBe(true);
+  }));
+  it('re-checks a concurrent version change after the separate quota transaction', () => inRolledBackApp(async tx => {
+    const actualSetLimit = quotaService.setLimit;
+    const spy = vi.spyOn(quotaService, 'setLimit').mockImplementation(async (actor, input) => {
+      await actualSetLimit(actor, input);
+      await publishVersion(await sam(), TEMPLATE.recruitingQa, { ...draft, audience: 'members', usableBy: [], maxTier: 'members' });
+    });
+    try {
+      await expect(publishToAllStudents(await sam(), INSTALLATION.startupRecruitingQa))
+        .rejects.toMatchObject({ error: { code: 'clamp_violation' } });
+      expect((await tx.execute(sql`select audience, enabled from agent_installations where id = ${INSTALLATION.startupRecruitingQa}`))[0])
+        .toEqual({ audience: null, enabled: false });
+    } finally { spy.mockRestore(); }
   }));
   it('does not block quota FK inserts from A’s separate transaction while holding write locks', () => inRolledBackApp(async () => {
     const connection = (await appSql())!;
