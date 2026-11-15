@@ -50,9 +50,18 @@ export default async function ClubHomePage({ params }: { params: Promise<{ orgId
         title={home.org.name}
         description="Your agents, documents and spend in this club."
         action={(
-          <Link href={`/org/${home.org.id}/catalog`} className={buttonVariants({ variant: 'secondary' })}>
-            Open catalog
-          </Link>
+          // The admin page has no entry in the side nav, which is stream D's, so the club home is
+          // how a president reaches it — otherwise it is only findable by typing the URL.
+          <div className="flex items-center gap-2">
+            <Link href={`/org/${home.org.id}/catalog`} className={buttonVariants({ variant: 'secondary' })}>
+              Open catalog
+            </Link>
+            {home.canManage && (
+              <Link href={`/org/${home.org.id}/admin`} className={buttonVariants({ variant: 'secondary' })}>
+                Manage club
+              </Link>
+            )}
+          </div>
         )}
       />
       <div className="space-y-8">
