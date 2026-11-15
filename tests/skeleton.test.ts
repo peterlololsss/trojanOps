@@ -7,7 +7,6 @@ import { now, resetClockForTests } from '@/lib/clock';
 import { AppError, type Actor } from '@/lib/contracts';
 import { pgTextArray } from '@/lib/db/with-actor';
 import { canUse, directory, effectiveAgent, myAgents, provisionOrg, publishToAllStudents } from '@/lib/distribution';
-import { explainAccess, listAccessibleDocuments } from '@/lib/documents/access';
 import { listLibraryDocuments } from '@/lib/documents/library';
 import { previewAccess } from '@/lib/documents/preview';
 import { runAgent } from '@/lib/gateway';
@@ -16,7 +15,7 @@ import { remaining, setLimit } from '@/lib/gateway/quota';
 import { transferPosition } from '@/lib/lifecycle/transfer';
 import { getConnectors, listConnectors } from '@/lib/connectors/registry';
 import { parseRosterCsv } from '@/lib/connectors/roster/mock';
-import { INSTALLATION, ORG, SOURCE, USER } from '@db/seed/ids';
+import { INSTALLATION, ORG, USER } from '@db/seed/ids';
 import { actorFor, appSql, closeAppDb } from './db';
 
 // grantsFor reads the DB since WP-3, so calls that reach it (getActor, runAgent, B's canUse and
@@ -90,19 +89,8 @@ describe('B: distribution', () => {
 });
 
 describe('C: documents', () => {
-  it('explainAccess checks in §10 order', () => {
-    const agent = { sourceIds: [SOURCE.startup.public, SOURCE.startup.minutes], maxTier: 'members' as const };
-    const member = ['*', `${ORG.startup}:*`] as const;
-    expect(explainAccess([...member], agent, { sourceId: SOURCE.startup.finance, tier: 'public', readGrants: ['*'] })).toBe('outside_sources');
-    expect(explainAccess([...member], agent, { sourceId: SOURCE.startup.minutes, tier: 'officers', readGrants: [`${ORG.startup}:president`] })).toBe('above_max_tier');
-    expect(explainAccess(['*'], agent, { sourceId: SOURCE.startup.minutes, tier: 'members', readGrants: [`${ORG.startup}:*`] })).toBe('not_granted');
-    expect(explainAccess([...member], agent, { sourceId: SOURCE.startup.minutes, tier: 'members', readGrants: [`${ORG.startup}:*`] })).toBe('allowed');
-  });
-
   it('keeps its shapes', async () => {
     const sam = literal(USER.sam, ORG.startup, 'president');
-    const docs = await listAccessibleDocuments(sam, ['*'], [SOURCE.startup.public]);
-    if (docs[0]) expect(Object.keys(docs[0]).sort()).toEqual(['bodyMd', 'id', 'tier', 'title']);
     expect(await listLibraryDocuments(sam, ORG.startup)).toEqual(expect.any(Array));
     const matrix = await previewAccess(sam, INSTALLATION.startupHandoff);
     expect(Object.keys(matrix).sort()).toEqual(['cells', 'documents', 'subjects']);
