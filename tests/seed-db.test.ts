@@ -32,4 +32,14 @@ describe.skipIf(!sql)('WP-2 seeded database', () => {
       'startup:member:morgan', 'startup:member:taylor', 'startup:president:sam', 'startup:treasurer:taylor',
     ]);
   });
+
+  it('preserves two departed memberships without adding them to the active roster', async () => {
+    const departed = await sql!`select u.external_id || ':' || o.slug || ':' || p.slug as membership,
+      m.started_at < m.ended_at as valid_period
+      from memberships m join users u on u.id = m.user_id
+      join orgs o on o.id = m.org_id join positions p on p.id = m.position_id
+      where m.ended_at is not null order by membership`;
+    expect(departed.map(m => m.membership)).toEqual(['casey:archery:member', 'lee:dance:member']);
+    expect(departed.every(m => m.valid_period)).toBe(true);
+  });
 });

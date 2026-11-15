@@ -7,11 +7,11 @@ import { Button } from '@/components/ui/button';
 
 export default function IntegrationsError({ retry }: { readonly retry: () => void }) {
   return <>
-    <PageHeader title="Integrations" />
+    <PageHeader title="Management" />
     <Alert variant="destructive">
       <CircleAlert aria-hidden="true" />
       <div>
-        <AlertTitle>Could not load connectors</AlertTitle>
+        <AlertTitle>Could not load management data</AlertTitle>
         <AlertDescription>Check your connection and try again. If the problem continues, contact a USG administrator.</AlertDescription>
         <Button variant="secondary" onClick={retry} className="mt-3">Try again</Button>
       </div>

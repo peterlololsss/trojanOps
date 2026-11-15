@@ -4,6 +4,20 @@ import { now } from '@/lib/clock';
 import type { SeedDb } from './index';
 import { ORG, POSITION, USER } from './ids';
 
+/** Historical examples; ended memberships confer no current club access. */
+export function departedMembershipSeeds(reference: Date) {
+  const day = 24 * 60 * 60 * 1000;
+  return [
+    { userId: USER.lee, orgId: ORG.dance, positionId: POSITION.dance.member },
+    { userId: USER.casey, orgId: ORG.archery, positionId: POSITION.archery.member },
+  ].map((membership, index) => ({
+    ...membership, source: 'manual' as const,
+    startedAt: new Date(reference.getTime() - 120 * day),
+    endedAt: new Date(reference.getTime() - (60 - index * 30) * day),
+    createdAt: reference,
+  }));
+}
+
 export async function seedPersonas(db: SeedDb): Promise<void> {
   const createdAt = now();
   await db.insert(users).values(
@@ -41,5 +55,6 @@ export async function seedPersonas(db: SeedDb): Promise<void> {
     m(USER.casey, ORG.startup, POSITION.startup.member),
     m(USER.morgan, ORG.archery, POSITION.archery.treasurer),
     m(USER.morgan, ORG.startup, POSITION.startup.member),
+    ...departedMembershipSeeds(createdAt),
   ]);
 }

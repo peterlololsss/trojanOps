@@ -51,7 +51,7 @@ describe('WP-2 seed', () => {
       'Avery', 'Casey', 'Jordan', 'Lee', 'Morgan', 'Riley', 'Sam', 'Taylor',
     ]);
     expect(rows.users.map((u) => u.id).sort()).toEqual(Object.values(USER).sort());
-    const memberships = rows.memberships.map((m) => {
+    const memberships = rows.memberships.filter(m => !m.endedAt).map((m) => {
       const user = rows.users.find((u) => u.id === m.userId)!;
       const org = rows.orgs.find((o) => o.id === m.orgId)!;
       const position = rows.positions.find((p) => p.id === m.positionId)!;
@@ -65,6 +65,16 @@ describe('WP-2 seed', () => {
       'morgan:archery:treasurer', 'morgan:startup:member', 'riley:usg:reviewer',
       'sam:startup:president', 'taylor:startup:member', 'taylor:startup:treasurer',
     ]);
+    const departed = rows.memberships.filter(m => m.endedAt);
+    expect(departed).toHaveLength(2);
+    expect(departed.map(m => [m.userId, m.orgId])).toEqual([
+      [USER.lee, ORG.dance], [USER.casey, ORG.archery],
+    ]);
+    for (const m of departed) {
+      expect(m.source).toBe('manual');
+      expect((m.startedAt as Date).getTime()).toBeLessThan((m.endedAt as Date).getTime());
+      expect((m.endedAt as Date).getTime()).toBeLessThan((m.createdAt as Date).getTime());
+    }
   });
 
   it('matches the roster baseline to existing club memberships, with only Robotics left to import', async () => {
@@ -78,7 +88,7 @@ describe('WP-2 seed', () => {
       const org = rows.orgs.find((o) => o.id === r.orgId)!;
       const user = rows.users.find((u) => u.externalId === r.externalUserId)!;
       const position = rows.positions.find((p) => p.orgId === org.id && p.slug === r.positionSlug)!;
-      expect(rows.memberships.some((m) => m.userId === user.id && m.positionId === position.id)).toBe(true);
+      expect(rows.memberships.some((m) => m.userId === user.id && m.positionId === position.id && !m.endedAt)).toBe(true);
       return `${org.slug}:${r.positionSlug}:${r.externalUserId}`;
     }).sort()).toEqual(keys);
     for (const r of existing) {

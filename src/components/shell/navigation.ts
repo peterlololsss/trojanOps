@@ -1,7 +1,7 @@
 // Navigation only: services still authorize every request.
 import type { Actor, MyAgentsClub } from '@/lib/contracts';
 
-export interface NavItem { href: string; label: string; exact?: boolean }
+export interface NavItem { href: string; label: string; exact?: boolean; activePaths?: readonly string[] }
 export interface Scope { href: string; label: string; match: string; items?: NavItem[] }
 
 export function matchesPath(pathname: string, path: string): boolean {
@@ -9,7 +9,8 @@ export function matchesPath(pathname: string, path: string): boolean {
 }
 
 export function isNavItemActive(pathname: string, item: NavItem): boolean {
-  return item.exact ? pathname === item.href : matchesPath(pathname, item.href);
+  return (item.exact ? pathname === item.href : matchesPath(pathname, item.href))
+    || (item.activePaths?.some((path) => matchesPath(pathname, path)) ?? false);
 }
 
 /** `activeOrgIsUsg` is the kind of the actor's active org (read by the shell), not a seed id. */
@@ -43,9 +44,8 @@ export function navigationFor(actor: Actor, clubs: readonly Pick<MyAgentsClub, '
   if (activeOrgIsUsg && actor.positions.includes('admin')) {
     scopes.push({ href: '/usg/templates', label: 'USG admin', match: '/usg', items: [
       { href: '/usg/templates', label: 'Templates' },
-      { href: '/usg/clubs', label: 'Clubs and quotas' },
       { href: '/usg/documents', label: 'Documents' },
-      { href: '/usg/integrations', label: 'Integrations' },
+      { href: '/usg/integrations', label: 'Management', activePaths: ['/usg/clubs'] },
       { href: '/usg/audit', label: 'Audit' },
     ] });
   }

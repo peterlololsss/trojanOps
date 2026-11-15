@@ -25,7 +25,7 @@ export function ClubsTable({ clubs }: { clubs: UsgClub[] }) {
   ]);
   const table = useTable({ features, data: found.slice((page - 1) * 10, page * 10), columns, getRowId: row => row.id });
   return <div className="space-y-4"><SearchBar value={query} onChange={v => { setQuery(v); setPage(1); }} count={found.length} />
-    <DataTable table={table} caption="Club quotas and USG policy" rowHeaderColumn="name" sorted={{ id: 'name', direction: 'asc' }} numericColumns={['limitMicro', 'spentMicro', 'remainingMicro']} minWidth={980} empty={clubs.length ? 'No clubs match your search. Clear filters to see all clubs.' : 'No clubs yet. Import the roster from Integrations to provision clubs.'} />
+    <DataTable table={table} caption="Club quotas and USG policy" rowHeaderColumn="name" sorted={{ id: 'name', direction: 'asc' }} numericColumns={['limitMicro', 'spentMicro', 'remainingMicro']} minWidth={980} empty={clubs.length ? 'No clubs match your search. Clear filters to see all clubs.' : 'No clubs yet. Import the roster from Management to provision clubs.'} />
     <Pagination page={page} setPage={setPage} total={found.length} /></div>;
 }
 function ClubEditor({ club }: { club: UsgClub }) {

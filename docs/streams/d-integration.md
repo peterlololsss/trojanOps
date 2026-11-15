@@ -89,3 +89,48 @@ Say "mock runtime" and keep the Mock labels visible. If a real agent misbehaves,
 ## Open requests
 
 - **A:** `AppError` has no server-error code, so a failed roster audit (which rolls the sync back) surfaces as `invalid` (400).
+
+## Connector CSV views and demo summaries
+
+The **Management** overview (at the existing `/usg/integrations` URL) contains a **Clubs and quotas**
+row linking to the existing `/usg/clubs` console, plus all five connector rows with **View details** linking to
+`/usg/integrations?connector=<kind>`. The existing page handles the selection after USG-admin
+authorization. Each selection renders a full-page CSV projection and its own **AI summary · Demo**;
+the summary uses local text and current counts, not a model call. Back returns to the overview.
+The USG sidebar groups club quotas under Management rather than listing them separately. Management
+remains highlighted while the club-quota console is open. This changes navigation and labels only;
+club quotas, policy permissions and route contracts are unchanged.
+
+The datasets are actual current platform data, not fabricated CSV fixtures:
+
+- Identity: current accounts and membership history, grouped by person and organization. Any
+  remaining active position means **Active member**; only ended positions means **Left
+  organization**. Ending one office does not count as leaving while another position remains
+  active. The table includes the last departure date for former memberships, and the summary
+  counts current and former person–organization relationships separately.
+- Roster: `RosterSource.fetch()` reads the current `db/seed/roster.csv`; source identifiers are
+  stripped, and counts distinguish people from multiple position rows.
+- Documents: C's document-library service recomputes grants and enforces RLS for each library.
+  Only readable metadata is projected, deduplicated across libraries; no document bodies are read.
+- Language model: the current model connector plus the latest 200 rows of `agent_runs_meta`,
+  selecting only person, billed club, recorded model, status, cost and timestamp. Run input/output
+  and document references are never selected. Mock records are identified as demo activity.
+- Applications: actual references from the internal submission queue in the current server
+  process, excluding arbitrary application payloads. This queue is not durable; no submissions
+  means an empty table. Run-page confirmation still does not invoke a submission executor.
+
+`loadConnectorPreview` independently checks USG-admin authorization before reading any dataset.
+A failed source produces an error for that selection without exposing internal error details.
+Previewing never imports or changes records. **Sync roster** and its pending/error/result feedback
+remain separate actions on the overview; no new API route, contract or schema is introduced.
+
+`tests/connector-preview.test.ts` covers query selection, authorization, actual current accounts,
+roster failure isolation, RLS-filtered document metadata, private run-content exclusion and
+submission-reference projection. `tests/roster-preview.test.ts` covers accurate source counts.
+
+The persona seed includes two ended membership examples: Lee formerly belonged to Dance Club;
+Casey formerly belonged to Archery Club and remains a Startup Club member. These historical rows
+do not change the active persona memberships or imported roster baseline and grant no access.
+`tests/member-status.test.ts` covers club departure versus office changes, rejoining, departure
+dates, identical display names and accounts without history. Seed acceptance also verifies the
+historical examples and unchanged active memberships.

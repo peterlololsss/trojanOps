@@ -592,6 +592,8 @@ Seeded templates (display names in UI copy):
 - USG rule text is not a connector: USG keeps it as rulebook documents in `/usg/documents`.
 - `connectors/registry.ts` picks each implementation from `CONNECTOR_*` and records it in
   `connectors`. `/usg/integrations` shows kind, implementation, status and last sync.
+  The UI labels this page **Management** and includes a **Clubs and quotas** row linking to the
+  existing `/usg/clubs` console; both routes and their authorization rules stay the same.
 - "Sync roster" runs `importRoster()` (§13) and writes `audit('connector.sync', {changes})`.
 
 ## 10. Documents and permissions

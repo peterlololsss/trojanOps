@@ -53,7 +53,7 @@ describe('WP-2 app shell', () => {
     expect(navigationFor(actor(USER.riley, ORG.usg, ['reviewer']), [], true).some((s) => s.match === '/usg')).toBe(false);
     expect(navigationFor(actor(USER.sam, ORG.startup, ['admin']), clubs, false).some((s) => s.match === '/usg')).toBe(false);
     expect(navigationFor(actor(USER.avery, ORG.usg, ['admin']), [], true).find((s) => s.match === '/usg')?.items?.map((i) => i.label)).toEqual([
-      'Templates', 'Clubs and quotas', 'Documents', 'Integrations', 'Audit',
+      'Templates', 'Documents', 'Management', 'Audit',
     ]);
   });
 
@@ -63,5 +63,12 @@ describe('WP-2 app shell', () => {
     expect(matchesPath('/meant', '/me')).toBe(false);
     expect(isNavItemActive('/usg/templates/version', { href: '/usg/templates', label: 'Templates' })).toBe(true);
     expect(isNavItemActive('/org/startup/catalog', { href: '/org/startup', label: 'Overview', exact: true })).toBe(false);
+    const management = navigationFor(actor(USER.avery, ORG.usg, ['admin']), [], true)
+      .find(scope => scope.match === '/usg')!.items!.find(item => item.label === 'Management')!;
+    expect(isNavItemActive('/usg/integrations', management)).toBe(true);
+    expect(isNavItemActive('/usg/clubs', management)).toBe(true);
+    expect(isNavItemActive('/usg/clubs/details', management)).toBe(true);
+    expect(isNavItemActive('/usg/clubs-other', management)).toBe(false);
+    expect(isNavItemActive('/usg/templates', management)).toBe(false);
   });
 });
