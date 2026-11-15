@@ -3,14 +3,15 @@
 // (blocking, D5, §11 messages) are in tests/gateway.test.ts. Every case runs in a rolled-back transaction
 // on the real seed; limits are set relative to remaining() because the app role cannot delete usage
 // committed by earlier manual runs.
-import { and, eq, gt, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, sql } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
-import { now } from '@/lib/clock';
-import type { QuotaTarget } from '@/lib/contracts';
+import { now, resetClockForTests, setDemoNow } from '@/lib/clock';
+import type { EffectiveAgent, QuotaTarget } from '@/lib/contracts';
 import type { Tx } from '@/lib/db/client';
 import { aiUsage, auditEvents, quotaLimits } from '@/lib/db/schema';
+import { effectiveAgent } from '@/lib/distribution';
 import { periodStart } from '@/lib/gateway/period';
-import { remaining, setLimit, settle, type QuotaHold } from '@/lib/gateway/quota';
+import { headroom, hold, remaining, setLimit, settle, type QuotaHold } from '@/lib/gateway/quota';
 import { quotaMessage, usd } from '@/lib/gateway/quota-messages';
 import { INSTALLATION, ORG, USER } from '@db/seed/ids';
 import { actorFor, appSql, closeAppDb, inRolledBackApp } from './db';
@@ -121,7 +122,9 @@ describe.skipIf(!probe)('setLimit', () => {
       error: { code: 'clamp_violation', cap: { scope: 'platform', limitMicro: platform, field: 'limitMicro', allowed: platform },
         message: expect.stringContaining('the platform limit') },
     });
-    await expect(setLimit(avery, { scope: 'student_daily', limitMicro: platform + 1 })).rejects.toMatchObject({ status: 422 });
+    // The student daily cap has no parent: it is a per-student cap, not a share of the platform limit.
+    await setLimit(avery, { scope: 'student_daily', limitMicro: platform + 1 });
+    expect((await remaining({ scope: 'student_daily', userId: USER.lee })).limitMicro).toBe(platform + 1);
     await expect(setLimit(sam, { scope: 'member', orgId: ORG.startup, userId: USER.casey, limitMicro: club + 1 })).rejects.toMatchObject({
       status: 422,
       error: { code: 'clamp_violation', cap: { scope: 'org', limitMicro: club }, message: expect.stringContaining("Startup Club's monthly quota") },
@@ -172,13 +175,16 @@ describe.skipIf(!probe)('setLimit', () => {
 describe.skipIf(!probe)('ai_usage ledger', () => {
   const held = (over: Partial<QuotaHold> = {}): QuotaHold => ({
     runId: crypto.randomUUID(), holdMicro: 10_000, billedOrgId: ORG.startup, userId: USER.casey,
-    installationId: INSTALLATION.startupHandoff, isPublic: false, ...over,
+    installationId: INSTALLATION.startupHandoff, isPublic: false, createdAt: now(), ...over,
   });
   const club: QuotaTarget = { scope: 'org', orgId: ORG.startup };
-  const insertHold = (tx: Tx, h: QuotaHold, ageMs: number) => tx.insert(aiUsage).values({
-    runId: h.runId, billedOrgId: h.billedOrgId, userId: h.userId, installationId: h.installationId, isPublic: h.isPublic,
-    kind: 'hold', amountMicro: h.holdMicro, createdAt: new Date(now().getTime() - ageMs),
-  });
+  const insertHold = (tx: Tx, h: QuotaHold, ageMs: number) => {
+    h.createdAt = new Date(now().getTime() - ageMs);
+    return tx.insert(aiUsage).values({
+      runId: h.runId, billedOrgId: h.billedOrgId, userId: h.userId, installationId: h.installationId, isPublic: h.isPublic,
+      kind: 'hold', amountMicro: h.holdMicro, createdAt: h.createdAt,
+    });
+  };
   const runRows = (tx: Tx, runId: string) => tx.select().from(aiUsage).where(eq(aiUsage.runId, runId)).orderBy(aiUsage.kind);
 
   it('settles with actual − hold, so a run nets to its cost', () => scenario(async (tx) => {
@@ -231,6 +237,31 @@ describe.skipIf(!probe)('ai_usage ledger', () => {
     expect(rows[1].createdAt.getTime()).toBe(lastMonth.getTime());
   }));
 
+  it('settles into the hold\'s period when the run crosses a month boundary', () => scenario(async (tx) => {
+    process.env.DEMO_MODE = '1';
+    try {
+      const agent = await effectiveAgent(INSTALLATION.startupHandoff);
+      setDemoNow(new Date('2026-11-30T23:59:30-08:00'));
+      const novBefore = (await remaining(club)).spentMicro;
+      const h = await hold(agent, USER.casey, ORG.startup, crypto.randomUUID(), 'Startup Club');
+      expect(h.createdAt.getTime() - Date.parse('2026-11-30T23:59:30-08:00')).toBeLessThan(5_000);
+
+      setDemoNow(new Date('2026-12-01T00:00:10-08:00'));
+      const decBefore = (await remaining(club)).spentMicro;
+      await settle(h, 25_000, 'mock');
+      expect((await remaining(club)).spentMicro).toBe(decBefore); // December never sees the run
+
+      const rows = await runRows(tx, h.runId);
+      expect(rows.map((r) => [r.kind, r.amountMicro])).toEqual([['hold', 10_000], ['settle', 15_000]]);
+      expect(rows[1].createdAt.getTime()).toBe(h.createdAt.getTime());
+      setDemoNow(new Date('2026-11-30T23:59:45-08:00'));
+      expect((await remaining(club)).spentMicro).toBe(novBefore + 25_000); // November holds all of it
+    } finally {
+      delete process.env.DEMO_MODE;
+      resetClockForTests();
+    }
+  }));
+
   it('charges the actual cost once when a run settles after its hold was released', () => scenario(async (tx) => {
     const before = (await remaining(club)).spentMicro;
     const late = held();
@@ -260,4 +291,153 @@ describe.skipIf(!probe)('ai_usage ledger', () => {
     expect(morgan.limitMicro).toBe(clubLimit);
     expect(taylor.limitMicro).toBe(clubLimit);
   }));
+});
+
+describe.skipIf(!probe)('hold: levels and fallbacks (§7 step 4, §11)', () => {
+  const agentOf = async (installationId: string, over: Partial<EffectiveAgent> = {}) => ({ ...(await effectiveAgent(installationId)), ...over });
+  const publicQa = (installationId: string) => agentOf(installationId, { status: 'enabled', audience: 'public', maxTier: 'public' });
+  const tryHold = (agent: EffectiveAgent, userId: string, club = 'a club') =>
+    hold(agent, userId, null, crypto.randomUUID(), club).then(() => 'held', (e) => (e as { error: { cap: { scope: string; limitMicro: number } } }).error.cap);
+  // The app role has no DELETE, so a limit row is hidden by moving its key to one nothing looks up.
+  const hideLimit = (tx: Tx, scope: QuotaTarget['scope'], where: ReturnType<typeof eq>, set: { orgId: string } | { installationId: string }) =>
+    tx.update(quotaLimits).set(set).where(and(eq(quotaLimits.scope, scope), where));
+  const spentOf = async (t: QuotaTarget) => (await remaining(t)).spentMicro;
+
+  it('blocks at limit 0 when a club has no limit row', () => scenario(async (tx) => {
+    await hideLimit(tx, 'org', eq(quotaLimits.orgId, ORG.startup), { orgId: ORG.usg });
+    expect(await remaining({ scope: 'org', orgId: ORG.startup })).toMatchObject({ limitMicro: 0, remainingMicro: 0 });
+    expect(await tryHold(await agentOf(INSTALLATION.startupFundingPrecheck), USER.taylor))
+      .toEqual({ scope: 'org', limitMicro: 0, spentMicro: expect.any(Number) });
+  }));
+
+  it('blocks at limit 0 when the student daily cap has no row', () => scenario(async (tx) => {
+    await hideLimit(tx, 'student_daily', sql`true`, { orgId: ORG.usg });
+    expect(await tryHold(await publicQa(INSTALLATION.startupRecruitingQa), USER.lee))
+      .toEqual({ scope: 'student_daily', limitMicro: 0, spentMicro: expect.any(Number) });
+  }));
+
+  it('lets the club limit cover a member and an installation with no row of their own', () => scenario(async (tx) => {
+    const avery = await actorFor(USER.avery, ORG.usg);
+    const funding = await agentOf(INSTALLATION.startupFundingPrecheck); // no installation row; Taylor has no member row
+    const spent = await spentOf({ scope: 'org', orgId: ORG.startup });
+    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: spent });
+    // Neither fallback level reports: the club's own check does.
+    expect(await tryHold(funding, USER.taylor)).toEqual({ scope: 'org', limitMicro: spent, spentMicro: spent });
+    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: spent + 10_000 });
+    expect(await tryHold(funding, USER.taylor)).toBe('held');
+    expect(await tryHold(funding, USER.taylor)).toEqual({ scope: 'org', limitMicro: spent + 10_000, spentMicro: spent + 10_000 });
+    expect((await tx.select().from(aiUsage).where(and(eq(aiUsage.userId, USER.taylor), eq(aiUsage.kind, 'hold')))).length).toBeGreaterThanOrEqual(1);
+  }));
+
+  it('lets a public installation with no row fall back to its club', () => scenario(async (tx) => {
+    const avery = await actorFor(USER.avery, ORG.usg);
+    await hideLimit(tx, 'installation', eq(quotaLimits.installationId, INSTALLATION.danceShowcaseQa), { installationId: INSTALLATION.startupFundingPrecheck });
+    expect(await remaining({ scope: 'installation', installationId: INSTALLATION.danceShowcaseQa }))
+      .toMatchObject({ limitMicro: 5_000_000 });
+    await setLimit(avery, { scope: 'student_daily', limitMicro: 5_000_000 });
+    const showcase = await publicQa(INSTALLATION.danceShowcaseQa);
+    const spent = await spentOf({ scope: 'org', orgId: ORG.dance });
+    await setLimit(avery, { scope: 'org', orgId: ORG.dance, limitMicro: spent });
+    expect(await tryHold(showcase, USER.morgan)).toEqual({ scope: 'org', limitMicro: spent, spentMicro: spent });
+    await setLimit(avery, { scope: 'org', orgId: ORG.dance, limitMicro: spent + 10_000 });
+    expect(await tryHold(showcase, USER.morgan)).toBe('held');
+  }));
+
+  it('reports the first failing level in the order member, student_daily, installation, club, platform', () => scenario(async () => {
+    const avery = await actorFor(USER.avery, ORG.usg);
+    const sam = await actorFor(USER.sam, ORG.startup);
+    const qa = await publicQa(INSTALLATION.startupRecruitingQa);
+    const scopeOf = async (userId: string) => ((await tryHold(qa, userId)) as { scope: string }).scope;
+    await setLimit(avery, { scope: 'platform', limitMicro: 0 });
+    expect(await scopeOf(USER.casey)).toBe('platform');
+    await setLimit(avery, { scope: 'platform', limitMicro: 50_000_000 });
+    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: 0 });
+    expect(await scopeOf(USER.casey)).toBe('org');
+    await setLimit(sam, { scope: 'installation', installationId: INSTALLATION.startupRecruitingQa, limitMicro: 0 });
+    expect(await scopeOf(USER.casey)).toBe('installation'); // before the club
+    await setLimit(avery, { scope: 'student_daily', limitMicro: 0 });
+    expect(await scopeOf(USER.lee)).toBe('student_daily'); // before the installation
+    expect(await scopeOf(USER.casey)).toBe('student_daily');
+    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: 5_000_000 });
+    await setLimit(sam, { scope: 'member', orgId: ORG.startup, userId: USER.casey, limitMicro: 0 });
+    expect(await scopeOf(USER.casey)).toBe('member'); // before everything
+    expect(await scopeOf(USER.lee)).toBe('student_daily'); // Lee is not a member
+  }));
+
+  it('leaves a child unchanged when its parent is lowered, and blocks at the parent', () => scenario(async () => {
+    const avery = await actorFor(USER.avery, ORG.usg);
+    const spent = await spentOf({ scope: 'org', orgId: ORG.startup });
+    await setLimit(avery, { scope: 'org', orgId: ORG.startup, limitMicro: spent });
+    expect(await remaining({ scope: 'member', orgId: ORG.startup, userId: USER.casey })).toMatchObject({ limitMicro: 500_000 });
+    expect(await remaining({ scope: 'installation', installationId: INSTALLATION.startupRecruitingQa })).toMatchObject({ limitMicro: 2_500_000 });
+    expect(await tryHold(await agentOf(INSTALLATION.startupHandoff), USER.casey)).toMatchObject({ scope: 'org', limitMicro: spent });
+  }));
+
+  it('counts student_daily spend from PT midnight, through hold and remaining', () => scenario(async (tx) => {
+    const avery = await actorFor(USER.avery, ORG.usg);
+    const qa = await publicQa(INSTALLATION.startupRecruitingQa);
+    const row = (amountMicro: number, createdAt: Date) => tx.insert(aiUsage).values({
+      runId: crypto.randomUUID(), billedOrgId: ORG.startup, userId: USER.lee, installationId: INSTALLATION.startupRecruitingQa,
+      isPublic: true, kind: 'settle', amountMicro, createdAt,
+    });
+    const spent = await spentOf({ scope: 'student_daily', userId: USER.lee });
+    await setLimit(avery, { scope: 'student_daily', limitMicro: spent + 10_000 });
+    const midnight = periodStart('day', now());
+
+    await row(999_999, new Date(midnight.getTime() - 1)); // yesterday, 23:59:59.999 PT
+    expect(await spentOf({ scope: 'student_daily', userId: USER.lee })).toBe(spent);
+    expect(await tryHold(qa, USER.lee)).toBe('held'); // exactly at the limit passes, and is now spent
+    await row(10_000, midnight); // 00:00:00 PT today counts
+    expect(await spentOf({ scope: 'student_daily', userId: USER.lee })).toBe(spent + 20_000);
+    expect(await tryHold(qa, USER.lee)).toEqual({ scope: 'student_daily', limitMicro: spent + 10_000, spentMicro: spent + 20_000 });
+    // Other students' spend is theirs alone.
+    expect(await spentOf({ scope: 'student_daily', userId: USER.morgan })).not.toBe(spent + 20_000);
+    expect((await tx.select().from(aiUsage).where(and(eq(aiUsage.userId, USER.lee), gte(aiUsage.createdAt, midnight)))).length).toBeGreaterThan(0);
+  }));
+
+  it('reports headroom as the smallest remaining over the levels that apply', () => scenario(async () => {
+    const avery = await actorFor(USER.avery, ORG.usg);
+    const sam = await actorFor(USER.sam, ORG.startup);
+    const handoff = await agentOf(INSTALLATION.startupHandoff);
+    const casey = await remaining({ scope: 'member', orgId: ORG.startup, userId: USER.casey });
+    expect(await headroom(handoff, USER.casey)).toBe(casey.remainingMicro); // her $0.50 is the smallest
+    expect(await headroom(handoff, USER.taylor)).toBe((await remaining({ scope: 'org', orgId: ORG.startup })).remainingMicro);
+
+    const qa = await publicQa(INSTALLATION.startupRecruitingQa);
+    const lee = await spentOf({ scope: 'student_daily', userId: USER.lee });
+    await setLimit(avery, { scope: 'student_daily', limitMicro: lee + 30_000 });
+    expect(await headroom(qa, USER.lee)).toBe(30_000);
+    await setLimit(sam, { scope: 'installation', installationId: INSTALLATION.startupRecruitingQa, limitMicro: 0 });
+    expect(await headroom(qa, USER.lee)).toBe(0);
+    await setLimit(avery, { scope: 'platform', limitMicro: 0 });
+    expect(await headroom(handoff, USER.taylor)).toBe(0);
+  }));
+});
+
+describe.skipIf(!probe)('hold: concurrent runs', () => {
+  // Six holds on separate pooled connections, committed for real: the app role cannot delete, so the
+  // limit is restored and the winning hold is settled at 0 afterwards. TODO(verify): the lock is
+  // what makes exactly one win; an unlocked read-then-insert would let both pass most of the time.
+  it('lets exactly one of six simultaneous holds through at the limit', async () => {
+    const sam = await actorFor(USER.sam, ORG.startup);
+    const agent = await effectiveAgent(INSTALLATION.startupHandoff);
+    const target: QuotaTarget = { scope: 'member', orgId: ORG.startup, userId: USER.casey };
+    const original = (await remaining(target)).limitMicro;
+    const spent = (await remaining(target)).spentMicro;
+    const winners: QuotaHold[] = [];
+    try {
+      await setLimit(sam, { ...target, limitMicro: spent + 10_000 });
+      const results = await Promise.allSettled(
+        Array.from({ length: 6 }, () => hold(agent, USER.casey, ORG.startup, crypto.randomUUID(), 'Startup Club')),
+      );
+      for (const r of results) if (r.status === 'fulfilled') winners.push(r.value);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const lost = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+      expect(lost.reason).toMatchObject({ status: 429 });
+    } finally {
+      for (const w of winners) await settle(w, 0);
+      await setLimit(sam, { ...target, limitMicro: original });
+    }
+    expect(await remaining(target)).toMatchObject({ limitMicro: original, spentMicro: spent });
+  });
 });

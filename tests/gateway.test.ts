@@ -2,7 +2,7 @@
 // trojanops_app: agent_runs, pending_actions and audit_events rows, denials that never reach the
 // runtime, and listAudit scoping. Every case runs in a rolled-back transaction (the app role has no
 // DELETE) against the real seed, through B's effectiveAgent and C's listAccessibleDocuments.
-import { eq, gt, notInArray, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, notInArray, sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { now } from '@/lib/clock';
 import type { Actor, EffectiveAgent } from '@/lib/contracts';
@@ -12,6 +12,7 @@ import { withActor } from '@/lib/db/with-actor';
 import { effectiveAgent } from '@/lib/distribution';
 import { runAgent } from '@/lib/gateway';
 import { audit, listAudit } from '@/lib/gateway/audit';
+import { periodStart } from '@/lib/gateway/period';
 import { remaining, setLimit } from '@/lib/gateway/quota';
 import { usd } from '@/lib/gateway/quota-messages';
 import { toolKind } from '@/lib/gateway/tools';
@@ -32,6 +33,10 @@ vi.mock('@/lib/distribution', async (importOriginal) => {
 const realEffectiveAgent = (await vi.importActual<typeof import('@/lib/distribution')>('@/lib/distribution')).effectiveAgent;
 const withAgent = (patch: Partial<EffectiveAgent>) =>
   vi.mocked(effectiveAgent).mockImplementationOnce(async (id) => ({ ...(await realEffectiveAgent(id)), ...patch }));
+
+const publicRecruitingWithTool = () => vi.mocked(effectiveAgent).mockImplementation(async (id) => ({
+  ...(await realEffectiveAgent(id)), status: 'enabled', audience: 'public', maxTier: 'public', tools: ['submit_application'],
+}));
 
 const probe = await appSql();
 await probe?.end();
@@ -355,6 +360,61 @@ describe.skipIf(!probe)('runAgent quota (§7 step 4, §11)', () => {
     expect(run.inspector.quotaRemainingMicro).toEqual({ 'Startup Club': after.remainingMicro });
   }));
 
+  it('reports the smallest remaining over the applicable levels in the inspector', () => scenario(async () => {
+    const avery = await actorFor(USER.avery, ORG.usg);
+    const sam = await actorFor(USER.sam, ORG.startup);
+    // Casey's own limit ($0.50) is the smallest level for a member's run.
+    const casey = await runAgent(await actorFor(USER.casey, ORG.startup), INSTALLATION.startupHandoff, 'x');
+    const caseyLeft = (await remaining({ scope: 'member', orgId: ORG.startup, userId: USER.casey })).remainingMicro;
+    expect(casey.inspector.quotaRemainingMicro).toEqual({ 'Startup Club': caseyLeft });
+    expect(caseyLeft).toBeLessThan((await remaining({ scope: 'org', orgId: ORG.startup })).remainingMicro);
+
+    // A small installation budget is the smallest level for Taylor's run.
+    const spent = (await remaining({ scope: 'installation', installationId: INSTALLATION.startupFundingPrecheck })).spentMicro;
+    await setLimit(sam, { scope: 'installation', installationId: INSTALLATION.startupFundingPrecheck, limitMicro: spent + 15_000 });
+    const taylor = await runAgent(await actorFor(USER.taylor, ORG.startup), INSTALLATION.startupFundingPrecheck, 'x');
+    expect(taylor.inspector.quotaRemainingMicro).toEqual({ 'Startup Club': 5_000 });
+
+    // The student cap is the smallest level for a public run by a non-member.
+    publicRecruiting();
+    const daily = (await remaining({ scope: 'student_daily', userId: USER.lee })).spentMicro;
+    await setLimit(avery, { scope: 'student_daily', limitMicro: daily + 30_000 });
+    const lee = await runAgent(await actorFor(USER.lee, null), INSTALLATION.startupRecruitingQa, 'x');
+    expect(lee.inspector.quotaRemainingMicro).toEqual({ 'Startup Club': 20_000 });
+  }));
+
+  it('fails the run and settles at 0 when the runtime reports an invalid cost', () => scenario(async (tx, base) => {
+    const taylor = await actorFor(USER.taylor, ORG.startup);
+    withAgent({ tools: ['submit_application'] });
+    const before = (await remaining({ scope: 'org', orgId: ORG.startup })).spentMicro;
+    for (const costMicro of [-1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 60]) {
+      withAgent({ tools: ['submit_application'] });
+      runtime.mockResolvedValueOnce({
+        reply: 'x', citations: [], proposedActions: [{ tool: 'submit_application', args: {} }],
+        usage: { model: 'mock', inputTokens: 0, outputTokens: 0, costMicro },
+      });
+      await expect(runAgent(taylor, INSTALLATION.startupFundingPrecheck, 'x')).rejects.toThrow(/cost/);
+    }
+    const runs = await newRuns(taylor, base);
+    expect(runs.map((r) => r.status)).toEqual(Array(5).fill('failed'));
+    expect((await remaining({ scope: 'org', orgId: ORG.startup })).spentMicro).toBe(before);
+    expect((await tx.select().from(pendingActions).where(eq(pendingActions.userId, USER.taylor))).filter((p) => runs.some((r) => r.id === p.runId))).toEqual([]);
+    expect((await newAudit(tx, base)).filter((r) => r.action === 'agent.run')).toEqual([]);
+  }));
+
+  it('accepts a cost of 0 and charges nothing', () => scenario(async (tx) => {
+    const before = (await remaining({ scope: 'org', orgId: ORG.startup })).spentMicro;
+    runtime.mockResolvedValueOnce({
+      reply: 'x', citations: [], proposedActions: [],
+      usage: { model: 'mock', inputTokens: 0, outputTokens: 0, costMicro: 0 },
+    });
+    const run = await runAgent(await actorFor(USER.taylor, ORG.startup), INSTALLATION.startupFundingPrecheck, 'x');
+    expect(run.inspector.costMicro).toBe(0);
+    const rows = await tx.select().from(aiUsage).where(eq(aiUsage.runId, run.runId)).orderBy(aiUsage.kind);
+    expect(rows.map((r) => [r.kind, r.amountMicro])).toEqual([['hold', 10_000], ['settle', -10_000]]);
+    expect((await remaining({ scope: 'org', orgId: ORG.startup })).spentMicro).toBe(before);
+  }));
+
   it('returns the hold when the run fails: spend is unchanged', () => scenario(async (tx) => {
     const taylor = await actorFor(USER.taylor, ORG.startup);
     const before = await remaining({ scope: 'org', orgId: ORG.startup });
@@ -365,16 +425,27 @@ describe.skipIf(!probe)('runAgent quota (§7 step 4, §11)', () => {
     expect((await remaining({ scope: 'org', orgId: ORG.startup })).spentMicro).toBe(before.spentMicro);
   }));
 
-  it('seeds the §15 limits and Lee\'s $0.04 of public usage', () => scenario(async () => {
+  it('seeds the §15 limits and Lee\'s $0.04 of public usage', () => scenario(async (tx) => {
     expect(await remaining({ scope: 'platform' })).toMatchObject({ limitMicro: 50_000_000 });
     for (const orgId of [ORG.startup, ORG.archery, ORG.dance]) {
       expect(await remaining({ scope: 'org', orgId })).toMatchObject({ limitMicro: 5_000_000 });
     }
     expect(await remaining({ scope: 'member', orgId: ORG.startup, userId: USER.casey })).toMatchObject({ limitMicro: 500_000 });
     expect(await remaining({ scope: 'student_daily', userId: USER.lee })).toMatchObject({ limitMicro: 50_000 });
-    expect(await remaining({ scope: 'installation', installationId: INSTALLATION.startupRecruitingQa })).toMatchObject({ limitMicro: 2_500_000 });
-    // Lee's four $0.01 runs from the seed; later manual runs by her today only add to it.
-    expect((await remaining({ scope: 'student_daily', userId: USER.lee })).spentMicro).toBeGreaterThanOrEqual(40_000);
+    // §11: every public installation has a limit.
+    for (const installationId of [INSTALLATION.startupRecruitingQa, INSTALLATION.danceShowcaseQa]) {
+      expect(await remaining({ scope: 'installation', installationId })).toMatchObject({ limitMicro: 2_500_000 });
+    }
+    // Lee's four seeded runs are four holds of $0.01 with a settle of 0: $0.04, plus whatever manual
+    // runs by her added today. The ledger sum is read here independently of remaining().
+    const today = await tx.select().from(aiUsage)
+      .where(and(eq(aiUsage.userId, USER.lee), eq(aiUsage.isPublic, true), gte(aiUsage.createdAt, periodStart('day', now()))));
+    const total = today.reduce((sum, r) => sum + r.amountMicro, 0);
+    expect((await remaining({ scope: 'student_daily', userId: USER.lee })).spentMicro).toBe(total);
+    const holds = today.filter((r) => r.kind === 'hold' && r.amountMicro === 10_000);
+    expect(holds.length).toBeGreaterThanOrEqual(4);
+    expect(total).toBeGreaterThanOrEqual(40_000);
+    expect(total % 10_000).toBe(0);
   }));
 });
 
@@ -466,7 +537,7 @@ describe.skipIf(!probe)('API routes', () => {
     expect((await tx.select().from(auditEvents).where(eq(auditEvents.action, 'quota.limit.set')).orderBy(auditEvents.id)).length).toBeGreaterThanOrEqual(2);
   }));
 
-  it('POST /api/pending-actions/:id/confirm lets the run\'s president confirm once, and refuses everyone else', () => scenario(async (tx, base) => {
+  it('POST /api/pending-actions/:id/confirm lets the run\'s own club member confirm once, and refuses everyone else', () => scenario(async (tx, base) => {
     const post = (id: string, userId: string | null, orgId = ORG.startup, body = '{}', type = 'application/json') => confirmRoute.POST(
       new Request(`http://localhost/api/pending-actions/${id}/confirm`, {
         method: 'POST', body, headers: { 'content-type': type, ...(userId ? { cookie: cookie(userId, orgId) } : {}) },
@@ -483,18 +554,29 @@ describe.skipIf(!probe)('API routes', () => {
     };
     const samAction = await propose(USER.sam);
     const taylorAction = await propose(USER.taylor);
+    // Lee runs Startup's public agent without being a member of Startup.
+    publicRecruitingWithTool();
+    runtime.mockResolvedValueOnce({
+      reply: 'x', citations: [], proposedActions: [{ tool: 'submit_application', args: {} }],
+      usage: { model: 'mock', inputTokens: 0, outputTokens: 0, costMicro: 10_000 },
+    });
+    const spent = (await remaining({ scope: 'student_daily', userId: USER.lee })).spentMicro;
+    await setLimit(await actorFor(USER.avery, ORG.usg), { scope: 'student_daily', limitMicro: spent + 10_000 });
+    const leeAction = (await runAgent(await actorFor(USER.lee, null), INSTALLATION.startupRecruitingQa, 'x')).pendingActions[0].id;
+    vi.mocked(effectiveAgent).mockReset().mockImplementation(realEffectiveAgent);
 
     expect((await post(samAction, null)).status).toBe(401);
     expect((await post(samAction, null, ORG.startup, '', 'text/plain')).status).toBe(401); // auth before the body check
     expect((await post('not-a-uuid', USER.sam)).status).toBe(404);
     expect((await post('00000000-0000-4000-8000-000000000000', USER.sam)).status).toBe(404);
     expect((await post(samAction, USER.sam, ORG.startup, 'x=1', 'application/x-www-form-urlencoded')).status).toBe(400);
-    // Not the run's user, and not a president: both 403, and the row stays pending.
+    // Not the run's user, or not a member of the action's club: 403, and the row stays pending.
     expect((await post(taylorAction, USER.sam)).status).toBe(403);
-    expect((await post(taylorAction, USER.taylor)).status).toBe(403);
     expect((await post(samAction, USER.casey)).status).toBe(403);
+    expect((await post(leeAction, USER.lee, ORG.startup)).status).toBe(403);
     const status = async (id: string) => (await tx.select().from(pendingActions).where(eq(pendingActions.id, id)))[0];
     expect(await status(samAction)).toMatchObject({ status: 'pending', confirmedBy: null });
+    expect(await status(leeAction)).toMatchObject({ status: 'pending', confirmedBy: null });
 
     const ok = await post(samAction, USER.sam);
     expect(ok.status).toBe(200);
@@ -504,14 +586,20 @@ describe.skipIf(!probe)('API routes', () => {
     expect(again.status).toBe(400);
     expect(await again.json()).toMatchObject({ code: 'invalid' });
 
+    // A tool with no CONFIRMERS entry needs only membership: the treasurer confirms her own action, and
+    // the run's active club does not matter.
+    const confirmed = await post(taylorAction, USER.taylor, ORG.archery);
+    expect(confirmed.status).toBe(200);
+    expect(await status(taylorAction)).toMatchObject({ status: 'confirmed', confirmedBy: USER.taylor });
+
     const rows = await newAudit(tx, base);
     const confirms = rows.filter((r) => r.action === 'tool.confirm');
-    expect(confirms).toHaveLength(1);
+    expect(confirms.map((r) => r.targetId)).toEqual([samAction, taylorAction]);
     expect(confirms[0]).toMatchObject({
       actorUserId: USER.sam, targetType: 'pending_action', targetId: samAction, installationId: INSTALLATION.startupFundingPrecheck,
       details: { pendingActionId: samAction, tool: 'submit_application' },
     });
-    expect(rows.filter((r) => r.action === 'authz.denied' && (r.details as { reason: string }).reason === 'confirm_forbidden')).toHaveLength(3);
+    expect(rows.filter((r) => r.action === 'authz.denied' && (r.details as { reason: string }).reason === 'confirm_forbidden')).toHaveLength(3); // taylorAction by sam, samAction by casey, leeAction by lee
   }));
 
   it('GET /api/audit scopes by viewer and validates the filter', () => scenario(async () => {

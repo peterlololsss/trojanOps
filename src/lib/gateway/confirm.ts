@@ -1,6 +1,6 @@
 // Owner: A (WP-4). gateway.confirm: a human confirms a pending write action (I6, §14). The run's own
-// user confirms, and only with a position that may confirm that tool in the action's club. Nothing
-// executes here: no write tool has an executor yet (TODO(WP-14)), so this records the decision.
+// user confirms, holding an active membership in the action's club, and a position that may confirm
+// that tool when the tool names any. Nothing executes here: no write tool has an executor yet (TODO(WP-14)), so this records the decision.
 import { and, eq } from 'drizzle-orm';
 import { AppError, type Actor } from '../contracts';
 import { activeMemberships, isUuid } from '../authz';
@@ -34,7 +34,7 @@ export async function confirm(actor: Actor, pendingActionId: string): Promise<{ 
   const allowed = confirmerPositions(action.tool);
   const held = (await activeMemberships(userId)) ?? [];
   const mayConfirm = action.userId === userId
-    && held.some((m) => m.orgId === action.orgId && allowed.includes(m.positionSlug));
+    && held.some((m) => m.orgId === action.orgId && (allowed === null || allowed.includes(m.positionSlug)));
   if (!mayConfirm) {
     await audit('authz.denied', { ...event, details: { reason: 'confirm_forbidden', pendingActionId: action.id, tool: action.tool } });
     throw new AppError({ code: 'forbidden', message: 'You cannot confirm this action.' });

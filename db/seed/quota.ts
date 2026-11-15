@@ -29,6 +29,8 @@ export async function seedQuota(db: SeedDb): Promise<void> {
     row('student_daily', 0.05 * USD, USER.avery),
     row('member', 0.5 * USD, USER.sam, { orgId: ORG.startup, userId: USER.casey }),
     row('installation', 2.5 * USD, USER.sam, { orgId: ORG.startup, installationId: INSTALLATION.startupRecruitingQa }),
+    // §11: every public installation has a limit.
+    row('installation', 2.5 * USD, USER.avery, { orgId: ORG.dance, installationId: INSTALLATION.danceShowcaseQa }),
   ]);
 
   // Lee ran Startup's public recruiting-qa four times today: a hold and a settle of the same cost each.

@@ -125,7 +125,7 @@ export async function remaining(target: QuotaTarget): Promise<QuotaRemaining> {
 // setLimit
 
 const PARENT: Record<QuotaScope, string | null> = {
-  platform: null, org: 'the platform limit', student_daily: 'the platform limit', member: 'club', installation: 'club',
+  platform: null, org: 'the platform limit', student_daily: null, member: 'club', installation: 'club',
 };
 
 /** Sets a limit (§11, §14). USG admins set platform, club and student_daily limits; a club's president
@@ -189,7 +189,7 @@ export async function setLimit(actor: Actor, input: QuotaTarget & { limitMicro: 
         if (parent.scope === 'org') {
           [{ name: clubName }] = await tx.select({ name: orgs.name }).from(orgs).where(eq(orgs.id, orgId!));
         }
-        const what = { org: "A club's quota", student_daily: 'The student daily cap', member: "A member's limit", installation: "An agent's budget", platform: '' }[target.scope];
+        const what = { org: "A club's quota", student_daily: '', member: "A member's limit", installation: "An agent's budget", platform: '' }[target.scope];
         const parentName = parent.scope === 'org' ? `${clubName}'s monthly quota` : 'the platform limit';
         throw new AppError({
           code: 'clamp_violation',
@@ -244,6 +244,8 @@ export interface QuotaHold {
   userId: string;
   installationId: string;
   isPublic: boolean;
+  /** When the hold was written. The settle row is stamped with it, so both fall in one period. */
+  createdAt: Date;
 }
 
 /** §7 step 4: holds the estimated cost (mock: a flat $0.01), or blocks with quota.blocked and 429
@@ -253,11 +255,12 @@ export async function hold(
   agent: EffectiveAgent, userId: string, actingOrgId: string | null, runId: string, club: string,
 ): Promise<QuotaHold> {
   const holdMicro = MOCK_COST_MICRO;
+  const at = now();
   const held: QuotaHold = {
     runId, holdMicro, billedOrgId: agent.orgId, userId, installationId: agent.installationId, isPublic: agent.audience === 'public',
+    createdAt: at,
   };
   const isMember = (await activeMemberships(userId))?.some((m) => m.orgId === agent.orgId) ?? false;
-  const at = now();
 
   const blocked = await getDb().transaction(async (tx) => {
     await lock(tx);
@@ -309,9 +312,10 @@ export async function hold(
 }
 
 /** §7 step 8: settles a hold with the actual cost (0 for a failed run). Writes (actual − hold), or
- * +actual when the hold was already released as stale. The row also marks the hold as settled. */
+ * +actual when the hold was already released as stale. The row also marks the hold as settled, and is
+ * stamped with the hold's time, so a run that crosses a period boundary nets to its cost in the period
+ * that holds it. */
 export async function settle(held: QuotaHold, actualMicro: number, model?: string): Promise<void> {
-  const at = now();
   await getDb().transaction(async (tx) => {
     await lock(tx);
     const [released] = await tx.select({ id: aiUsage.id }).from(aiUsage)
@@ -319,9 +323,30 @@ export async function settle(held: QuotaHold, actualMicro: number, model?: strin
     await tx.insert(aiUsage).values({
       runId: held.runId, billedOrgId: held.billedOrgId, userId: held.userId, installationId: held.installationId,
       isPublic: held.isPublic, model: model ?? null, kind: 'settle',
-      amountMicro: released ? actualMicro : actualMicro - held.holdMicro, createdAt: at,
+      amountMicro: released ? actualMicro : actualMicro - held.holdMicro, createdAt: held.createdAt,
     });
   });
 }
 
-export const quota = { setLimit, remaining, hold, settle };
+/** The smallest remaining amount over the levels that apply to a run of `agent` by `userId`: member
+ * (an active member of the billed club), student_daily (public agents), installation, club and
+ * platform. What the user can still spend before a run would be blocked. */
+export async function headroom(
+  agent: Pick<EffectiveAgent, 'orgId' | 'installationId' | 'audience'>, userId: string,
+): Promise<number> {
+  const targets: QuotaTarget[] = [];
+  if ((await activeMemberships(userId))?.some((m) => m.orgId === agent.orgId)) {
+    targets.push({ scope: 'member', orgId: agent.orgId, userId });
+  }
+  if (agent.audience === 'public') targets.push({ scope: 'student_daily', userId });
+  targets.push(
+    { scope: 'installation', installationId: agent.installationId },
+    { scope: 'org', orgId: agent.orgId },
+    { scope: 'platform' },
+  );
+  let smallest = Infinity;
+  for (const target of targets) smallest = Math.min(smallest, (await remaining(target)).remainingMicro);
+  return smallest;
+}
+
+export const quota = { setLimit, remaining, hold, settle, headroom };
