@@ -135,7 +135,7 @@ export async function seedDistribution(db: SeedDb): Promise<void> {
         'Before the club submits a funding application on EngageSC, check the draft against the USG Funding Department Guidelines in the USG rulebook.',
         'For each budget line and date: say whether it passes, fails or needs a reviewer, cite the rule by section (for example "§5 Food per person"), and when it fails say exactly what to change.',
         'Use only the club’s own finance documents and the USG rulebook. Never approve or deny a request: USG reviewers decide.'].join('\n\n'),
-      // The funding rules are the USG rulebook document (decision 19); the usg-funding pack stays seeded, unattached.
+      // The funding rules are the USG rulebook document (decision 20); the usg-funding pack stays seeded, unattached.
       rulePackSlug: null,
       changelog: 'First version.',
       publishedBy: USER.avery,

@@ -1,4 +1,4 @@
-// Owner: B (WP-6). POST /api/usg/rule-packs/:slug/versions (§14). Not used by the UI (decision 19).
+// Owner: B (WP-6). POST /api/usg/rule-packs/:slug/versions (§14). Not used by the UI (decision 20).
 //
 // Published packs are immutable; this adds the next version, and the next funding-precheck run in
 // any club resolves it because agents read the latest published pack at run time.

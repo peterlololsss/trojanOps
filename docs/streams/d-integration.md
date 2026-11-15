@@ -31,7 +31,7 @@ Stubs by H3.
 ## Demo beats
 
 - D1: integration panel and roster sync.
-- D3: directory and Lee's run.
+- D3: directory (Startup Club's Agents tab) and Lee's run.
 - D4: my agents.
 - You also run the whole demo script.
 
@@ -76,7 +76,7 @@ Stubs by H3.
 |---|---|
 | D1 | Avery → `/usg/integrations` → Sync roster, twice. Five Mock connectors; Robotics provisioned; existing clubs unchanged |
 | D2 | Avery → `/usg/templates`, distribute Event planning. Sam → Startup catalog; attempting the standard model is rejected |
-| D3 | Sam publishes Recruiting Q&A. Lee → `/directory` → one run; the Inspector shows public sources only |
+| D3 | Sam publishes Recruiting Q&A. Lee → Directory → Startup Club → Agents → one run; the Inspector shows public sources only |
 | D4 | Casey, then Taylor → `/me/agents`; Sam → Startup permission preview |
 | D5 | Sam sets Casey to $0.00; Casey's run is blocked. Lee's second public run is blocked |
 | D6 | Avery publishes the USG Funding Department Guidelines as v2 (§3 at $10,000) in /usg/documents; Taylor's funding-precheck names "USG Funding Department Guidelines (v2)" |

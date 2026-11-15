@@ -101,7 +101,7 @@ export function publishConfirmation(
   return {
     title: `Publish ${entry.name} to all students?`,
     points: [
-      `Anyone signed in with a USC account can use ${entry.name} from the campus directory, without joining ${orgName}.`,
+      `Anyone signed in with a USC account can use ${entry.name} from ${orgName}'s page in the directory, without joining ${orgName}.`,
       `It can read only ${orgName} documents at the Public tier, and never its members-only or officer documents.`,
       budget.micro <= 0
         ? `${orgName} has no monthly AI quota yet, so publishing is refused until USG sets one.`

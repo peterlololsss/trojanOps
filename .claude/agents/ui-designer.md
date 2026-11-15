@@ -64,8 +64,19 @@ Every screen uses real seed data (club names, document titles); never lorem ipsu
 ## Page patterns
 
 - **Lists and directories** are dense rows or tables, not card grids.
-  - Directory row: agent name, purpose, club, audience chip, Open.
-  - Filters: club, purpose, search.
+  - Club row: initials tile, name, tagline and categories; members; next event; public agents. USG
+    adds the monthly quota meter and USG funding.
+  - Department row: name and purpose, lead, members, next event; the president adds the budget.
+  - Filters: search, category; USG adds status.
+- **Club and department dashboards** (`/directory/clubs/[orgId]`, department pages), after the
+  EngageSC club page:
+  - header: initials tile, name (serif) with "· parent", tagline, category and cohort chips, actions;
+  - link tabs with a 2px Cardinal underline: About · Events · Members · Officers · Departments ·
+    Agents (Members and Departments only for the club's members and USG);
+  - About: USG oversight (USG only), contact and officer avatars with names, about text, then
+    "Recent updates" and "Upcoming events" side by side;
+  - events: date tile (MON / DD), title, PT time range, location, RSVPs; the club's members and USG
+    also see the department and the funding chip.
 - **Data tables** (catalog, documents, members, quotas, templates, audit): shadcn Data Table on
   TanStack.
   - Rows 40px (32px compact).
@@ -149,7 +160,7 @@ Every screen uses real seed data (club names, document titles); never lorem ipsu
 - **Agent names** say the job: "Funding pre-check", "Event planning", "Recruiting Q&A",
   "Showcase Q&A", "Club handoff", "USG review assistant". No personas, faces, robot icons or
   avatars for agents.
-- **Terms:** "Directory" (all clubs' public agents), "Catalog" (one club's agents), "My agents",
+- **Terms:** "Directory" (clubs, or the active club's departments), "Catalog" (one club's agents), "My agents",
   "Persona" (demo identity). Our module is "the gateway"; USC's is always "Trojan AI Gateway".
 - **Audience labels:** "All students", "All members", or the position names ("Treasurer,
   President"). The same labels give the reason on My agents. **Tier labels:** "Public", "Members",

@@ -14,9 +14,15 @@ export function isNavItemActive(pathname: string, item: NavItem): boolean {
 
 /** `activeOrgIsUsg` is the kind of the actor's active org (read by the shell), not a seed id. */
 export function navigationFor(actor: Actor, clubs: readonly Pick<MyAgentsClub, 'orgId' | 'orgName'>[], activeOrgIsUsg: boolean): Scope[] {
+  // Directory is the org directory: a member acting in a club sees its departments first; USG and
+  // students outside a club see the clubs (§14).
+  const inClub = Boolean(actor.userId && actor.activeOrgId && !activeOrgIsUsg && actor.positions.length > 0);
+  const directoryItems: NavItem[] = inClub
+    ? [{ href: '/directory/departments', label: 'Departments' }, { href: '/directory/clubs', label: 'All clubs' }]
+    : [{ href: '/directory/clubs', label: 'Clubs' }];
   const scopes: Scope[] = [
     { href: '/me/agents', label: 'My agents', match: '/me', items: [{ href: '/me/agents', label: 'My agents' }] },
-    { href: '/directory', label: 'Directory', match: '/directory', items: [{ href: '/directory', label: 'All public agents' }] },
+    { href: '/directory', label: 'Directory', match: '/directory', items: directoryItems },
   ];
   if (!actor.userId) return scopes;
   const club = clubs.find((c) => c.orgId === actor.activeOrgId && !activeOrgIsUsg);

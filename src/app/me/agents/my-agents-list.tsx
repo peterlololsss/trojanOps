@@ -41,8 +41,8 @@ export function MyAgentsList({ clubs }: { readonly clubs: readonly MyAgentsClub[
 
   if (clubs.length === 0) return <div className="space-y-3">
     <h2 className="text-xl font-semibold leading-7">No club memberships yet</h2>
-    <p className="max-w-prose text-muted-foreground">Browse agents available to all students in the Directory. If a club membership is missing, ask the club president to check the roster.</p>
-    <Link href="/directory" className={buttonVariants({ variant: 'secondary' })}>Browse directory</Link>
+    <p className="max-w-prose text-muted-foreground">Browse clubs for agents open to all students, or ask a club president to add you to the roster.</p>
+    <Link href="/directory/clubs" className={buttonVariants({ variant: 'secondary' })}>Browse clubs</Link>
   </div>;
 
   return <div className="min-w-0 space-y-8">
@@ -83,8 +83,8 @@ export function MyAgentsList({ clubs }: { readonly clubs: readonly MyAgentsClub[
           </TableCell>
         </TableRow>)}</TableBody>
       </Table> : <div className="space-y-3">
-        <p className="text-muted-foreground">No agents are available to you in this club yet. Ask the club president about access, or browse agents for all students.</p>
-        <Link href="/directory" className={buttonVariants({ variant: 'secondary' })}>Browse directory</Link>
+        <p className="text-muted-foreground">No agents in this club are open to you yet; ask the club president about access.</p>
+        <Link href="/directory/clubs" className={buttonVariants({ variant: 'secondary' })}>Browse clubs</Link>
       </div>}
     </section>)}
   </div>;

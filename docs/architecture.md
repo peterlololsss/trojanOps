@@ -7,8 +7,10 @@ into one platform that gives every club governed AI:
 
 - Clubs publish **public agents** for all students (recruiting Q&A, event Q&A) and use **internal
   agents** for their members and officers (handoff, minutes).
-- Each student's `/me/agents` lists, per club, the agents that club exposes to them; the campus
-  directory lists every club's public agents.
+- Each student's `/me/agents` lists, per club, the agents that club exposes to them.
+- The directory is the org directory: USG and students outside a club browse the clubs; a member
+  acting in a club browses its departments. Each club and department opens a dashboard (about,
+  events, members, officers); a club's dashboard lists its public agents.
 - USG distributes agent templates to clubs, sets quotas and club policy, and publishes its rulebook documents.
 - The platform gateway governs every agent run and tool call: identity → grants → audience check →
   quota → runtime → audit.
@@ -19,7 +21,8 @@ until then.
 
 | Term | 中文 | Meaning |
 |---|---|---|
-| directory | 全校智能体目录 | every club's public agents, `/directory` |
+| directory | 组织目录 | clubs (USG, students outside a club) or the active club's departments, each with a dashboard, `/directory` |
+| department | 部门 | a team inside a club (Events, Finance…), with a lead, members, events and a budget the president sees |
 | catalog | 社团智能体库 | agents installed in or available to one club, `/org/[orgId]/catalog` |
 | my agents | 我的智能体 | agents a student's clubs expose to them, `/me/agents` |
 | audience | 受众 | who may use an agent: All students / All members / named positions |
@@ -33,7 +36,7 @@ Demo beats (each runs on real platform logic; agents answer through the mock run
 |---|---|---|
 | D1 | Integration panel | `/usg/integrations` lists the five connectors, each "Mock", with last sync. "Sync roster" imports Robotics Club from `roster.csv` and provisions it with the templates already distributed (`funding-precheck`); existing clubs report 0 changes |
 | D2 | USG distributes | Avery distributes `event-planning` (default) to all clubs; it appears in all five catalogs, Robotics included. `funding-precheck` (required) is already there. Sam's attempt to give `event-planning` model class `standard` is rejected with the cap named and logged as `installation.rejected` |
-| D3 | Club publishes a public agent | Startup's `recruiting-qa` starts disabled. Sam clicks "Publish to all students"; the confirmation states who gains access and the installation limit. It appears in `/directory`; Lee (no club) opens it; the inspector lists Startup's public documents only |
+| D3 | Club publishes a public agent | Startup's `recruiting-qa` starts disabled. Sam clicks "Publish to all students"; the confirmation states who gains access and the installation limit. It appears on Startup Club's Agents tab in the directory; Lee (no club) opens it from there; the inspector lists Startup's public documents only |
 | D4 | Internal vs public scope | Casey's `/me/agents`: `handoff` (All members), `recruiting-qa` (All students). Taylor's adds `funding-precheck` (Treasurer, President). Sam's preview of `handoff`: Member → minutes allowed, budget "Not granted"; Treasurer → both; preview of `recruiting-qa`: "Any signed-in student" → recruiting FAQ only, minutes "Outside agent sources" |
 | D5 | Quota | Sam sets Casey's limit to $0.00 → Casey's next `handoff` run is blocked before the runtime is called. Lee (seeded with $0.04 today) runs `recruiting-qa` once ($0.01, billed to Startup); the next run hits the $0.05 student daily cap |
 | D6 | Rule update | Avery publishes the USG Funding Department Guidelines as v2 in `/usg/documents` (§3 annual maximum $8,000 → $10,000); the next `funding-precheck` run in any club reads v2: the reply names "USG Funding Department Guidelines (v2)" and the inspector lists it under Versions |
@@ -133,6 +136,7 @@ src/lib/
   lifecycle/     transfer.ts                                                B
                  import.ts                                                  D
   documents/     library.ts, access.ts (listAccessibleDocuments, explainAccess), preview.ts   C
+  directory/     service.ts (clubs, departments, dashboards), content.ts, view.ts           D
   connectors/    registry.ts + one folder per kind, each with mock.ts       D
                  llm/**                                                     A
 src/components/  ui/ (shadcn, restyled), shell/ (masthead, side nav, footer)   D
@@ -512,7 +516,7 @@ Mock runtime (`runtime/mock.ts`):
 - The reply lists the accessible documents.
 - Citations quote the first sentence of up to three accessible documents.
 - A document above version 1 is named with its version, e.g. "USG Funding Department Guidelines (v2)".
-- With a rule pack, the reply adds "<label> v<version> · annual cap $<value>". No seeded template attaches one (decision 19).
+- With a rule pack, the reply adds "<label> v<version> · annual cap $<value>". No seeded template attaches one (decision 20).
 - Cost is a flat $0.01. No model call.
 
 ## 8. Agent distribution
@@ -734,7 +738,7 @@ Every handler: `const actor = await getActor(req)` → one service call → JSON
 | POST `/api/usg/connectors/roster/sync` | `lifecycle.importRoster` | USG admin | D |
 | POST `/api/demo/clock` | demo | `DEMO_MODE` only | D |
 
-Pages (19):
+Pages (22):
 
 | Page | Stream |
 |---|---|
@@ -752,7 +756,11 @@ Pages (19):
 | `/org/[orgId]/audit` | C |
 | `/usg/audit` | C |
 | `/me/agents` | D |
-| `/directory` | D |
+| `/directory`: redirects to departments when acting in a club, else to clubs | D |
+| `/directory/clubs`: clubs; USG also sees status, monthly quota and USG funding | D |
+| `/directory/clubs/[orgId]?tab=`: club dashboard (about, events, members, officers, departments, agents); members, departments, member-only updates and each event's department and funding for the club's members and USG; quota, policy and funding totals for USG | D |
+| `/directory/departments`: the active club's departments; budgets for the president | D |
+| `/directory/departments/[slug]`: a department of the active club; `/directory/clubs/[orgId]/departments/[slug]`: any club's department, for its members and USG. Department dashboard: about, events, members | D |
 | `/directory/[installationId]`: run + inspector | D |
 | `/usg/integrations` | D |
 | `/demo`: clock control and the reset command | D |
@@ -788,7 +796,7 @@ Pages (19):
 **USG Funding Department Guidelines** (`rulebook`, public): USG's public
 [Funding Department Guidelines](https://usg.usc.edu/branches/funding/), current as of 2026-10-21,
 §1–§7. D6 publishes v2 with the §3 annual maximum at $10,000. The `usg-funding` rule pack stays
-seeded but no template attaches it (decision 19).
+seeded but no template attaches it (decision 20).
 
 **Policy and quota:**
 - Every club may use `standard` and `economy` and publish public agents. `event-planning` v1 allows
@@ -844,7 +852,7 @@ WP-14.
   `src/lib/lifecycle/import.ts`, `src/app/usg/integrations/**`, `src/app/api/usg/connectors/**`,
   `tests/connectors.test.ts` · connectors, registry, panel, roster sync with precedence; D1.
 - **WP-11** · D · H9–12 · B `directory`/`myAgents`, C `<Inspector />` · `src/app/{directory,me}/**` ·
-  campus directory, public-agent runs, my agents; D3, D4.
+  org directory (clubs, departments and their dashboards), public-agent runs, my agents; D3, D4.
 - **WP-12** · D · H12–20 · all P0 · `src/app/demo/**`, `src/app/api/demo/**` · clock control,
   rehearsed D1–D8, backup video.
 - **WP-13** · A · H12–14 (floor), to H16 if time · WP-4 · `src/lib/connectors/llm/**`,

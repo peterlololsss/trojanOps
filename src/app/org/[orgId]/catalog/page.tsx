@@ -37,9 +37,9 @@ export default async function CatalogPage({ params }: { params: Promise<{ orgId:
         <p className="flex items-center gap-2 rounded-md border border-border p-4">
           <Lock aria-hidden className="size-4" />
           <span>
-            Join the club to see its agents, or browse the{' '}
-            <Link href="/directory" className="text-primary underline">campus directory</Link> for
-            agents open to every student.
+            Join the club to see its agents, or see its{' '}
+            <Link href={`/directory/clubs/${orgId}?tab=agents`} className="text-primary underline">agents for all students</Link>{' '}
+            in the directory.
           </span>
         </p>
       </>

@@ -147,7 +147,7 @@ export function CatalogTable({ data }: { data: ClubCatalog }) {
       )}
       <p role="status" className="text-muted-foreground">
         {published
-          ? `${published} is published. Anyone signed in with a USC account can use it from the campus directory.`
+          ? `${published} is published. Anyone signed in with a USC account can use it from ${data.orgName}'s page in the directory.`
           : ''}
       </p>
       <DataTable

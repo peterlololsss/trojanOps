@@ -81,7 +81,7 @@ the club has a budget, gives the installation one and audits `agent.publish_publ
 | POST `/api/templates/:id/versions` | `publishVersion` | USG admin (global), president (own) |
 | POST `/api/usg/templates/:id/distribute` | `distribute` | USG admin |
 | POST `/api/usg/templates/:id/retire` | `retire` | USG admin |
-| POST `/api/usg/rule-packs/:slug/versions` | `publishRulePack` (not used by the UI, decision 19) | USG admin |
+| POST `/api/usg/rule-packs/:slug/versions` | `publishRulePack` (not used by the UI, decision 20) | USG admin |
 | POST `/api/orgs/:orgId/positions/:slug/transfer` | `transferPosition` | club president |
 
 Each handler is `getActor` → one service call → JSON or `ApiError`; permissions stay in the
