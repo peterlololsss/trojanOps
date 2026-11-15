@@ -605,6 +605,15 @@ Seeded templates (display names in UI copy):
   4. `allowed` otherwise.
   - A test asserts it agrees with `listAccessibleDocuments` for every persona × agent × document
     in the seed.
+- **`listBlockedDocuments(viewer, agent, runGrants, accessibleIds)`** (`documents/access.ts`) fills
+  `RunInspector.blocked` in the gateway's step 8. It returns `undefined` unless the viewer is the
+  president of `agent.orgId` (recomputed with `grantsFor`) or a USG admin.
+  - Candidates: the documents the viewer reads through their memberships in `agent.orgId`, over
+    the club's sources, the USG rulebook and the agent's sources, minus `accessibleIds`.
+  - Reasons come from `explainAccess(runGrants, …)`.
+  - Titles are resolved under the viewer's own `actor.grants`; an unreadable one is `null`
+    ("Restricted document").
+  - A document the viewer can't read at all never appears.
 - **`previewAccess(viewer, installationId)`** returns a `PreviewMatrix`, president only.
   - Rows: "Any signed-in student", "Member", and each club position.
   - Columns: every document the viewer can read in the club, plus the USG rulebook.

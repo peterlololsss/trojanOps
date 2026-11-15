@@ -86,6 +86,7 @@ fixture data lives in the owner's `fixtures.ts`; delete it once the function rea
 | `listAccessibleDocuments()`, `explainAccess()` | `@/lib/documents/access` | C | A (gateway step 5), C | H5 |
 | `listLibraryDocuments()` | `@/lib/documents/library` | C | B (club home) | H6 |
 | `previewAccess()` | `@/lib/documents/preview` | C | C | H10 |
+| `listBlockedDocuments()` | `@/lib/documents/access` | C | A (gateway step 8) | H10 |
 | `<Inspector />` | `@/components/inspector` | C | D (run pages) | H10 |
 | `getConnectors()`, `listConnectors()`, `RosterSource` | `@/lib/connectors/registry` | D | A, B | H9 |
 | app shell, `src/components/ui/*` | `@/components/shell`, `@/components/ui/*` | D | all pages | H5 |

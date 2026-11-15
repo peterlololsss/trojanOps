@@ -1,75 +1,161 @@
-// Owner: C (WP-9, real by H10). STUB layout: the six inspector sections in order (ui-designer.md
-// "Agent run page"). Final styling, chips and icons come in WP-9.
-import type { AccessCell, RunInspector, Tier } from '@/lib/contracts';
+// Owner: C (WP-9). The run inspector beside the transcript on run pages (ui-designer.md "Agent run
+// page"). Server-renderable and hook-free: it only renders the RunInspector it is given.
+// Sizes are in px because the app's root font size is 14px, so rem-based utilities run small.
+import { FileText, Folder, KeyRound, Lock } from 'lucide-react';
+import type { RunInspector } from '@/lib/contracts';
+import { accessDecisions, tierIcons, tierLabels } from './access-labels';
+import { Chip } from './chip';
 
-const TIER_LABEL: Record<Tier, string> = {
-  public: 'Public', members: 'Members', officers: 'Officers', usg_internal: 'USG internal',
-};
-
-const BLOCKED_LABEL: Record<AccessCell, string> = {
-  allowed: 'Allowed',
-  not_granted: 'Not granted',
-  outside_sources: 'Outside agent sources',
-  above_max_tier: 'Above agent max tier',
-};
-
-const money = (micro: number) => `$${(micro / 1_000_000).toFixed(2)}`;
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (micro: number) => usd.format(micro / 1_000_000);
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="border-b border-border py-3">
-      <h3 className="mb-2 font-semibold">{title}</h3>
+    <section className="border-b border-border px-[16px] py-[16px] last:border-b-0">
+      <h2 className="mb-[8px] text-[14px] font-semibold leading-5">{title}</h2>
       {children}
     </section>
   );
 }
 
-export function Inspector({ inspector }: { inspector: RunInspector }) {
+function SubSection({ title, count, note, children }: { title: string; count?: number; note?: string; children: React.ReactNode }) {
   return (
-    <aside aria-label="Run inspector" className="w-96 shrink-0 border-l border-border px-4 text-sm">
+    <div className="mt-[12px] first:mt-0">
+      <div className="flex items-baseline justify-between gap-[8px]">
+        <h3 className="text-[12px] font-semibold leading-4 text-muted-foreground">{title}</h3>
+        {count !== undefined && <span className="text-[12px] leading-4 tabular-nums text-muted-foreground">{String(count)}</span>}
+      </div>
+      {note && <p className="text-[12px] leading-4 text-muted-foreground">{note}</p>}
+      {children}
+    </div>
+  );
+}
+
+function Empty({ children }: { children: string }) {
+  return <p className="py-[4px] text-muted-foreground">{children}</p>;
+}
+
+function Row({ children }: { children: React.ReactNode }) {
+  return <li className="flex min-h-[32px] items-center justify-between gap-[8px] border-b border-border py-[4px] last:border-b-0">{children}</li>;
+}
+
+export function Inspector({ inspector }: { inspector: RunInspector }) {
+  const tierOf = new Map(inspector.permitted.map((d) => [d.id, d.tier]));
+  const quota = Object.entries(inspector.quotaRemainingMicro);
+
+  return (
+    <aside aria-label="Run inspector" className="w-[384px] shrink-0 border-l border-border bg-background text-[14px] leading-5">
       <Section title="Run grants">
-        <ul>{inspector.runGrants.map((g) => <li key={g.grant}>{g.label}</li>)}</ul>
-      </Section>
-      <Section title="Sources">
-        <ul>{inspector.sources.map((s) => <li key={s.id}>{s.name}</li>)}</ul>
-      </Section>
-      <Section title="Documents">
-        <p className="font-semibold">Permitted</p>
-        <ul className="mb-2">
-          {inspector.permitted.map((d) => (
-            <li key={d.id}>{d.title} <span className="text-muted-foreground">· {TIER_LABEL[d.tier]}</span></li>
-          ))}
-        </ul>
-        <p className="font-semibold">Read in this run</p>
-        <ul className="mb-2">{inspector.readInRun.map((d) => <li key={d.id}>{d.title}</li>)}</ul>
-        {inspector.blocked && (
-          <>
-            <p className="font-semibold">Blocked by rule</p>
-            <ul>
-              {inspector.blocked.map((d) => (
-                <li key={d.id} className={d.title ? '' : 'text-muted-foreground'}>
-                  {d.title ?? 'Restricted document'} <span className="text-muted-foreground">· {BLOCKED_LABEL[d.reason]}</span>
-                </li>
-              ))}
-            </ul>
-          </>
+        {inspector.runGrants.length === 0 ? <Empty>This run had no grants.</Empty> : (
+          <ul>
+            {inspector.runGrants.map((g) => (
+              <li key={g.grant} className="flex items-center gap-[8px] py-[4px]">
+                <KeyRound aria-hidden className="size-[16px] shrink-0 text-muted-foreground" />
+                <span>{g.label}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </Section>
-      <Section title="Versions">
-        <p>Template v{inspector.templateVersion}</p>
-        {inspector.rulePack && <p>{inspector.rulePack.label} v{inspector.rulePack.version}</p>}
+
+      <Section title="Sources">
+        {inspector.sources.length === 0 ? <Empty>This agent has no document sources.</Empty> : (
+          <ul>
+            {inspector.sources.map((s) => (
+              <li key={s.id} className="flex items-center gap-[8px] py-[4px]">
+                <Folder aria-hidden className="size-[16px] shrink-0 text-muted-foreground" />
+                <span>{s.name}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </Section>
-      <Section title="Billing">
-        <p>Billed to {inspector.billedClub}</p>
-        <p className="tabular-nums">Cost {money(inspector.costMicro)}</p>
+
+      <Section title="Documents">
+        <SubSection title="Permitted" count={inspector.permitted.length}>
+          {inspector.permitted.length === 0 ? <Empty>This run could read no documents.</Empty> : (
+            <ul>
+              {inspector.permitted.map((d) => (
+                <Row key={d.id}>
+                  <span className="min-w-0 break-words">{d.title}</span>
+                  <Chip icon={tierIcons[d.tier]}>{tierLabels[d.tier]}</Chip>
+                </Row>
+              ))}
+            </ul>
+          )}
+        </SubSection>
+
+        <SubSection title="Read in this run" count={inspector.readInRun.length}>
+          {inspector.readInRun.length === 0 ? <Empty>No documents cited in this run.</Empty> : (
+            <ul>
+              {inspector.readInRun.map((d) => {
+                const tier = tierOf.get(d.id);
+                return (
+                  <Row key={d.id}>
+                    <span className="flex min-w-0 items-center gap-[8px]">
+                      <FileText aria-hidden className="size-[16px] shrink-0 text-muted-foreground" />
+                      <span className="break-words">{d.title}</span>
+                    </span>
+                    {tier && <Chip icon={tierIcons[tier]}>{tierLabels[tier]}</Chip>}
+                  </Row>
+                );
+              })}
+            </ul>
+          )}
+        </SubSection>
+
+        {inspector.blocked !== undefined && (
+          <SubSection title="Blocked by rule" count={inspector.blocked.length} note="Shown to the club president and USG admins.">
+            {inspector.blocked.length === 0 ? <Empty>Nothing blocked for this run.</Empty> : (
+              <ul>
+                {inspector.blocked.map((d) => {
+                  const reason = accessDecisions[d.reason];
+                  return (
+                    <Row key={d.id}>
+                      {d.title === null ? (
+                        <span className="flex min-w-0 items-center gap-[8px] text-muted-foreground">
+                          <Lock aria-hidden className="size-[16px] shrink-0" />
+                          <span>Restricted document</span>
+                        </span>
+                      ) : <span className="min-w-0 break-words">{d.title}</span>}
+                      <Chip icon={reason.icon} tone={reason.tone}>{reason.label}</Chip>
+                    </Row>
+                  );
+                })}
+              </ul>
+            )}
+          </SubSection>
+        )}
+      </Section>
+
+      <Section title="Versions">
         <ul>
-          {Object.entries(inspector.quotaRemainingMicro).map(([scope, micro]) => (
-            <li key={scope} className="tabular-nums">{scope}: {money(micro)} left</li>
-          ))}
+          <li className="py-[4px]">{`Template v${inspector.templateVersion}`}</li>
+          {inspector.rulePack && <li className="py-[4px]">{`${inspector.rulePack.label} v${inspector.rulePack.version}`}</li>}
         </ul>
       </Section>
+
+      <Section title="Billing">
+        <dl className="grid grid-cols-[1fr_auto] gap-x-[16px] gap-y-[4px]">
+          <dt className="text-muted-foreground">Billed club</dt>
+          <dd className="text-right">{inspector.billedClub}</dd>
+          <dt className="text-muted-foreground">Cost of this run</dt>
+          <dd className="text-right tabular-nums">{money(inspector.costMicro)}</dd>
+          {quota.map(([club, micro]) => (
+            <div key={club} className="contents">
+              <dt className="text-muted-foreground">{`Quota left · ${club}`}</dt>
+              <dd className="text-right tabular-nums">{money(micro)}</dd>
+            </div>
+          ))}
+        </dl>
+        {quota.length > 0 && <p className="mt-[8px] text-[12px] leading-4 text-muted-foreground">The smallest amount left across the limits that apply to this run.</p>}
+      </Section>
+
       <Section title="Audit">
-        <p className="font-mono">#{inspector.auditEventId}</p>
+        <dl className="grid grid-cols-[1fr_auto] gap-x-[16px]">
+          <dt className="text-muted-foreground">Audit event</dt>
+          <dd className="text-right font-mono">{`#${inspector.auditEventId}`}</dd>
+        </dl>
       </Section>
     </aside>
   );
