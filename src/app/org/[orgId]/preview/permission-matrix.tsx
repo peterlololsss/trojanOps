@@ -1,16 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, CircleMinus, Lock, ShieldAlert } from 'lucide-react';
+import { accessDecisions as decisions, tierLabels as tiers } from '@/components/inspector/access-labels';
 import type { AccessCell, PreviewMatrix, Tier } from '@/lib/contracts';
-
-const tiers: Record<Tier, string> = { public: 'Public', members: 'Members', officers: 'Officers', usg_internal: 'USG internal' };
-const decisions = {
-  allowed: { label: 'Allowed', icon: Check, style: 'text-success', explanation: 'The simulated grants match this document, and it is within the agent’s sources and max tier.' },
-  not_granted: { label: 'Not granted', icon: Lock, style: 'text-muted-foreground', explanation: 'The simulated grants do not match this document’s required access.' },
-  outside_sources: { label: 'Outside agent sources', icon: CircleMinus, style: 'text-muted-foreground', explanation: 'This document’s source is outside the agent’s configured sources.' },
-  above_max_tier: { label: 'Above agent max tier', icon: ShieldAlert, style: 'text-attention-ink', explanation: 'This document’s tier is above the agent’s configured max tier.' },
-} satisfies Record<AccessCell, { label: string; icon: typeof Check; style: string; explanation: string }>;
 
 export function PermissionMatrix({ matrix, maxTier, agentName }: { matrix: PreviewMatrix; maxTier: Tier; agentName: string }) {
   const [selected, setSelected] = useState<{ subject: PreviewMatrix['subjects'][number]; document: PreviewMatrix['documents'][number]; decision: AccessCell } | null>(null);

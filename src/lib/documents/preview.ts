@@ -1,12 +1,12 @@
-import { and, asc, eq, or } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { requireUser } from '../api';
 import { grantsFor } from '../authz';
 import { AppError, type Actor, type EffectiveAgent, type Grant, type PreviewMatrix } from '../contracts';
 import { getDb } from '../db/client';
-import { documents, orgs, positions, sources } from '../db/schema';
+import { documents, positions, sources } from '../db/schema';
 import { withActor } from '../db/with-actor';
 import { effectiveAgent } from '../distribution';
-import { explainAccess } from './access';
+import { clubSourceIds, explainAccess } from './access';
 
 export async function requirePreviewPresident(viewer: Actor, orgId: string): Promise<Grant[]> {
   requireUser(viewer);
@@ -19,11 +19,8 @@ export async function requirePreviewPresident(viewer: Actor, orgId: string): Pro
 
 async function buildMatrix(viewer: Actor, agent: EffectiveAgent): Promise<PreviewMatrix> {
   const grants = await requirePreviewPresident(viewer, agent.orgId);
-  const db = getDb();
-  const sourceRows = await db.select({ id: sources.id }).from(sources)
-    .innerJoin(orgs, eq(orgs.id, sources.orgId))
-    .where(or(eq(sources.orgId, agent.orgId), and(eq(orgs.kind, 'usg'), eq(sources.kind, 'rulebook'))));
-  const heldPositions = await db.select({ slug: positions.slug, name: positions.name }).from(positions)
+  const sourceIds = await clubSourceIds(agent.orgId);
+  const heldPositions = await getDb().select({ slug: positions.slug, name: positions.name }).from(positions)
     .where(eq(positions.orgId, agent.orgId)).orderBy(asc(positions.name), asc(positions.slug));
   const subjects: Array<{ key: string; label: string; grants: Grant[] }> = [
     { key: 'student', label: 'Any signed-in student', grants: ['*'] },
@@ -34,7 +31,7 @@ async function buildMatrix(viewer: Actor, agent: EffectiveAgent): Promise<Previe
       grants: ['*', `${agent.orgId}:*`, `${agent.orgId}:${position.slug}`] as Grant[],
     })),
   ];
-  const rows = await withActor(viewer, { grants, sourceIds: sourceRows.map((source) => source.id) }, (tx) =>
+  const rows = await withActor(viewer, { grants, sourceIds }, (tx) =>
     tx.select({ id: documents.id, title: documents.title, tier: documents.tier,
       sourceId: documents.sourceId, source: sources.name, readGrants: documents.readGrants })
       .from(documents).innerJoin(sources, eq(sources.id, documents.sourceId))
