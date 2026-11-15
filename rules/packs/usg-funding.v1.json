@@ -1,0 +1,12 @@
+{
+  "slug": "usg-funding",
+  "version": 1,
+  "label": "Demo rule pack",
+  "notice": "Demo values written for the AI@USC Hackathon. Not USG policy, and not endorsed by USC or USG.",
+  "content": {
+    "annualCapUsd": 8000,
+    "fundedEventsPerSemester": 4,
+    "vendorLeadTimeInstructionalWeeks": 6,
+    "deadline": "Wednesday 11:59 PM PT"
+  }
+}
