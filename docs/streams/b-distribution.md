@@ -10,7 +10,7 @@ are in `AGENTS.md`.
 |---|---|---|
 | WP-5 | H2–7 | Publish, distribute, install, clamps, directory, `myAgents`, publish to all students, propagation, retire, `provisionOrg`; `myAgents` tests for Casey, Taylor, Morgan |
 | WP-7 | H7–10 | Club home, catalog with "Publish to all students", members, transfer, quotas; D3, D5, D7 |
-| WP-6 | H10–12 | Template list and detail, distribute, club quotas and policy, rule-pack publish; D2, D6 |
+| WP-6 | H10–12 | Template list and detail, distribute, club quotas and policy; D2 |
 
 ## You provide
 
@@ -32,7 +32,7 @@ Stubs by H3.
 
 - D2: distribute plus the rejected widening.
 - D3: publish to all students.
-- D6: rule-pack v2.
+- D6: USG Funding Department Guidelines v2 (document version, `/usg/documents`).
 - D7: transfer.
 - D5: the quota UI.
 
@@ -81,7 +81,7 @@ the club has a budget, gives the installation one and audits `agent.publish_publ
 | POST `/api/templates/:id/versions` | `publishVersion` | USG admin (global), president (own) |
 | POST `/api/usg/templates/:id/distribute` | `distribute` | USG admin |
 | POST `/api/usg/templates/:id/retire` | `retire` | USG admin |
-| POST `/api/usg/rule-packs/:slug/versions` | `publishRulePack` | USG admin |
+| POST `/api/usg/rule-packs/:slug/versions` | `publishRulePack` (not used by the UI, decision 19) | USG admin |
 | POST `/api/orgs/:orgId/positions/:slug/transfer` | `transferPosition` | club president |
 
 Each handler is `getActor` → one service call → JSON or `ApiError`; permissions stay in the
@@ -132,10 +132,10 @@ separate slices.
 
 ## WP-6 USG console
 
-`/usg/templates`, `/usg/templates/[templateId]`, `/usg/clubs`, and `/usg/rule-packs` now
+`/usg/templates`, `/usg/templates/[templateId]` and `/usg/clubs` now
 use authorized, serializable server models in `usg-view.ts`. USG admins can review version history,
 change rollout metadata, distribute to all active clubs or a seeded cohort, publish immutable
-versions, retire templates, edit club quotas/policy, and publish rule-pack versions. Required
+versions, retire templates and edit club quotas/policy. Required
 rollouts and retirement require the typed template name; other publication actions show a review.
 Client components import only distribution types and call the existing HTTP services.
 

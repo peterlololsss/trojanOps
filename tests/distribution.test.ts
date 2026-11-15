@@ -363,8 +363,8 @@ describe.skipIf(!probe)('effectiveAgent · version, clamps and rule pack', () =>
     expect((await effectiveAgent(INSTALLATION.danceShowcaseQa)).modelClass).toBe('economy');
   });
 
-  it('attaches the rule pack to the funding pre-check and to nothing else', async () => {
-    expect((await effectiveAgent(INSTALLATION.startupFundingPrecheck)).rulePack?.slug).toBe('usg-funding');
+  it('attaches no rule pack: the funding rules are the USG rulebook document', async () => {
+    expect((await effectiveAgent(INSTALLATION.startupFundingPrecheck)).rulePack).toBeUndefined();
     expect((await effectiveAgent(INSTALLATION.usgReviewAssistant)).rulePack).toBeUndefined();
   });
 
@@ -776,12 +776,15 @@ describe.skipIf(!probe)('effectiveAgent · tracks and versions', () => {
     }));
 });
 
-describe.skipIf(!probe)('effectiveAgent · the latest published rule pack (§8, D6)', () => {
-  const addPack = (tx: Tx, version: number, status: 'draft' | 'published', label: string) =>
-    tx.execute(
+describe.skipIf(!probe)('effectiveAgent · the latest published rule pack (§8)', () => {
+  // The seed attaches the pack to no template, so each case names it on funding-precheck v1 first.
+  const addPack = async (tx: Tx, version: number, status: 'draft' | 'published', label: string) => {
+    await tx.execute(sql`update agent_template_versions set rule_pack_slug = 'usg-funding' where template_id = ${TEMPLATE.fundingPrecheck}`);
+    await tx.execute(
       sql`insert into rule_packs (slug, version, status, label, content, published_at, created_at)
           values ('usg-funding', ${version}, ${status}, ${label}, '{}'::jsonb, ${status === 'published' ? sql`now()` : null}, now())`,
     );
+  };
 
   it('ignores a draft newer than the published pack', () =>
     inRolledBackApp(async (tx) => {

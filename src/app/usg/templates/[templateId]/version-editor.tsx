@@ -66,7 +66,7 @@ export function VersionEditor({ data, editing, setEditing }: { data: UsgTemplate
   const [errors, setErrors] = useState<Partial<Record<EditorField, string>>>({});
   const [formError, setFormError] = useState<string | null>(null); const [open, setOpen] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null); const mutation = useConsoleMutation();
-  const ctx = { positions: data.positions, rulePacks: data.rulePacks };
+  const ctx = { positions: data.positions };
   const body = toBody(state); const changes = versionChanges(latest, body, ctx);
   const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setState(s => ({ ...s, [key]: value }));
 
@@ -131,13 +131,6 @@ export function VersionEditor({ data, editing, setEditing }: { data: UsgTemplate
               control={<RadioGroupItem id={`tier-${t}`} value={t} aria-describedby={`tier-${t}-hint`} className="size-5" />} />)}
           </RadioGroup></>}
       </Field>
-
-      <div><Label htmlFor="version-rulepack">Rule pack</Label>
-        <select id="version-rulepack" className={selectClass} value={state.rulePackSlug} onChange={e => set('rulePackSlug', e.target.value)}>
-          <option value="">None</option>
-          {data.rulePacks.map(p => <option key={p.slug} value={p.slug}>{`${p.label} (v${p.version}, ${p.ruleCount} rules)`}</option>)}
-          {state.rulePackSlug && !data.rulePacks.some(p => p.slug === state.rulePackSlug) && <option value={state.rulePackSlug}>{`${state.rulePackSlug} (no published version)`}</option>}
-        </select></div>
 
       <Field id="version-tools" legend="Tools">
         <div className="space-y-2">{toolOptions.map(t => <Choice key={t.slug} id={`tool-${t.slug}`} title={t.name} description={t.description}

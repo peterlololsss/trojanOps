@@ -18,7 +18,7 @@ export async function listAccessibleDocuments(
 ): Promise<AccessibleDocument[]> {
   // No where clause: the documents_read policy is the filter, and a copy of it here would hide an RLS failure.
   return withActor(actor, { grants: runGrants, sourceIds: agent.sourceIds, maxTier: agent.maxTier }, async (tx) =>
-    tx.select({ id: documents.id, title: documents.title, tier: documents.tier, bodyMd: documents.bodyMd })
+    tx.select({ id: documents.id, title: documents.title, tier: documents.tier, bodyMd: documents.bodyMd, version: documents.version })
       .from(documents)
       .orderBy(asc(documents.createdAt), asc(documents.title)));
 }
@@ -29,7 +29,7 @@ export interface AccessDocument {
   readGrants: string[];
 }
 
-const TIER_RANK: Record<Tier, number> = { public: 0, members: 1, officers: 2, usg_internal: 3 };
+export const TIER_RANK: Record<Tier, number> = { public: 0, members: 1, officers: 2, usg_internal: 3 };
 
 /** Why a subject can or can't read a document through an agent, checked in §10 order. */
 export function explainAccess(

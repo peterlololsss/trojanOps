@@ -4,7 +4,7 @@ import { isUuid } from '../authz';
 import type { Actor, LibraryDocument } from '../contracts';
 import { getDb } from '../db/client';
 import { orgs, positions, sources } from '../db/schema';
-import { listLibraryDocuments } from './library';
+import { listLibraryDocuments, managesLibrary } from './library';
 
 export interface LibraryPageData {
   org: { id: string; name: string; kind: 'usg' | 'rso' };
@@ -22,7 +22,7 @@ export async function getLibraryPageData(actor: Actor, orgId: string): Promise<L
     .from(orgs).where(eq(orgs.id, orgId));
   if (!org) return null;
 
-  const canUpload = actor.activeOrgId === orgId && actor.positions.includes('president');
+  const canUpload = await managesLibrary(actor, orgId);
   const [documents, uploadSources, officerPositions] = await Promise.all([
     listLibraryDocuments(actor, orgId),
     canUpload

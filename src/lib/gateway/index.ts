@@ -142,7 +142,7 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
     inspector: {
       runGrants: await grantLabels(runGrants),
       sources: await sourceNames(agent.sourceIds),
-      permitted: docs.map(({ id, title, tier }) => ({ id, title, tier })),
+      permitted: docs.map(({ id, title, tier, version }) => ({ id, title, tier, version })),
       readInRun: docs.filter((d) => cited.includes(d.id)).map(({ id, title }) => ({ id, title })),
       ...(blocked !== undefined && { blocked }),
       templateVersion: agent.templateVersion,

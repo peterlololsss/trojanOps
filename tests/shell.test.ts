@@ -43,7 +43,7 @@ describe('WP-2 app shell', () => {
     expect(navigationFor(actor(USER.riley, ORG.usg, ['reviewer']), [], true).some((s) => s.match === '/usg')).toBe(false);
     expect(navigationFor(actor(USER.sam, ORG.startup, ['admin']), clubs, false).some((s) => s.match === '/usg')).toBe(false);
     expect(navigationFor(actor(USER.avery, ORG.usg, ['admin']), [], true).find((s) => s.match === '/usg')?.items?.map((i) => i.label)).toEqual([
-      'Templates', 'Clubs and quotas', 'Rule packs', 'Integrations', 'Audit',
+      'Templates', 'Clubs and quotas', 'Documents', 'Integrations', 'Audit',
     ]);
   });
 

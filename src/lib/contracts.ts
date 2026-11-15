@@ -39,7 +39,7 @@ export type CanUseResult =
   | { ok: false };
 export type CanUse = (userId: string, agent: EffectiveAgent) => Promise<CanUseResult>;
 
-export interface AccessibleDocument { id: string; title: string; tier: Tier; bodyMd: string }
+export interface AccessibleDocument { id: string; title: string; tier: Tier; bodyMd: string; version?: number }
 
 // The document library (C → B club home): documents the actor can read in one club.
 export interface LibraryDocument {
@@ -69,7 +69,7 @@ export interface AgentResult {
 export interface RunInspector {
   runGrants: Array<{ grant: Grant; label: string }>;      // label e.g. "Startup Club · Treasurer"
   sources: Array<{ id: string; name: string }>;
-  permitted: Array<{ id: string; title: string; tier: Tier }>;
+  permitted: Array<{ id: string; title: string; tier: Tier; version?: number }>;
   readInRun: Array<{ id: string; title: string }>;        // cited documents
   blocked?: Array<{ id: string; title: string | null; reason: AccessCell }>;  // only when the viewer manages the club; null title = "Restricted document"
   templateVersion: number;

@@ -144,7 +144,7 @@ describe.skipIf(!sql)('listAccessibleDocuments under RLS', () => {
   it('returns exactly id, title, tier and bodyMd', async () => {
     const docs = await listAccessibleDocuments(student, EVERY_GRANT, { sourceIds: EVERY_SOURCE, maxTier: 'usg_internal' });
     expect(docs.map((d) => d.id).sort()).toEqual(seeded.map((d) => d.id).sort());
-    for (const doc of docs) expect(Object.keys(doc).sort()).toEqual(['bodyMd', 'id', 'tier', 'title']);
+    for (const doc of docs) expect(Object.keys(doc).sort()).toEqual(['bodyMd', 'id', 'tier', 'title', 'version']);
   });
 
   it('returns nothing without sources or without grants', async () => {

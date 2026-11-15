@@ -1,7 +1,7 @@
 // Owner: B. I7 policy/metadata writes and remaining §14 routes on the real app role.
 import { sql } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
-import { usgTemplatesView, usgTemplateView, usgClubsView, usgRulePacksView } from '@/lib/distribution/usg-view';
+import { usgTemplatesView, usgTemplateView, usgClubsView } from '@/lib/distribution/usg-view';
 import { setClubPolicy } from '@/lib/distribution/club-policy';
 import { getTemplate, updateTemplate } from '@/lib/distribution/template-admin';
 import { installTemplate } from '@/lib/distribution/create-installation';
@@ -11,7 +11,7 @@ import { ACTIVE_ORG_COOKIE, PERSONA_COOKIE } from '@/lib/identity';
 import * as templateRoute from '@/app/api/usg/templates/[templateId]/route';
 import * as policyRoute from '@/app/api/usg/club-policy/[orgId]/route';
 import * as installRoute from '@/app/api/orgs/[orgId]/installations/route';
-import { ORG, TEMPLATE, USER, INSTALLATION } from '@db/seed/ids';
+import { DOCUMENT, ORG, TEMPLATE, USER, INSTALLATION } from '@db/seed/ids';
 import { actorFor, appSql, closeAppDb, inRolledBackApp } from './db';
 const probe = await appSql(); await probe?.end();
 afterAll(async () => { if (probe) await closeAppDb(); });
@@ -29,26 +29,18 @@ describe.skipIf(!probe)('USG policy and template management', () => {
     expect((await usgTemplatesView(actor)).templates.map(t => t.slug)).toContain('event-planning');
     expect((await usgTemplateView(actor, TEMPLATE.eventPlanning))?.versions[0].modelClasses).toEqual(['economy']);
     expect(await usgClubsView(actor)).toHaveLength(3);
-    expect((await usgRulePacksView(actor)).find(p => p.slug === 'usg-funding')?.versions[0].content).toMatchObject({ annualCapUsd: 8000 });
     const [{ count: before }] = await tx.execute<{ count: number }>(sql`select count(*)::int as count from audit_events where action = 'authz.denied'`);
-    for (const read of [usgTemplatesView, usgClubsView, usgRulePacksView]) await expect(read(await sam())).rejects.toMatchObject({ error: { code: 'forbidden' } });
+    for (const read of [usgTemplatesView, usgClubsView]) await expect(read(await sam())).rejects.toMatchObject({ error: { code: 'forbidden' } });
     const [{ count: after }] = await tx.execute<{ count: number }>(sql`select count(*)::int as count from audit_events where action = 'authz.denied'`);
-    expect(after - before).toBe(3);
+    expect(after - before).toBe(2);
   }));
-  it('names the templates that use each rule pack and what the template page explains', () => inRolledBackApp(async tx => {
+  it('gives the template page its purpose, USG documents and positions', () => inRolledBackApp(async () => {
     const actor = await avery();
-    const usedBy = async () => (await usgRulePacksView(actor)).find(p => p.slug === 'usg-funding')?.usedBy;
-    // Only templates whose version names the pack: Funding pre-check, not the review assistant.
-    expect((await usedBy())?.map(u => u.name)).toEqual(['Funding pre-check']);
-    expect((await usedBy())?.[0]).toMatchObject({ templateId: TEMPLATE.fundingPrecheck, version: 1, audience: 'positions', usableBy: ['treasurer', 'president'], installedCount: 3, global: true });
-    // A turned-off installation does not run the pack, so its club is not counted.
-    await tx.execute(sql`update agent_installations set enabled = false where id = ${INSTALLATION.archeryFundingPrecheck}`);
-    expect((await usedBy())?.[0].installedCount).toBe(2);
     const list = await usgTemplatesView(actor);
-    expect(list.rulePacks).toEqual([{ slug: 'usg-funding', label: 'USG Funding Guidelines 2026–27', version: 1, ruleCount: 13 }]);
-    expect(list.templates.find(t => t.id === TEMPLATE.fundingPrecheck)).toMatchObject({ rulePackSlug: 'usg-funding', purpose: expect.stringContaining('funding request') });
+    expect(list.templates.find(t => t.id === TEMPLATE.fundingPrecheck)).toMatchObject({ purpose: expect.stringContaining('funding request') });
+    expect(list).not.toHaveProperty('rulePacks');
     const detail = await usgTemplateView(actor, TEMPLATE.fundingPrecheck);
-    expect(detail?.usgDocuments).toContainEqual({ kind: 'rulebook', title: 'USG Funding Department Guidelines', tier: 'public' });
+    expect(detail?.usgDocuments).toContainEqual({ id: DOCUMENT.usgFundingRules, kind: 'rulebook', title: 'USG Funding Department Guidelines', tier: 'public' });
     expect(detail?.positions.map(p => p.slug)).toEqual(expect.arrayContaining(['president', 'treasurer']));
   }));
   it('applies a compatible policy, audits it, and never widens a template model ceiling', () => inRolledBackApp(async tx => {

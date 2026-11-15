@@ -92,7 +92,7 @@ Every screen uses real seed data (club names, document titles); never lorem ipsu
        - "Read in this run" (the cited documents);
        - "Blocked by rule", shown only to the club president or a USG admin. Titles the viewer
          can't read show as "Restricted document".
-    4. Versions (template, rule pack).
+    4. Versions (template, documents above v1).
     5. Billing (billed club, cost, quota remaining).
     6. Audit id.
   - Pending actions show inline as cards with Confirm and Reject.

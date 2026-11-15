@@ -1,7 +1,7 @@
 // Owner: B. The configuration editor's draft: the POST body for /api/templates/:id/versions (the
 // same shape as versionDraftSchema), its validation, and the fields that differ from the current version.
 import type { Audience, ModelClass, Tier } from '@/lib/contracts';
-import type { UsgPackOption, UsgPositionOption, UsgVersion } from '@/lib/distribution/usg-view';
+import type { UsgPositionOption, UsgVersion } from '@/lib/distribution/usg-view';
 import { AUDIENCES, audienceLabel, MODEL_CLASSES, MODEL_ORDER, plural, SOURCE_KINDS, sourceName, TIERS, toolOption } from '../template-config';
 
 export interface EditorState {
@@ -18,7 +18,8 @@ export const initialState = (latest: UsgVersion | undefined): EditorState => ({
   modelClasses: latest?.modelClasses ?? ['economy'], defaultModelClass: latest?.defaultModelClass ?? 'economy',
   systemPrompt: latest?.systemPrompt ?? '', rulePackSlug: latest?.rulePackSlug ?? '', changelog: '',
 });
-/** The request body, unchanged from the slug-based form: positions only for a positions audience, Public for All students. */
+/** The request body, unchanged from the slug-based form: positions only for a positions audience, Public for All students.
+ * `rulePackSlug` has no control and is carried over from the current version. */
 export const toBody = (s: EditorState): VersionBody => ({
   purpose: s.purpose.trim(), audience: s.audience, usableBy: s.audience === 'positions' ? s.usableBy : [],
   maxTier: s.audience === 'public' ? 'public' : s.maxTier, sourceKinds: s.sourceKinds, tools: s.tools,
@@ -38,10 +39,9 @@ export function validate(s: EditorState): Partial<Record<EditorField, string>> {
 }
 
 export interface FieldChange { field: string; before: string; after: string; detail?: string }
-export interface ChangeContext { positions: UsgPositionOption[]; rulePacks: UsgPackOption[] }
+export interface ChangeContext { positions: UsgPositionOption[] }
 const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every(x => b.includes(x));
 const list = (values: string[], name: (v: string) => string) => values.length ? values.map(name).join(', ') : 'None';
-const packName = (slug: string | null, packs: UsgPackOption[]) => !slug ? 'None' : packs.find(p => p.slug === slug)?.label ?? slug;
 const audienceName = (a: Audience) => AUDIENCES.find(x => x.slug === a)?.name ?? a;
 const words = (text: string) => plural(text.trim() ? text.trim().split(/\s+/).length : 0, 'word');
 
@@ -56,7 +56,6 @@ export function versionChanges(before: UsgVersion | undefined, after: VersionBod
   add('Instructions', before?.systemPrompt !== after.systemPrompt, before ? words(before.systemPrompt) : none, `${words(after.systemPrompt)}, edited`, after.systemPrompt);
   add('Knowledge sources', !sameSet(before?.sourceKinds ?? [], after.sourceKinds), list(before?.sourceKinds ?? [], sourceName), list(after.sourceKinds, sourceName));
   add('Reads up to', before?.maxTier !== after.maxTier, before ? TIERS[before.maxTier].name : none, TIERS[after.maxTier].name);
-  add('Rule pack', (before?.rulePackSlug ?? null) !== after.rulePackSlug, packName(before?.rulePackSlug ?? null, ctx.rulePacks), packName(after.rulePackSlug, ctx.rulePacks));
   add('Tools', !sameSet(before?.tools ?? [], after.tools), list(before?.tools ?? [], t => toolOption(t).name), list(after.tools, t => toolOption(t).name));
   add('Model classes', !sameSet(before?.modelClasses ?? [], after.modelClasses), list(MODEL_ORDER.filter(m => before?.modelClasses.includes(m)), m => MODEL_CLASSES[m as ModelClass].name), list(after.modelClasses, m => MODEL_CLASSES[m as ModelClass].name));
   add('Default model', before?.defaultModelClass !== after.defaultModelClass, before ? MODEL_CLASSES[before.defaultModelClass].name : none, MODEL_CLASSES[after.defaultModelClass].name);

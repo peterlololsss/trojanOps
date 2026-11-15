@@ -131,6 +131,7 @@ export function Inspector({ inspector }: { inspector: RunInspector }) {
         <ul>
           <li className="py-[4px]">{`Template v${inspector.templateVersion}`}</li>
           {inspector.rulePack && <li className="py-[4px]">{`${inspector.rulePack.label} v${inspector.rulePack.version}`}</li>}
+          {inspector.permitted.filter((d) => (d.version ?? 1) > 1).map((d) => <li key={d.id} className="py-[4px]">{`${d.title} v${d.version}`}</li>)}
         </ul>
       </Section>
 

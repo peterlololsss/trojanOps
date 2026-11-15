@@ -84,11 +84,12 @@ describe('toolKind', () => {
 });
 
 describe.skipIf(!probe)('runAgent', () => {
-  it('runs funding-precheck for the treasurer with capped grants, the rule pack and DB names', () => scenario(async () => {
+  it('runs funding-precheck for the treasurer with capped grants and DB names', () => scenario(async () => {
     const run = await runAgent(await actorFor(USER.taylor, ORG.startup), INSTALLATION.startupFundingPrecheck, 'Can we fund pitch night?');
     expect(run.inspector.permitted.map((d) => d.id).sort()).toEqual(
       [DOCUMENT.usgFundingRules, DOCUMENT.spring2026Budget, DOCUMENT.sponsorContacts].sort());
-    expect(run.reply).toContain('USG Funding Guidelines 2026–27 v1 · annual cap $8,000');
+    expect(run.reply).toContain('USG Funding Department Guidelines');
+    expect(run.inspector.rulePack).toBeUndefined();
     expect(run.inspector.runGrants.map((g) => g.label)).toContain('Startup Club · Treasurer');
     expect(run.inspector).toMatchObject({ billedClub: 'Startup Club', costMicro: 10_000, templateVersion: 1 });
     expect(run.inspector.sources.map((x) => x.name).sort()).toEqual(['Startup Club · Finance', 'USG rulebook']);
@@ -106,7 +107,7 @@ describe.skipIf(!probe)('runAgent', () => {
     expect(row).toMatchObject({
       installationId: INSTALLATION.startupFundingPrecheck, orgId: ORG.startup, billedOrgId: ORG.startup,
       userId: USER.taylor, input: 'Can we fund pitch night?', status: 'completed', model: 'mock', costMicro: 10_000,
-      templateVersion: 1, rulePackVersion: 1,
+      templateVersion: 1, rulePackVersion: null,
       output: { reply: run.reply, citations: run.citations },
     });
     expect([...row.accessibleDocumentIds].sort()).toEqual(run.inspector.permitted.map((d) => d.id).sort());

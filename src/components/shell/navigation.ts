@@ -38,7 +38,7 @@ export function navigationFor(actor: Actor, clubs: readonly Pick<MyAgentsClub, '
     scopes.push({ href: '/usg/templates', label: 'USG admin', match: '/usg', items: [
       { href: '/usg/templates', label: 'Templates' },
       { href: '/usg/clubs', label: 'Clubs and quotas' },
-      { href: '/usg/rule-packs', label: 'Rule packs' },
+      { href: '/usg/documents', label: 'Documents' },
       { href: '/usg/integrations', label: 'Integrations' },
       { href: '/usg/audit', label: 'Audit' },
     ] });

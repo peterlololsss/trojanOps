@@ -21,18 +21,24 @@ export function pgTextArray(values: readonly string[]): string {
 
 /**
  * Runs fn in one transaction after setting the RLS settings with set_config(..., true) (local to the
- * transaction). app.manage_org is set to the active org only when the actor is its president.
+ * transaction). app.manage_org is set to the active org only when the actor manages it: its president,
+ * or an admin when the active org is USG (checked against orgs.kind here, not trusted from the slug).
  */
 export async function withActor<T>(actor: Actor, scope: ActorScope, fn: (tx: Tx) => Promise<T>): Promise<T> {
   const grants = scope.grants ?? actor.grants;
   const sources = scope.sourceIds ?? [];
-  const manageOrg = actor.activeOrgId && actor.positions.includes('president') ? actor.activeOrgId : '';
+  const org = actor.activeOrgId ?? '';
+  const president = !!org && actor.positions.includes('president');
+  const admin = !!org && actor.positions.includes('admin');
   return getDb().transaction(async (tx) => {
     await tx.execute(sql`select
       set_config('app.user_id', ${actor.userId ?? ''}, true),
       set_config('app.grants', ${pgTextArray(grants)}, true),
       set_config('app.agent_sources', ${pgTextArray(sources)}, true),
-      set_config('app.manage_org', ${manageOrg}, true),
+      set_config('app.manage_org', case
+        when ${president}::boolean then ${org}
+        when ${admin}::boolean and exists (select 1 from orgs where id::text = ${org} and kind = 'usg') then ${org}
+        else '' end, true),
       set_config('app.max_tier', ${scope.maxTier ?? 'usg_internal'}, true)`);
     return fn(tx);
   });

@@ -1,6 +1,4 @@
-Individual organizations may receive a maximum of $8,000 from the USG Funding Department per year.
-
-USC Undergraduate Student Government, Funding Department Guidelines, current as of October 21, 2026. Copied from the public guidelines linked on [usg.usc.edu/branches/funding](https://usg.usc.edu/branches/funding/) on November 15, 2026, with two typos corrected. TrojanOps is a student project and is not affiliated with or endorsed by USG. The USG funding page adds: "Each RSO can have up to 4 events funded per semester as long as it remains under $8,000 from the USG Funding Department per year."
+USC Undergraduate Student Government Funding Department Guidelines, current as of October 21, 2026.
 
 ## Section 1: Funding Application Timeline
 

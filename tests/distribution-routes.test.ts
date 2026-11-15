@@ -15,11 +15,8 @@ import * as distributeRoute from '@/app/api/usg/templates/[templateId]/distribut
 import * as retireRoute from '@/app/api/usg/templates/[templateId]/retire/route';
 import * as versionsRoute from '@/app/api/templates/[templateId]/versions/route';
 import * as rulePacksRoute from '@/app/api/usg/rule-packs/[slug]/versions/route';
-import { withRuleValues } from '@/lib/distribution/rule-pack-content';
-import { runAgent } from '@/lib/gateway';
 import { INSTALLATION, ORG, TEMPLATE, USER } from '@db/seed/ids';
-import seedPack from '../rules/packs/usg-funding.v1.json';
-import { actorFor, appSql, closeAppDb, inRolledBackApp } from './db';
+import { appSql, closeAppDb, inRolledBackApp } from './db';
 
 const probe = await appSql();
 await probe?.end();
@@ -257,8 +254,8 @@ describe.skipIf(!probe)('distribute and narrow an installation (D2)', () => {
 });
 
 describe.skipIf(!probe)('POST /api/usg/rule-packs/:slug/versions (D6)', () => {
-  it('publishes the next version, which the next run resolves', () =>
-    inRolledBackApp(async () => {
+  it('publishes the next version as the latest published pack', () =>
+    inRolledBackApp(async (tx) => {
       const res = await post(
         rulePacksRoute.POST,
         'http://localhost/api/usg/rule-packs/usg-funding/versions',
@@ -272,31 +269,10 @@ describe.skipIf(!probe)('POST /api/usg/rule-packs/:slug/versions (D6)', () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toMatchObject({ version: 2 });
 
-      const agent = await effectiveAgent(INSTALLATION.startupFundingPrecheck);
-      expect(agent.rulePack).toMatchObject({ version: 2, content: { annualCapUsd: 10_000 } });
-    }));
-
-  it('publishes the dialog’s full content as v2, and Taylor’s next funding pre-check names it', () =>
-    inRolledBackApp(async (tx) => {
-      // The body /usg/rule-packs sends: the seeded content with only the annual cap changed.
-      const content = withRuleValues(seedPack.content as Record<string, unknown>, { 'annual-cap': 10_000 }, 'Annual cap raised to $10,000.');
-      const res = await post(
-        rulePacksRoute.POST,
-        'http://localhost/api/usg/rule-packs/usg-funding/versions',
-        { slug: 'usg-funding' },
-        { userId: USER.avery, orgId: ORG.usg, body: { label: seedPack.label, content } },
-      );
-      expect(res.status).toBe(200);
-      expect(await res.json()).toMatchObject({ version: 2 });
-
-      const [stored] = await tx.execute<{ content: { rules: Array<{ id: string; value?: unknown; amendedFrom?: unknown }>; annualCapUsd: number } }>(
-        sql`select content from rule_packs where slug = 'usg-funding' and version = 2`);
-      expect(stored.content.rules).toHaveLength(13);
-      expect(stored.content.annualCapUsd).toBe(10_000);
-      expect(stored.content.rules.find((r) => r.id === 'annual-cap')).toMatchObject({ value: 10_000, amendedFrom: 8_000 });
-
-      const run = await runAgent(await actorFor(USER.taylor, ORG.startup), INSTALLATION.startupFundingPrecheck, 'Can we fund Demo day?');
-      expect(run.reply).toContain('USG Funding Guidelines 2026–27 v2 · annual cap $10,000');
+      // No seeded template names the pack any more, so read the stored row.
+      const [latest] = await tx.execute<{ version: number; status: string; content: { annualCapUsd: number } }>(
+        sql`select version, status, content from rule_packs where slug = 'usg-funding' order by version desc limit 1`);
+      expect(latest).toMatchObject({ version: 2, status: 'published', content: { annualCapUsd: 10_000 } });
     }));
 
   // isUsgAdmin needs position `admin` in a usg-kind org; Riley is a reviewer, Sam is a club

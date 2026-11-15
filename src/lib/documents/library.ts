@@ -2,10 +2,10 @@
 // Sources, orgs and positions have no RLS and are read with getDb(); documents are read and written
 // only inside withActor (I1), and the documents_read / documents_insert policies are the filter.
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, inArray, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { requireUser } from '../api';
-import { grantsFor, isUuid } from '../authz';
+import { grantsFor, isUsgAdmin, isUuid } from '../authz';
 import { now } from '../clock';
 import { AppError, type Actor, type LibraryDocument } from '../contracts';
 import { getDb } from '../db/client';
@@ -60,13 +60,20 @@ export type UploadDocumentInput = z.infer<typeof uploadDocumentInput>;
 
 const invalid = (message: string) => new AppError({ code: 'invalid', message });
 
-/** A club president uploads a document to one of the club's sources. read_grants is computed by the
- * documents_read_grants trigger; the documents_insert policy checks app.manage_org. */
+/** The actor manages orgId's library: it is the active org and the actor is its president, or a USG
+ * admin in USG. The same condition withActor uses to set app.manage_org. */
+export async function managesLibrary(actor: Actor, orgId: string): Promise<boolean> {
+  if (actor.activeOrgId !== orgId) return false;
+  return actor.positions.includes('president') || isUsgAdmin(actor);
+}
+
+/** A club president (or a USG admin, for USG) uploads a document to one of the org's sources.
+ * read_grants is computed by the documents_read_grants trigger; the documents_insert policy checks
+ * app.manage_org. */
 export async function uploadDocument(actor: Actor, orgId: string, input: UploadDocumentInput): Promise<LibraryDocument> {
   const userId = requireUser(actor);
-  // The same condition withActor uses to set app.manage_org.
-  if (actor.activeOrgId !== orgId || !actor.positions.includes('president')) {
-    throw new AppError({ code: 'forbidden', message: 'Only the club president can upload documents. Switch to that club first.' });
+  if (!await managesLibrary(actor, orgId)) {
+    throw new AppError({ code: 'forbidden', message: 'Only the club president, or a USG admin for USG, can upload documents. Switch to that organization first.' });
   }
 
   const db = getDb();
@@ -106,4 +113,63 @@ export async function uploadDocument(actor: Actor, orgId: string, input: UploadD
   });
 
   return { id, title: input.title, tier: input.tier, sourceId: source.id, sourceName: source.name, version: 1, createdAt };
+}
+
+export const publishDocumentVersionInput = z.object({
+  bodyMd: z.string().max(100_000).refine((s) => s.trim().length > 0, 'Enter the document text.'),
+  baseVersion: z.number().int().min(1),
+}).strict();
+export type PublishDocumentVersionInput = z.infer<typeof publishDocumentVersionInput>;
+
+/** The library's manager replaces a document's text as version n+1. The document keeps its id, source,
+ * tier and grants, so agents read the new text on their next run. The documents_update policy checks
+ * app.manage_org; the row must also be readable (UPDATE … WHERE applies the read policy). */
+export async function publishDocumentVersion(
+  actor: Actor, orgId: string, documentId: string, input: PublishDocumentVersionInput,
+): Promise<{ version: number }> {
+  const userId = requireUser(actor);
+  if (!await managesLibrary(actor, orgId)) {
+    throw new AppError({ code: 'forbidden', message: 'Only the organization’s manager can publish a new version. Switch to that organization first.' });
+  }
+  if (!isUuid(documentId)) throw new AppError({ code: 'not_found', message: 'Document not found.' });
+  const [sourceIds, grants] = await Promise.all([librarySourceIds(orgId), grantsFor(userId, orgId)]);
+  const version = await withActor(actor, { grants, sourceIds }, async (tx) => {
+    const [current] = await tx.select({ version: documents.version, bodyMd: documents.bodyMd }).from(documents)
+      .where(and(eq(documents.id, documentId), eq(documents.orgId, orgId))).for('update');
+    if (!current) throw new AppError({ code: 'not_found', message: 'Document not found.' });
+    if (current.version !== input.baseVersion) {
+      throw invalid(`This document changed since you opened it. Reload to see version ${current.version}.`);
+    }
+    if (current.bodyMd === input.bodyMd) throw invalid('The text is unchanged. Edit it before publishing a new version.');
+    const [row] = await tx.update(documents)
+      .set({ bodyMd: input.bodyMd, version: sql`${documents.version} + 1`, uploadedBy: userId })
+      .where(and(eq(documents.id, documentId), eq(documents.orgId, orgId), eq(documents.version, input.baseVersion)))
+      .returning({ version: documents.version });
+    if (!row) throw new AppError({ code: 'forbidden', message: 'Only the organization’s manager can publish a new version.' });
+    await audit('document.upload', {
+      actorUserId: userId, actingOrgId: orgId, targetType: 'document', targetId: documentId,
+      details: { version: row.version },
+    }, tx);
+    return row.version;
+  });
+  return { version };
+}
+
+export interface ManagedDocument extends LibraryDocument { bodyMd: string; sourceKind: string }
+
+/** One document of orgId's library with its text, read under the actor's own RLS scope for that org. */
+export async function getLibraryDocument(actor: Actor, orgId: string, documentId: string): Promise<ManagedDocument | null> {
+  const userId = requireUser(actor);
+  if (!isUuid(orgId) || !isUuid(documentId)) return null;
+  const [sourceIds, grants] = await Promise.all([librarySourceIds(orgId), grantsFor(userId, orgId)]);
+  const [doc] = await withActor(actor, { grants, sourceIds }, async (tx) =>
+    tx.select({
+      id: documents.id, title: documents.title, tier: documents.tier, sourceId: documents.sourceId,
+      sourceName: sources.name, sourceKind: sources.kind, version: documents.version,
+      createdAt: documents.createdAt, bodyMd: documents.bodyMd,
+    })
+      .from(documents)
+      .innerJoin(sources, eq(sources.id, documents.sourceId))
+      .where(eq(documents.id, documentId)));
+  return doc ?? null;
 }

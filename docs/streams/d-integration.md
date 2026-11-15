@@ -79,7 +79,7 @@ Stubs by H3.
 | D3 | Sam publishes Recruiting Q&A. Lee → `/directory` → one run; the Inspector shows public sources only |
 | D4 | Casey, then Taylor → `/me/agents`; Sam → Startup permission preview |
 | D5 | Sam sets Casey to $0.00; Casey's run is blocked. Lee's second public run is blocked |
-| D6 | Avery publishes usg-funding v2 at $10,000; Taylor's funding-precheck names "USG Funding Guidelines 2026–27 v2" |
+| D6 | Avery publishes the USG Funding Department Guidelines as v2 (§3 at $10,000) in /usg/documents; Taylor's funding-precheck names "USG Funding Department Guidelines (v2)" |
 | D7 | Sam transfers Treasurer Taylor → Jordan; compare My agents; Avery syncs, nothing changes |
 | D8 | Avery → `/usg/audit`; Sam → club audit. Metadata only; unreadable titles read "Restricted document" |
 

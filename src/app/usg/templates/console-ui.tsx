@@ -69,7 +69,7 @@ export function Pagination({ page, setPage, total, pageSize = 10 }: { page: numb
 }
 export function ConsoleNav() {
   return <nav aria-label="USG distribution" className="mb-6 flex flex-wrap gap-4 border-b border-border pb-3">
-    <Link className="text-primary underline" href="/usg/templates">Templates</Link><Link className="text-primary underline" href="/usg/clubs">Clubs</Link><Link className="text-primary underline" href="/usg/rule-packs">Rule packs</Link>
+    <Link className="text-primary underline" href="/usg/templates">Templates</Link><Link className="text-primary underline" href="/usg/clubs">Clubs</Link><Link className="text-primary underline" href="/usg/documents">Documents</Link>
   </nav>;
 }
 export function Section({ title, children }: { title: string; children: ReactNode }) {

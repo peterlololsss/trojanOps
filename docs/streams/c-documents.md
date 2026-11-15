@@ -10,7 +10,7 @@ views. Your paths are in `AGENTS.md`.
 |---|---|---|
 | WP-8 | H2–6 | Upload (president only), `listAccessibleDocuments` (real by H5), `explainAccess` with a test that it agrees with RLS |
 | WP-9 | H6–11 | Run page with inspector and pending actions, preview matrix, club and USG audit views; D4, D8 |
-| WP-14 | H12–16 | Retrieval, tools and verified citations on the real runtime; rule-pack evaluation for `funding-precheck` |
+| WP-14 | H12–16 | Retrieval, tools and verified citations on the real runtime; `funding-precheck` checks against the USG Funding Department Guidelines |
 
 ## You provide
 

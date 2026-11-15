@@ -11,13 +11,10 @@ const column = createColumnHelper<typeof features, UsgTemplateRow>();
 
 export function TemplatesTable({ data }: { data: UsgTemplatesView }) {
   const [query, setQuery] = useState(''); const [page, setPage] = useState(1);
-  const packLabel = (slug: string | null) => slug ? data.rulePacks.find(p => p.slug === slug)?.label ?? slug : null;
-  const found = data.templates.filter(t => `${t.name} ${t.slug} ${t.purpose} ${packLabel(t.rulePackSlug) ?? ''}`.toLowerCase().includes(query.toLowerCase()));
+  const found = data.templates.filter(t => `${t.name} ${t.slug} ${t.purpose}`.toLowerCase().includes(query.toLowerCase()));
   const columns = column.columns([
     column.accessor('name', { id: 'name', header: 'Template', cell: ({ row }) => <Link className="whitespace-nowrap text-primary underline" href={`/usg/templates/${row.original.id}`}>{row.original.name}</Link> }),
     column.accessor('purpose', { header: 'What it does', cell: ({ getValue }) => getValue() ? <span className="block min-w-[180px] max-w-[300px]">{getValue()}</span> : <span className="text-muted-foreground">No version published yet</span> }),
-    column.accessor('rulePackSlug', { header: 'Rule pack', cell: ({ getValue }) => getValue()
-      ? <Link className="whitespace-nowrap text-primary underline" href="/usg/rule-packs">{packLabel(getValue())}</Link> : <span className="text-muted-foreground">None</span> }),
     column.accessor('distribution', { header: 'Distribution', cell: ({ getValue }) => <span className={chipClass}>{getValue() === 'required' && <Lock className="size-3" aria-hidden="true" />}{label(getValue())}</span> }),
     column.accessor('target', { header: 'Target', cell: ({ row }) => <span className="whitespace-nowrap">{data.targets.find(t => t.slug === row.original.target)?.name ?? row.original.target}
       <span className="block text-muted-foreground">{`Installed in ${row.original.installedCount} of ${row.original.targetCount}`}</span></span> }),
@@ -26,7 +23,7 @@ export function TemplatesTable({ data }: { data: UsgTemplatesView }) {
     column.accessor('distributedAt', { header: 'Last distributed', cell: ({ getValue }) => getValue() ? absoluteTime(getValue()) : 'Not distributed' }),
   ]);
   const table = useTable({ features, data: found.slice((page - 1) * 10, page * 10), columns, getRowId: row => row.id });
-  return <div className="space-y-4"><SearchBar value={query} onChange={v => { setQuery(v); setPage(1); }} count={found.length} placeholder="Search by name, purpose or rule pack" />
+  return <div className="space-y-4"><SearchBar value={query} onChange={v => { setQuery(v); setPage(1); }} count={found.length} placeholder="Search by name or purpose" />
     <DataTable table={table} caption="USG agent templates" rowHeaderColumn="name" sorted={{ id: 'name', direction: 'asc' }} numericColumns={['latestVersion']} monoColumns={['distributedAt']} minWidth={1100} alignTop
       empty={data.templates.length ? 'No templates match your search. Clear filters to see all templates.' : 'No global templates are published yet. Ask the platform team to seed the USG templates.'} />
     <Pagination page={page} setPage={setPage} total={found.length} /></div>;

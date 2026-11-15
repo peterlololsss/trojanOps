@@ -5,12 +5,13 @@ import type { AgentRuntime } from '../contracts';
 export const MOCK_COST_MICRO = 10_000;
 
 const firstSentence = (text: string) => (text.match(/^.*?[.!?](\s|$)/)?.[0] ?? text).trim();
+const titled = (d: { title: string; version?: number }) => (d.version && d.version > 1 ? `${d.title} (v${d.version})` : d.title);
 
 export const mockRuntime: AgentRuntime = {
   async run(agent, _actor, _input, { accessibleDocuments: docs }) {
     const lines = [
       docs.length
-        ? `I can read ${docs.length} document${docs.length === 1 ? '' : 's'}: ${docs.map((d) => d.title).join(', ')}.`
+        ? `I can read ${docs.length} document${docs.length === 1 ? '' : 's'}: ${docs.map(titled).join(', ')}.`
         : 'I cannot read any documents for this run.',
     ];
     if (agent.rulePack) {

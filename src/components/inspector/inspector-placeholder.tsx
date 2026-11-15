@@ -6,7 +6,7 @@ const SECTIONS: Array<[title: string, note: string]> = [
   ['Run grants', 'The club positions this run acts with.'],
   ['Sources', 'The document sources this agent may read.'],
   ['Documents', 'Permitted documents and the ones the answer cites.'],
-  ['Versions', 'The template and rule pack versions in use.'],
+  ['Versions', 'The template and document versions in use.'],
   ['Billing', 'The billed club, the cost of the run and the quota left.'],
   ['Audit', 'The audit event that records the run.'],
 ];

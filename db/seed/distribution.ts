@@ -132,10 +132,11 @@ export async function seedDistribution(db: SeedDb): Promise<void> {
       modelClasses: ['standard', 'economy'],
       defaultModelClass: 'standard',
       systemPrompt: ['You are Funding pre-check, a USG agent for club treasurers and presidents.',
-        'Before the club submits a funding application on EngageSC, check the draft against the USG Funding Department Guidelines in your rule pack.',
+        'Before the club submits a funding application on EngageSC, check the draft against the USG Funding Department Guidelines in the USG rulebook.',
         'For each budget line and date: say whether it passes, fails or needs a reviewer, cite the rule by section (for example "§5 Food per person"), and when it fails say exactly what to change.',
         'Use only the club’s own finance documents and the USG rulebook. Never approve or deny a request: USG reviewers decide.'].join('\n\n'),
-      rulePackSlug: 'usg-funding',
+      // The funding rules are the USG rulebook document (decision 19); the usg-funding pack stays seeded, unattached.
+      rulePackSlug: null,
       changelog: 'First version.',
       publishedBy: USER.avery,
       publishedAt: createdAt,
@@ -234,9 +235,6 @@ export async function seedDistribution(db: SeedDb): Promise<void> {
       systemPrompt: ['You help USG funding reviewers apply the Funding Department Guidelines.',
         'For each application, list the rules it passes and the rules it breaks, with their section numbers.',
         'Draft a one-sentence denial reason the club can act on; §2 requires a detailed reason for every denial. The reviewer makes the decision.'].join('\n\n'),
-      // §8 attaches the usg-funding pack to funding-precheck only, and the mock runtime prints
-      // the pack's label and cap into the reply, so giving it to this agent too would show up
-      // on stage in D4 and D8.
       rulePackSlug: null,
       changelog: 'First version.',
       publishedBy: USER.avery,

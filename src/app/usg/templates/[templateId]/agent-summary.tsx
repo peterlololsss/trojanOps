@@ -22,7 +22,6 @@ export function AgentSummary({ data, action }: { data: UsgTemplateView; action?:
   </div>;
   if (!latest) return <section aria-labelledby="agent-summary" className="rounded-md border border-border p-4">{header('No version published yet')}</section>;
 
-  const pack = latest.rulePackSlug ? data.rulePacks.find(p => p.slug === latest.rulePackSlug) : undefined;
   const models = MODEL_ORDER.filter(m => latest.modelClasses.includes(m))
     .sort((a, b) => Number(b === latest.defaultModelClass) - Number(a === latest.defaultModelClass))
     .map(m => m === latest.defaultModelClass ? `${MODEL_CLASSES[m].name} (default)` : MODEL_CLASSES[m].name);
@@ -42,14 +41,9 @@ export function AgentSummary({ data, action }: { data: UsgTemplateView; action?:
           const docs = owner === 'usg' ? data.usgDocuments.filter(d => d.kind === kind && withinTier(d.tier, latest.maxTier)) : [];
           return <li key={kind}>
             <p><span className="font-semibold">{sourceName(kind)}</span> <Badge className="ml-1 align-middle">{scopeLabel(owner)}</Badge></p>
-            {docs.length > 0 && <ul className="mt-1 space-y-1">{docs.map(d => <li key={d.title} className="flex items-center gap-2"><FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />{d.title}</li>)}</ul>}
+            {docs.length > 0 && <ul className="mt-1 space-y-1">{docs.map(d => <li key={d.id} className="flex items-center gap-2"><FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><Link className="text-primary underline" href={`/usg/documents/${d.id}`}>{d.title}</Link></li>)}</ul>}
           </li>;
         })}</ul> : <p>None</p>}
-      </Row>
-      <Row term="Rule pack">
-        {!latest.rulePackSlug ? <p>None</p>
-          : pack ? <p><Link className="text-primary underline" href="/usg/rule-packs">{`${pack.label} · v${pack.version} · ${plural(pack.ruleCount, 'rule')}`}</Link></p>
-          : <p><span className="font-mono text-xs">{latest.rulePackSlug}</span> (not published)</p>}
       </Row>
       <Row term="Tools"><p>{latest.tools.length ? latest.tools.map(t => toolOption(t).name).join(', ') : 'None'}</p></Row>
       <Row term="Model"><p>{models.join(', ')}</p></Row>

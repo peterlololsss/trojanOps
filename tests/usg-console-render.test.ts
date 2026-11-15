@@ -1,167 +1,75 @@
-// Owner: B (WP-6). Markup of the USG rule-pack and template pages, rendered to static HTML in node (no
-// browser, no database) from the seeded funding pack: the rule-pack card and its publish review (D6),
-// the template configuration, and the configuration editor's review.
+// Owner: B (WP-6). Markup of the USG console's template and documents pages, rendered to static HTML in
+// node (no browser, no database): the template configuration and its editor review, the documents
+// list and detail, the Markdown renderer, the line diff and the publish review (D6).
+import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { PackReview, reachSentences } from '@/app/usg/rule-packs/publish-pack-dialog';
-import { RulePackCard, UsedBy } from '@/app/usg/rule-packs/rule-pack-card';
+import { consequence, DocumentDetail, DocumentReview } from '@/app/usg/documents/[documentId]/document-detail';
+import { DocumentBody, parseDocument } from '@/app/usg/documents/document-body';
+import { DocumentsTable } from '@/app/usg/documents/documents-table';
+import { lineChanges, lineDiff, MAX_DIFF_CELLS } from '@/app/usg/documents/line-diff';
 import { AgentSummary } from '@/app/usg/templates/[templateId]/agent-summary';
 import { initialState, reachSentences as versionReach, toBody, validate, versionChanges } from '@/app/usg/templates/[templateId]/version-draft';
 import { VersionEditor, VersionReview } from '@/app/usg/templates/[templateId]/version-editor';
 import { TemplatesTable } from '@/app/usg/templates/templates-table';
-import {
-  formatRuleValue, isAmended, parseRulePackContent, ruleValueChanges, ruleValues, valueError, withRuleValues,
-} from '@/lib/distribution/rule-pack-content';
-import type { UsgPack, UsgTemplateView, UsgVersion } from '@/lib/distribution/usg-view';
-import { TEMPLATE } from '@db/seed/ids';
-import seedPack from '../rules/packs/usg-funding.v1.json';
+import type { UsgTemplateView, UsgVersion } from '@/lib/distribution/usg-view';
+import type { UsgDocumentRow, UsgDocumentUser, UsgDocumentView } from '@/lib/documents/usg-documents';
+import { DOCUMENT, ORG, TEMPLATE } from '@db/seed/ids';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {}, push: () => {}, replace: () => {} }) }));
 
 /** Visible text: tags dropped, entities decoded, whitespace collapsed. */
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, '\'').replace(/&quot;/g, '"').replace(/&amp;/g, '&')
-  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ');
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').replace(/ ,/g, ',');
 const render = (element: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(element);
-/** Narration the pages must not carry: they show the product, not explanations of it. */
-const META = ['What is a rule pack', 'Built for', 'Demo runtime', 'Example', 'Copied on', 'Corrections'];
-const expectNoMeta = (page: string) => { for (const phrase of META) expect(page).not.toContain(phrase); };
+/** The pages show the product, not narration about it, and rule packs are not part of it. */
+const ABSENT = ['Rule pack', 'rule pack', 'What is a rule pack', 'Built for', 'Demo runtime', 'Example', 'Copied on', 'Corrections'];
+const expectProductOnly = (page: string, except: string[] = []) => { for (const phrase of ABSENT.filter(p => !except.includes(p))) expect(page).not.toContain(phrase); };
 
-const content = seedPack.content as Record<string, unknown>;
-const fundingUser = { templateId: TEMPLATE.fundingPrecheck, name: 'Funding pre-check', version: 1, audience: 'positions' as const, usableBy: ['treasurer', 'president'], installedCount: 4, global: true };
-const pack: UsgPack = {
-  slug: 'usg-funding', usedBy: [fundingUser],
-  versions: [{ version: 1, status: 'published', label: seedPack.label, content, publishedAt: '2026-11-15T18:00:00.000Z' }],
-};
+const guidelines = readFileSync(new URL('../db/seed/docs/usg-funding-rules.md', import.meta.url), 'utf8');
+const reviewerNotes = readFileSync(new URL('../db/seed/docs/reviewer-notes.md', import.meta.url), 'utf8');
 
 const prompt = ['You are Funding pre-check, a USG agent for club treasurers and presidents.',
   'For each budget line and date: say whether it passes, fails or needs a reviewer, cite the rule by section.'].join('\n\n');
 const v1: UsgVersion = {
   version: 1, purpose: 'Checks a funding request against the USG funding rules before you submit it.', audience: 'positions',
   usableBy: ['treasurer', 'president'], maxTier: 'officers', sourceKinds: ['rulebook', 'finance'], tools: [],
-  modelClasses: ['standard', 'economy'], defaultModelClass: 'standard', systemPrompt: prompt, rulePackSlug: 'usg-funding',
+  modelClasses: ['standard', 'economy'], defaultModelClass: 'standard', systemPrompt: prompt, rulePackSlug: null,
   changelog: 'First version.', publishedAt: '2026-11-15T18:00:00.000Z',
 };
 const view = (patch: Partial<UsgTemplateView> = {}): UsgTemplateView => ({
   template: {
     id: TEMPLATE.fundingPrecheck, slug: 'funding-precheck', name: 'Funding pre-check', distribution: 'required', target: 'all',
-    status: 'active', latestVersion: 1, distributedAt: '2026-11-15T18:00:00.000Z', installedCount: 3, targetCount: 3,
-    purpose: v1.purpose, rulePackSlug: 'usg-funding',
+    status: 'active', latestVersion: 1, distributedAt: '2026-11-15T18:00:00.000Z', installedCount: 3, targetCount: 3, purpose: v1.purpose,
   },
   versions: [v1],
   targets: [{ slug: 'all', name: 'All active clubs', clubs: [{ id: 'a', name: 'Archery Club' }, { id: 'd', name: 'Dance Club' }, { id: 's', name: 'Startup Club' }] }],
-  rulePacks: [{ slug: 'usg-funding', label: 'USG Funding Guidelines 2026–27', version: 1, ruleCount: 13 }],
   positions: [{ slug: 'member', name: 'Member' }, { slug: 'president', name: 'President' }, { slug: 'secretary', name: 'Secretary' }, { slug: 'treasurer', name: 'Treasurer' }],
-  usgDocuments: [{ kind: 'rulebook', title: 'USG Funding Department Guidelines', tier: 'public' }, { kind: 'usg_internal', title: 'Reviewer notes', tier: 'usg_internal' }],
+  usgDocuments: [
+    { id: DOCUMENT.usgFundingRules, kind: 'rulebook', title: 'USG Funding Department Guidelines', tier: 'public' },
+    { id: DOCUMENT.reviewerNotes, kind: 'usg_internal', title: 'Reviewer notes', tier: 'usg_internal' },
+  ],
   ...patch,
 });
 
-describe('rule-pack content', () => {
-  const parsed = parseRulePackContent(content)!;
-  it('reads the seeded guidelines and formats values with their units', () => {
-    expect(parsed.rules).toHaveLength(13);
-    expect(parsed.source).toMatchObject({ title: 'Funding Department Guidelines', currentAsOf: '2026-10-21' });
-    const rule = (id: string) => parsed.rules.find(r => r.id === id)!;
-    expect(rule('annual-cap')).not.toHaveProperty('example');
-    expect(formatRuleValue(rule('annual-cap'))).toBe('$8,000 per year');
-    expect(formatRuleValue(rule('vendor-lead-time'))).toBe('6 academic weeks before the first payment is due');
-    expect(formatRuleValue(rule('weekly-window'))).toBe('Wednesday 11:59 PM');
-    expect(formatRuleValue(rule('not-eligible'))).toBe('18 expense types');
-    expect(rule('not-eligible').note).toMatch(/^Any items critical to the function of the program/);
-  });
-  it('falls back to null for content without a well-formed rule list', () => {
-    expect(parseRulePackContent({ annualCapUsd: 8000 })).toBeNull();
-    expect(parseRulePackContent({ rules: [{ id: 'x', group: 'limits' }] })).toBeNull();
-    expect(parseRulePackContent({ rules: [...(content.rules as unknown[]), (content.rules as unknown[])[0]] })).toBeNull();
-  });
-  it('keeps everything but the edited values, mirrors the cap and stores the note', () => {
-    const values = { ...ruleValues(parsed), 'annual-cap': 10000 };
-    expect(ruleValueChanges(parsed, values)).toEqual([{ id: 'annual-cap', section: '§3', title: 'Annual maximum per club', before: '$8,000', after: '$10,000', unit: 'per year' }]);
-    const next = withRuleValues(content, values, 'Cap raised after the fall budget vote.');
-    expect(next).toMatchObject({ annualCapUsd: 10000, source: content.source, changeNote: 'Cap raised after the fall budget vote.' });
-    expect(parseRulePackContent(next)!.rules).toHaveLength(13);
-    expect(withRuleValues(next, values, '  ')).not.toHaveProperty('changeNote');
-  });
-  it('marks an amended value with USG’s original, across later versions, until it is set back', () => {
-    const rule = (c: Record<string, unknown>, id: string) => parseRulePackContent(c)!.rules.find(r => r.id === id)!;
-    const v2 = withRuleValues(content, { ...ruleValues(parsed), 'annual-cap': 10000 }, '');
-    expect(rule(v2, 'annual-cap')).toMatchObject({ value: 10000, amendedFrom: 8000 });
-    expect(isAmended(rule(v2, 'annual-cap'))).toBe(true);
-    expect(rule(v2, 'food-per-person')).not.toHaveProperty('amendedFrom');
-    const v3 = withRuleValues(v2, { ...ruleValues(parseRulePackContent(v2)!), 'annual-cap': 12000 }, '');
-    expect(rule(v3, 'annual-cap')).toMatchObject({ value: 12000, amendedFrom: 8000 });
-    const v4 = withRuleValues(v3, { ...ruleValues(parseRulePackContent(v3)!), 'annual-cap': 8000 }, '');
-    expect(rule(v4, 'annual-cap')).not.toHaveProperty('amendedFrom');
-    expect(parseRulePackContent(v4)!.rules.some(isAmended)).toBe(false);
-  });
-  it('says why a value is refused', () => {
-    const rule = (id: string) => parsed.rules.find(r => r.id === id)!;
-    expect(valueError(rule('travel-lead-time'), 8.5)).toMatch(/whole number/);
-    expect(valueError(rule('annual-cap'), -1)).toMatch(/0 or more/);
-    expect(valueError(rule('food-per-person'), 37.5)).toBeNull();
-    expect(valueError(rule('weekly-window'), ' ')).toMatch(/Enter a value/);
-  });
-});
-
-describe('/usg/rule-packs', () => {
-  it('shows the source, who uses the pack and every rule with its section, value and checker', () => {
-    const html = render(createElement(RulePackCard, { pack }));
-    const page = text(html);
-    expect(page).toContain('USG Funding Guidelines 2026–27');
-    expect(page).toContain('Published v1');
-    expect(html).toContain(`href="${(seedPack.content.source as { url: string }).url}"`);
-    expect(page).toContain('Funding Department Guidelines, current as of Oct 21, 2026');
-    expect(page).toContain('USG web page');
-    expect(page).toContain('Used by Funding pre-check · 4 clubs · Treasurer, President');
-    expect(html).toContain(`href="/usg/templates/${TEMPLATE.fundingPrecheck}"`);
-    for (const heading of ['Deadlines · 7 rules', 'Limits · 5 rules', 'Not eligible · 1 rule']) expect(page).toContain(heading);
-    expect(page).toContain('Section Rule Value Checked by');
-    expect(page).toMatch(/§3 Annual maximum per club USG wording .*\$8,000 per year Pre-check/);
-    expect(page).toMatch(/Fixing an incomplete application USG wording .*2 business days USG reviewer/);
-    expect(page).toContain('Gifts and gift cards');
-    expect(page).toContain('Exception: Any items critical to the function of the program may be considered as an exception to this rule at the board’s discretion.');
-    expect(page).toContain('Publish new version');
-    expect(page).toContain('Version history (1)');
-    expect(html).toContain('id="usg-funding-group-limits"');
-    expectNoMeta(page);
-    for (const gone of ['Meant for the agent', 'because it depends', 'When to apply', 'Copied from', 'not affiliated', 'for the agent to flag']) expect(page).not.toContain(gone);
-  });
-  it('marks an amended rule', () => {
-    const v2 = withRuleValues(content, { ...ruleValues(parseRulePackContent(content)!), 'annual-cap': 10000 }, 'Cap raised.');
-    const amended: UsgPack = { ...pack, versions: [{ version: 2, status: 'published', label: seedPack.label, content: v2, publishedAt: '2026-11-15T19:00:00.000Z' }, ...pack.versions] };
-    const page = text(render(createElement(RulePackCard, { pack: amended })));
-    expect(page).toMatch(/Annual maximum per club USG wording \(before amendment\) .*\$10,000 per year Amended · USG: \$8,000 Pre-check/);
-    expect(page).toContain('Cap raised.');
-    expectNoMeta(page);
-  });
-  it('links only USG’s own templates under Used by', () => {
-    const club = { ...fundingUser, templateId: TEMPLATE.handoff, name: 'Club handoff', global: false, audience: 'members' as const, usableBy: [], installedCount: 1 };
-    const html = render(createElement(UsedBy, { users: [fundingUser, club] }));
-    expect(html).toContain(`href="/usg/templates/${TEMPLATE.fundingPrecheck}"`);
-    expect(html).not.toContain(`href="/usg/templates/${TEMPLATE.handoff}"`);
-    expect(text(html)).toContain('Club handoff · 1 club · All members');
-    expect(text(render(createElement(UsedBy, { users: [] }))).trim()).toBe('None');
-  });
-  it('shows a pack without a rule list as JSON', () => {
-    const page = text(render(createElement(RulePackCard, { pack: { slug: 'venue-rules', usedBy: [], versions: [{ version: 1, status: 'published', label: 'Venue rules', content: { maxHours: 4 }, publishedAt: null }] } })));
-    expect(page).toContain('"maxHours": 4');
-    expect(page).toContain('Used by None');
-  });
-  it('reviews only the changed values and who they reach', () => {
-    const parsed = parseRulePackContent(content)!;
-    const changes = ruleValueChanges(parsed, { ...ruleValues(parsed), 'annual-cap': 10000 });
-    const page = text(render(createElement(PackReview, { labelChange: null, changes, changeNote: '', usedBy: pack.usedBy })));
-    expect(page).toContain('§3 Annual maximum per club');
-    expect(page).toContain('$8,000 → $10,000 per year');
-    expect(page).not.toContain('$35');
-    expect(page).toContain('Applies to Funding pre-check (Treasurer, President) in 4 clubs on the next run, including pinned installations.');
-    expect(page).not.toMatch(/carry over|cannot be edited|To undo/);
-    expect(reachSentences([])).toEqual(['No agent template uses this rule pack.']);
-  });
-});
+const users: UsgDocumentUser[] = [
+  { templateId: TEMPLATE.fundingPrecheck, name: 'Funding pre-check', global: true },
+  { templateId: TEMPLATE.usgReviewAssistant, name: 'USG review assistant', global: false },
+];
+const createdAt = new Date('2026-11-15T18:00:00.000Z');
+const rows: UsgDocumentRow[] = [
+  { id: DOCUMENT.reviewerNotes, title: 'Reviewer notes', tier: 'usg_internal', sourceId: 's1', sourceName: 'USG internal', version: 1, createdAt, sourceKind: 'usg_internal', usedBy: [users[1]] },
+  { id: DOCUMENT.usgFundingRules, title: 'USG Funding Department Guidelines', tier: 'public', sourceId: 's2', sourceName: 'USG rulebook', version: 1, createdAt, sourceKind: 'rulebook', usedBy: users },
+];
+const detail: UsgDocumentView = {
+  orgId: ORG.usg, usedBy: users,
+  document: { id: DOCUMENT.usgFundingRules, title: 'USG Funding Department Guidelines', tier: 'public', sourceId: 's2', sourceName: 'USG rulebook',
+    sourceKind: 'rulebook', version: 1, createdAt, bodyMd: guidelines },
+};
 
 describe('/usg/templates/[templateId]', () => {
-  it('lists the configuration as labels and values', () => {
+  it('lists the configuration as labels and values, without a rule pack', () => {
     const html = render(createElement(AgentSummary, { data: view() }));
     const page = text(html);
     expect(page).toContain('Configuration Version 1 · published Nov 15, 2026, 10:00 AM PT');
@@ -169,12 +77,11 @@ describe('/usg/templates/[templateId]', () => {
     expect(page).toContain('Who uses it Treasurer, President · 3 clubs');
     expect(html).toContain('You are Funding pre-check, a USG agent for club treasurers and presidents.\n\nFor each budget line');
     expect(page).toContain('Knowledge USG rulebook USG library USG Funding Department Guidelines Club finances Each club');
-    expect(html).toMatch(/href="\/usg\/rule-packs">USG Funding Guidelines 2026–27 · v1 · 13 rules</);
+    expect(html).toContain(`href="/usg/documents/${DOCUMENT.usgFundingRules}"`);
     expect(page).toContain('Tools None');
     expect(page).toContain('Model Standard (default), Economy');
     expect(page).toContain('Reads up to Officers');
-    expectNoMeta(page);
-    for (const gone of ['What this agent does', 'The system prompt', 'Every run uses', 'never reads more', 'USG cannot open', 'Sources:', 'Max tier:', 'Model class:', 'quota']) expect(page).not.toContain(gone);
+    expectProductOnly(page);
   });
   it('lists only the USG documents the version’s max tier lets it read', () => {
     const both = { ...v1, sourceKinds: ['rulebook', 'usg_internal'] };
@@ -185,14 +92,15 @@ describe('/usg/templates/[templateId]', () => {
     const page = text(render(createElement(AgentSummary, { data: view({ versions: [], template: { ...view().template, latestVersion: 0, installedCount: 0 } }) })));
     expect(page).toContain('Configuration No version published yet');
   });
-  it('keeps the request body shape and lists the fields that change', () => {
-    const state = { ...initialState(v1), usableBy: ['treasurer'], tools: ['submit_to_queue'], rulePackSlug: '', changelog: 'Treasurers file it themselves.' };
+  it('keeps the request body shape, carrying the rule-pack field over, and lists the fields that change', () => {
+    const state = { ...initialState({ ...v1, rulePackSlug: 'usg-funding' }), usableBy: ['treasurer'], tools: ['submit_to_queue'], changelog: 'Treasurers file it themselves.' };
     const body = toBody(state);
     expect(Object.keys(body).sort()).toEqual(['audience', 'changelog', 'defaultModelClass', 'maxTier', 'modelClasses', 'purpose', 'rulePackSlug', 'sourceKinds', 'systemPrompt', 'tools', 'usableBy']);
-    expect(body).toMatchObject({ usableBy: ['treasurer'], tools: ['submit_to_queue'], rulePackSlug: null, modelClasses: ['economy', 'standard'] });
-    const ctx = { positions: view().positions, rulePacks: view().rulePacks };
-    const changes = versionChanges(v1, body, ctx);
-    expect(changes.map(c => c.field)).toEqual(['Positions', 'Rule pack', 'Tools']);
+    expect(body).toMatchObject({ usableBy: ['treasurer'], tools: ['submit_to_queue'], rulePackSlug: 'usg-funding', modelClasses: ['economy', 'standard'] });
+    expect(toBody(initialState(v1)).rulePackSlug).toBeNull();
+    const ctx = { positions: view().positions };
+    const changes = versionChanges(v1, toBody({ ...state, rulePackSlug: '' }), ctx);
+    expect(changes.map(c => c.field)).toEqual(['Positions', 'Tools']);
     expect(versionChanges(v1, toBody(initialState(v1)), ctx)).toEqual([]);
     expect(validate({ ...state, audience: 'positions', usableBy: [] }).usableBy).toMatch(/Choose at least one position/);
     expect(toBody({ ...state, audience: 'public', maxTier: 'officers' })).toMatchObject({ audience: 'public', usableBy: [], maxTier: 'public' });
@@ -201,36 +109,133 @@ describe('/usg/templates/[templateId]', () => {
       reach: versionReach(body, 3, ctx), changelog: state.changelog })));
     expect(page).toContain('Changes Setting Now (v1) After (v2)');
     expect(page).toContain('Positions Treasurer, President Treasurer');
-    expect(page).toContain('Rule pack USG Funding Guidelines 2026–27 None');
     expect(page).toContain('Tools None Submit to queue');
     expect(page).toContain('Reaches Treasurer in 3 clubs on the next run; pinned installations keep their version.');
     expect(page).toContain('Change note: Treasurers file it themselves.');
-    expect(page).not.toMatch(/cannot be edited|publishing stops/);
+    expectProductOnly(page);
   });
-  it('edits every setting through labelled controls', () => {
+  it('edits every setting through labelled controls, with no rule pack control', () => {
     // One "Edit configuration" button, on the Configuration card: the editor renders nothing until it is opened.
     expect(render(createElement(VersionEditor, { data: view(), editing: false, setEditing: () => {} }))).toBe('');
-    const page = text(render(createElement(VersionEditor, { data: view(), editing: true, setEditing: () => {} })));
+    const html = render(createElement(VersionEditor, { data: view(), editing: true, setEditing: () => {} }));
+    const page = text(html);
     expect(page).toContain('Publishes as version 2');
     for (const choice of ['Purpose', 'Audience', 'All students', 'All members', 'Named positions', 'Positions', 'Treasurer', 'Instructions',
-      'Knowledge sources', 'Club finances', 'USG rulebook', 'Reads up to', 'Officers', 'Rule pack', 'Tools', 'Submit to queue',
+      'Knowledge sources', 'Club finances', 'USG rulebook', 'Reads up to', 'Officers', 'Tools', 'Submit to queue',
       'Proposes filing the application in USG’s queue; the user confirms.', 'Model classes', 'Economy', 'Standard', 'Default model',
-      'USG Funding Guidelines 2026–27 (v1, 13 rules)', 'Change note']) expect(page).toContain(choice);
+      'Change note']) expect(page).toContain(choice);
+    expect(html).not.toContain('version-rulepack');
     expect(page).not.toContain('USG internal');
-    for (const gone of ['Who may open it', 'The system prompt', 'The kinds of documents', 'The max tier', 'USG policy the agent', 'Actions it can take',
-      'The strength and cost', 'Shown in the version history', 'One sentence.', 'Each club fills', 'In this demo']) expect(page).not.toContain(gone);
-    expectNoMeta(page);
+    expectProductOnly(page);
   });
 });
 
 describe('/usg/templates', () => {
-  it('shows what each template does and the rule pack it uses', () => {
+  it('shows what each template does, without a rule pack column', () => {
     const data = view();
-    const page = text(render(createElement(TemplatesTable, { data: { templates: [data.template], targets: data.targets, rulePacks: data.rulePacks } })));
+    const page = text(render(createElement(TemplatesTable, { data: { templates: [data.template], targets: data.targets } })));
     expect(page).toContain('What it does');
     expect(page).toContain('Checks a funding request against the USG funding rules before you submit it.');
-    expect(page).toContain('Rule pack');
-    expect(page).toContain('USG Funding Guidelines 2026–27');
     expect(page).toContain('Installed in 3 of 3');
+    expectProductOnly(page);
+  });
+});
+
+describe('/usg/documents', () => {
+  it('lists USG’s documents with source, readers, version and the templates that read them', () => {
+    const html = render(createElement(DocumentsTable, { documents: rows, orgId: ORG.usg }));
+    const page = text(html);
+    expect(page).toContain('Title Source Readable by Version Used by');
+    expect(page).toContain('USG Funding Department Guidelines USG rulebook Public v1 Funding pre-check, USG review assistant');
+    expect(page).toContain('Reviewer notes USG internal USG internal v1 USG review assistant');
+    expect(html).toContain(`href="/usg/documents/${DOCUMENT.usgFundingRules}"`);
+    expect(html).toContain(`href="/usg/templates/${TEMPLATE.fundingPrecheck}"`);
+    expect(html).not.toContain(`href="/usg/templates/${TEMPLATE.usgReviewAssistant}"`);
+    const empty = render(createElement(DocumentsTable, { documents: [], orgId: ORG.usg }));
+    expect(text(empty)).toContain('No USG documents yet. Upload a document');
+    expect(empty).toContain(`href="/org/${ORG.usg}/documents"`);
+    expectProductOnly(page);
+  });
+});
+
+describe('/usg/documents/[documentId]', () => {
+  it('shows the document’s metadata and its text, with the publish action', () => {
+    const html = render(createElement(DocumentDetail, { data: detail }));
+    const page = text(html);
+    expect(page).toContain('USG Funding Department Guidelines All documents Publish new version');
+    expect(html).toContain('href="/usg/documents"');
+    expect(page).toContain('Source USG rulebook Readable by Public Version v1 Used by Funding pre-check, USG review assistant');
+    expect(page).toContain('USC Undergraduate Student Government Funding Department Guidelines, current as of October 21, 2026.');
+    expect(page).toContain('Section 1: Funding Application Timeline');
+    expect(page).toContain('Individual organizations may receive a maximum of $8,000 from the USG Funding Department per year.');
+    expect(page).not.toContain('Review v2');
+    // USG's guidelines themselves say "Examples include…".
+    expectProductOnly(page, ['Example']);
+    expectProductOnly(page.slice(0, page.indexOf('USC Undergraduate Student Government')));
+  });
+  it('renders headings, paragraphs and nested bulleted and numbered lists', () => {
+    const blocks = parseDocument(guidelines);
+    expect(blocks[0]).toEqual({ kind: 'paragraph', text: 'USC Undergraduate Student Government Funding Department Guidelines, current as of October 21, 2026.' });
+    expect(blocks[1]).toEqual({ kind: 'heading', level: 2, text: 'Section 1: Funding Application Timeline' });
+    const html = render(createElement(DocumentBody, { text: guidelines }));
+    expect(html).toMatch(/<h2[^>]*>Section 2: Funding Application Overview<\/h2>/);
+    // "A completed application consists of the following:" holds a list, whose items hold another.
+    expect(html).toMatch(/A completed application consists of the following:<ul[^>]*><li[^>]*>Applicant information/);
+    expect(html).toMatch(/including quotes for each individual expense<ul[^>]*><li[^>]*>For online purchases/);
+    expect(html).not.toContain('## ');
+    const notes = render(createElement(DocumentBody, { text: reviewerNotes }));
+    expect(notes).toMatch(/<ol[^>]*><li[^>]*>Event count:/);
+    expect(render(createElement(DocumentBody, { text: 'Line one\nline two\n\n<b>bold</b>' }))).toContain('<p>Line one line two</p><p>&lt;b&gt;bold&lt;/b&gt;</p>');
+  });
+  it('diffs the text line by line', () => {
+    const edited = guidelines.replace('maximum of $8,000', 'maximum of $10,000');
+    expect(lineChanges(guidelines, guidelines)).toEqual([]);
+    expect(lineChanges(guidelines, edited)).toEqual([{
+      line: 52,
+      before: '- Individual organizations may receive a maximum of $8,000 from the USG Funding Department per year.',
+      after: '- Individual organizations may receive a maximum of $10,000 from the USG Funding Department per year.',
+    }]);
+    expect(lineChanges('a\nb\nc', 'a\nB\nc\nd')).toEqual([{ line: 2, before: 'b', after: 'B' }, { line: 4, before: null, after: 'd' }]);
+    expect(lineChanges('a\nb\nc', 'a\nc')).toEqual([{ line: 2, before: 'b', after: null }]);
+    expect(lineChanges('a\nb', 'a\n\nb')).toEqual([]);
+  });
+  it('counts instead of diffing when the edited region is too large', () => {
+    const before = Array.from({ length: 2100 }, (_, i) => `old ${i}`).join('\n');
+    const after = Array.from({ length: 2100 }, (_, i) => `new ${i}`).join('\n');
+    expect(2100 * 2100).toBeGreaterThan(MAX_DIFF_CELLS);
+    expect(lineDiff(before, after)).toEqual({ changes: null, count: 2100 });
+    // The shared head and tail do not count toward the limit.
+    expect(lineDiff(`${before}\nx`, `${before}\ny`)).toEqual({ changes: [{ line: 2101, before: 'x', after: 'y' }], count: 1 });
+    const page = text(render(createElement(DocumentReview, { diff: lineDiff(before, after), usedBy: users, nextVersion: 2 })));
+    expect(page).toContain('Changed lines (2,100)');
+    expect(page).not.toContain('Line Before After');
+    expect(page).toContain('Funding pre-check and USG review assistant read version 2 on their next run.');
+  });
+  it('reviews the changed lines and who reads the new version', () => {
+    const diff = lineDiff(guidelines, guidelines.replace('maximum of $8,000', 'maximum of $10,000'));
+    const page = text(render(createElement(DocumentReview, { diff, usedBy: users, nextVersion: 2 })));
+    expect(page).toContain('Changed lines (1) Line Before After 52');
+    expect(page).toContain('maximum of $8,000 from the USG Funding Department per year.');
+    expect(page).toContain('maximum of $10,000 from the USG Funding Department per year.');
+    expect(page).toContain('Funding pre-check and USG review assistant read version 2 on their next run.');
+    expect(page).not.toContain('not shown');
+    expect(page).not.toContain('Could not save');
+    expectProductOnly(page);
+
+    const many = lineDiff(Array.from({ length: 14 }, (_, i) => `line ${i}`).join('\n'), Array.from({ length: 14 }, (_, i) => `LINE ${i}`).join('\n'));
+    const long = text(render(createElement(DocumentReview, { diff: many, usedBy: [], nextVersion: 3 })));
+    expect(long).toContain('Changed lines (14)');
+    expect(long).toContain('4 more changed lines not shown');
+    expect(long).not.toContain('LINE 10');
+    expect(consequence(users.slice(0, 1), 3)).toBe('Funding pre-check reads version 3 on its next run.');
+    // One-sided rows carry words for screen readers, not an aria-label on a plain span.
+    const added = render(createElement(DocumentReview, { diff: lineDiff('a', 'a\nb'), usedBy: [], nextVersion: 2 }));
+    expect(added).toContain('<span class="sr-only">Added line</span>');
+    expect(added).not.toContain('aria-label="No line"');
+  });
+  it('shows the server’s message when the document changed since it was opened', () => {
+    const stale = 'This document changed since you opened it. Reload to see version 2.';
+    const page = text(render(createElement(DocumentReview, { diff: lineDiff('a', 'b'), usedBy: users, nextVersion: 2, error: stale })));
+    expect(page).toContain(`Could not save ${stale}`);
   });
 });

@@ -144,7 +144,9 @@ describe.skipIf(!probe)('distribution writes', () => {
     await tx.execute(sql`update agent_installations set enabled = false where org_id = ${ORG.archery}`);
     expect(await publishVersion(await avery(), TEMPLATE.eventPlanning, draft)).toEqual({ version: 2 });
   }));
-  it('D6 resolves a new published rule pack on the next funding read', () => inRolledBackApp(async () => {
+  it('resolves a new published rule pack on the next read of a template that names it', () => inRolledBackApp(async tx => {
+    // The seed attaches the pack to no template; name it on funding-precheck v1 for this case.
+    await tx.execute(sql`update agent_template_versions set rule_pack_slug = 'usg-funding' where template_id = ${TEMPLATE.fundingPrecheck}`);
     const old = (await effectiveAgent(INSTALLATION.startupFundingPrecheck)).rulePack!;
     expect(await publishRulePack(await avery(), 'usg-funding', { label: old.label,
       content: { ...(old.content as Record<string, number>), annualCapUsd: 10000 } })).toEqual({ version: 2 });

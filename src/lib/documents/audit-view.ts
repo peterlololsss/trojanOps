@@ -139,7 +139,8 @@ async function toRows(viewer: Actor, entries: AuditEntry[]): Promise<AuditRow[]>
         return t(typeof e.details.tool === 'string' ? humanizeTool(e.details.tool) : 'Pending action');
       case 'document': {
         const title = titles.get(e.targetId) ?? null;
-        return title === null ? t(RESTRICTED_DOCUMENT, true) : t(title);
+        const version = typeof e.details.version === 'number' && e.details.version > 1 ? ` v${e.details.version}` : '';
+        return title === null ? t(RESTRICTED_DOCUMENT, true) : t(`${title}${version}`);
       }
       case 'org':
         return t(orgNames.get(e.targetId) ?? 'Unknown club');

@@ -9,7 +9,7 @@ into one platform that gives every club governed AI:
   agents** for their members and officers (handoff, minutes).
 - Each student's `/me/agents` lists, per club, the agents that club exposes to them; the campus
   directory lists every club's public agents.
-- USG distributes agent templates to clubs, sets quotas and club policy, and publishes rule packs.
+- USG distributes agent templates to clubs, sets quotas and club policy, and publishes its rulebook documents.
 - The platform gateway governs every agent run and tool call: identity → grants → audience check →
   quota → runtime → audit.
 - Documents carry org-qualified grants; Postgres RLS decides what any user–agent pair can read.
@@ -36,7 +36,7 @@ Demo beats (each runs on real platform logic; agents answer through the mock run
 | D3 | Club publishes a public agent | Startup's `recruiting-qa` starts disabled. Sam clicks "Publish to all students"; the confirmation states who gains access and the installation limit. It appears in `/directory`; Lee (no club) opens it; the inspector lists Startup's public documents only |
 | D4 | Internal vs public scope | Casey's `/me/agents`: `handoff` (All members), `recruiting-qa` (All students). Taylor's adds `funding-precheck` (Treasurer, President). Sam's preview of `handoff`: Member → minutes allowed, budget "Not granted"; Treasurer → both; preview of `recruiting-qa`: "Any signed-in student" → recruiting FAQ only, minutes "Outside agent sources" |
 | D5 | Quota | Sam sets Casey's limit to $0.00 → Casey's next `handoff` run is blocked before the runtime is called. Lee (seeded with $0.04 today) runs `recruiting-qa` once ($0.01, billed to Startup); the next run hits the $0.05 student daily cap |
-| D6 | Rule pack update | Avery publishes `usg-funding` v2 (annual cap $8,000 → $10,000); the next `funding-precheck` run in any club shows "USG Funding Guidelines 2026–27 v2 · annual cap $10,000" |
+| D6 | Rule update | Avery publishes the USG Funding Department Guidelines as v2 in `/usg/documents` (§3 annual maximum $8,000 → $10,000); the next `funding-precheck` run in any club reads v2: the reply names "USG Funding Department Guidelines (v2)" and the inspector lists it under Versions |
 | D7 | Succession | Sam transfers treasurer from Taylor to Jordan. Taylor's `/me/agents` drops `funding-precheck`; Jordan's gains it; installations and documents are unchanged |
 | D8 | Audit | Every beat above is in the log, including the rejected widening. The USG view shows metadata only; documents the viewer can't read show as "Restricted document" |
 
@@ -259,7 +259,7 @@ create policy runs_own on agent_runs for all to trojanops_app
     services filter it by org. Because a simple view is updatable as its owner, the migration
     revokes insert and update on it; revoke them on any future view too.
 - `audit_events.ts` is that table's `created_at`.
-- `withActor` sets `app.manage_org` to the active org only when the actor is its president.
+- `withActor` sets `app.manage_org` to the active org only when the actor manages it: its president, or a USG admin in USG.
 - `0002_document_tier_ceiling.sql` adds `app_document_tier_rank` and the tier predicate above to
   the existing policy. `withActor` sets `app.max_tier` on every transaction; an omitted ceiling
   permits all tiers subject to grants and sources. An invalid nonempty ceiling permits no rows.
@@ -313,7 +313,7 @@ export type CanUseResult =
   | { ok: false };
 export type CanUse = (userId: string, agent: EffectiveAgent) => Promise<CanUseResult>;
 
-export interface AccessibleDocument { id: string; title: string; tier: Tier; bodyMd: string }
+export interface AccessibleDocument { id: string; title: string; tier: Tier; bodyMd: string; version?: number }
 
 // The document library (C → B club home): documents the actor can read in one club.
 export interface LibraryDocument {
@@ -343,7 +343,7 @@ export interface AgentResult {
 export interface RunInspector {
   runGrants: Array<{ grant: Grant; label: string }>;      // label e.g. "Startup Club · Treasurer"
   sources: Array<{ id: string; name: string }>;
-  permitted: Array<{ id: string; title: string; tier: Tier }>;
+  permitted: Array<{ id: string; title: string; tier: Tier; version?: number }>;
   readInRun: Array<{ id: string; title: string }>;        // cited documents
   blocked?: Array<{ id: string; title: string | null; reason: AccessCell }>;  // only when the viewer manages the club; null title = "Restricted document"
   templateVersion: number;
@@ -511,7 +511,8 @@ export interface LLMProvider {              // used by the real runtime (WP-13)
 Mock runtime (`runtime/mock.ts`):
 - The reply lists the accessible documents.
 - Citations quote the first sentence of up to three accessible documents.
-- With a rule pack, the reply adds "<label> v<version> · annual cap $<value>".
+- A document above version 1 is named with its version, e.g. "USG Funding Department Guidelines (v2)".
+- With a rule pack, the reply adds "<label> v<version> · annual cap $<value>". No seeded template attaches one (decision 19).
 - Cost is a flat $0.01. No model call.
 
 ## 8. Agent distribution
@@ -547,7 +548,7 @@ Mock runtime (`runtime/mock.ts`):
   membership, that club's enabled installations that `canUse` admits, each with its reason label
   ("All students", "All members", or the position names).
 - **Propagation:** `latest` installations resolve the template's latest version at run time;
-  `pinned` ones keep theirs and show "Update available". Runs use the latest published rule pack.
+  `pinned` ones keep theirs and show "Update available". Agents read each document's current version.
   `retire(templateId)` blocks runs with "Retired by USG".
 - **Provisioning:** `provisionOrg(orgId)` installs only templates with `distributed_at` set whose
   target includes the club.
@@ -567,7 +568,7 @@ Seeded templates (display names in UI copy):
 
 | slug | Name | Publisher | Distribution | Audience / usable_by | Max tier | Source kinds |
 |---|---|---|---|---|---|---|
-| `funding-precheck` | Funding pre-check | USG | required, all; distributed in the seed | positions: treasurer, president | officers | rulebook, finance; rule pack `usg-funding` |
+| `funding-precheck` | Funding pre-check | USG | required, all; distributed in the seed | positions: treasurer, president | officers | rulebook, finance |
 | `event-planning` | Event planning | USG | default; v1 published, not distributed (D2 distributes it) | positions: president, secretary | members | archive, minutes |
 | `recruiting-qa` | Recruiting Q&A | Startup | installation seeded **disabled**, audience public | public | public | public |
 | `showcase-qa` | Showcase Q&A | Dance | enabled, public | public | public | public |
@@ -584,15 +585,18 @@ Seeded templates (display names in UI copy):
 | `llm` | `LLMProvider` | mock | Trojan AI Gateway, or the chosen provider (WP-13) |
 | `applications` | `ApplicationSink` | internal queue | EngageSC funding applications |
 
-- USG rule text is not a connector: USG keeps it as rule packs in `/usg/rule-packs`.
+- USG rule text is not a connector: USG keeps it as rulebook documents in `/usg/documents`.
 - `connectors/registry.ts` picks each implementation from `CONNECTOR_*` and records it in
   `connectors`. `/usg/integrations` shows kind, implementation, status and last sync.
 - "Sync roster" runs `importRoster()` (§13) and writes `audit('connector.sync', {changes})`.
 
 ## 10. Documents and permissions
 
-- **Upload** (`documents/library.ts`): only the club president (`app.manage_org`). Choose source,
-  tier and, for `officers`, positions. The trigger computes `read_grants`. `audit('document.upload')`.
+- **Upload** (`documents/library.ts`): only the org's manager (`app.manage_org`): the club president,
+  or a USG admin for USG. Choose source, tier and, for `officers`, positions. The trigger computes
+  `read_grants`. `audit('document.upload')`.
+- **New version** (`publishDocumentVersion`): the manager replaces a document's text as version n+1;
+  id, source, tier and grants stay. Agents read it on their next run. `audit('document.upload', {version})`.
 - **`listAccessibleDocuments(actor, runGrants, agent)`** (`documents/access.ts`): the RLS query
   used by the gateway's step 5. `agent` requires `sourceIds` and `maxTier`; the query runs as
   `withActor(actor, {grants: runGrants, sourceIds: agent.sourceIds, maxTier: agent.maxTier})`.
@@ -722,14 +726,15 @@ Every handler: `const actor = await getActor(req)` → one service call → JSON
 | GET/PATCH `/api/usg/templates/:id`, POST `/api/templates/:id/versions` | `distribution.*` | USG admin (global), president (own) | B |
 | POST `/api/usg/templates/:id/distribute`, POST `/api/usg/templates/:id/retire` | `distribution.*` | USG admin | B |
 | PUT `/api/usg/club-policy/:orgId` | `distribution.setClubPolicy` | USG admin | B |
-| POST `/api/usg/rule-packs/:slug/versions` | `rules.publish` | USG admin | B |
+| POST `/api/usg/rule-packs/:slug/versions` | `rules.publish` (unused by the UI) | USG admin | B |
+| POST `/api/orgs/:orgId/documents/:documentId/versions` | `documents.publishDocumentVersion` | president, USG admin (USG) | C |
 | POST `/api/orgs/:orgId/positions/:slug/transfer` | `lifecycle.transferPosition` | president | B |
-| GET/POST `/api/orgs/:orgId/documents` | `documents.library` | members (read via RLS), president (upload) | C |
+| GET/POST `/api/orgs/:orgId/documents` | `documents.library` | members (read via RLS), president or USG admin for USG (upload) | C |
 | GET `/api/orgs/:orgId/preview?installation=` | `documents.previewAccess` | president | C |
 | POST `/api/usg/connectors/roster/sync` | `lifecycle.importRoster` | USG admin | D |
 | POST `/api/demo/clock` | demo | `DEMO_MODE` only | D |
 
-Pages (18):
+Pages (19):
 
 | Page | Stream |
 |---|---|
@@ -740,7 +745,7 @@ Pages (18):
 | `/usg/templates` | B |
 | `/usg/templates/[templateId]`: versions, distribution, target | B |
 | `/usg/clubs`: quotas, club policy | B |
-| `/usg/rule-packs` | B |
+| `/usg/documents`, `/usg/documents/[documentId]`: USG's documents, versions, publish a new version | C |
 | `/org/[orgId]/agents/[installationId]`: run + inspector + pending actions | C |
 | `/org/[orgId]/documents` | C |
 | `/org/[orgId]/preview` | C |
@@ -780,20 +785,10 @@ Pages (18):
 | Archery | `finance` | Archery budget 2026 | officers: treasurer (+ president) |
 | Dance | `public` | Spring showcase info | public |
 
-**Rule pack** `usg-funding` v1 (`label: "USG Funding Guidelines 2026–27"`) holds USG's public
+**USG Funding Department Guidelines** (`rulebook`, public): USG's public
 [Funding Department Guidelines](https://usg.usc.edu/branches/funding/), current as of 2026-10-21,
-as 13 rules. `content` keys:
-- `annualCapUsd` (8000): the mock runtime prints it;
-- `source`: title, publisher, `currentAsOf`, `retrievedAt`, links, `edits` (typos corrected);
-- `rules[]`: `{id, group, section, title, value?, unit?, check, quote, items?, note?,
-  amendedFrom?}`, grouped as deadlines, limits and not eligible. `check` is `precheck` or
-  `reviewer`; `quote` is the guideline text. A published value that differs from USG's carries
-  `amendedFrom` with USG's value;
-- `changeNote`: the publisher's note for that version.
-
-The USG `rulebook` document carries the full guideline text.
-
-D6 publishes v2 with the cap at $10,000. Evaluation of the rules belongs to WP-14.
+§1–§7. D6 publishes v2 with the §3 annual maximum at $10,000. The `usg-funding` rule pack stays
+seeded but no template attaches it (decision 19).
 
 **Policy and quota:**
 - Every club may use `standard` and `economy` and publish public agents. `event-planning` v1 allows
@@ -830,9 +825,9 @@ WP-14.
   `src/app/api/orgs/[orgId]/{catalog,installations,templates,positions}/**`,
   `src/lib/lifecycle/transfer.ts` · club home, catalog with "Publish to all students", members,
   transfer, quotas; D3, D5, D7.
-- **WP-6** · B · H10–12 · WP-5 · `src/app/usg/{templates,clubs,rule-packs}/**`,
-  `src/app/api/usg/{templates,club-policy,rule-packs}/**` · template list and detail, distribute,
-  club quotas and policy, rule-pack publish; D2, D6.
+- **WP-6** · B · H10–12 · WP-5 · `src/app/usg/{templates,clubs}/**`,
+  `src/app/api/usg/{templates,club-policy}/**` · template list and detail, distribute,
+  club quotas and policy; D2. USG documents and versions (`src/app/usg/documents/**`, C): D6.
 - **WP-8** · C · H2–6 · WP-0 · `src/lib/documents/{library,access}.ts`,
   `src/app/org/[orgId]/documents/**`, `src/app/api/orgs/[orgId]/documents/**`,
   `db/seed/documents.ts`, `db/seed/docs/**`, `tests/documents.test.ts` · upload,
@@ -871,7 +866,7 @@ WP-14.
 - B also takes WP-11 (H12–14).
 - C also takes WP-2 (H0–3, before WP-8) and WP-12.
 - From H0, cut club-built agent UI, cohort targeting, USG overview and WP-14. WP-6 shrinks to
-  distribute plus rule-pack publish.
+  distribute.
 
 **Cut order:** WP-14 → WP-13 beyond its floor → club-built agent UI → cohort targeting → USG overview.
 
@@ -889,15 +884,15 @@ permissions and the preview, quota block, audit, transfer, the integration panel
 - Every claim cites a document it was given. The server checks that each quote is a substring of
   that document and drops unverified claims.
 - Tools go through `gateway.tool()`; write tools stay pending until a human confirms.
-- Agent-specific data (funding applications, review queue, funding ledger via `ApplicationSink`) and
-  rule-pack evaluation are designed in WP-14.
+- Agent-specific data (funding applications, review queue, funding ledger via `ApplicationSink`) is
+  designed in WP-14.
 
 ## 18. Demo operations
 
 - Run `pnpm db:reset` (CLI) before each rehearsal and before judging, then restart `pnpm dev`; the
   clock restarts at `DEMO_NOW`.
 - The inspector shows run grants as labels ("Startup Club · Treasurer"), sources, permitted and
-  cited documents, template and rule-pack versions, the billed club, cost, quota remaining and the
+  cited documents, template and document versions, the billed club, cost, quota remaining and the
   audit id.
 - If a real agent misbehaves on stage, restart with `AGENT_RUNTIME=mock`.
 - Record a backup video after the final rehearsal.
