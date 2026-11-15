@@ -90,8 +90,14 @@ an unknown id when it does not match, so a URL naming one club cannot act on ano
 Every write parses its body with `parseBody` even when the body is empty: the `application/json`
 check is the cross-site write guard, and an empty-bodied cross-origin POST sends no content type.
 
-Still unrouted, because the services do not exist yet: the club catalog, the installations
-collection, `createClubTemplate` and `setClubPolicy`.
+| GET `/api/orgs/:orgId/catalog` | `catalog()` | the club's members, and USG admins |
+
+Still unrouted, because the services do not exist yet: the installations collection,
+`createClubTemplate` and `setClubPolicy`.
+
+`catalog()` is scoped to the club's members (§14): it carries the club's monthly quota, each
+agent's budget, and for USG the configuration of an internal agent. `clubProfile()` is the
+unscoped lookup a page uses to name a club before deciding what the viewer may see.
 
 Writes lock template → clubs in id order → installation. Non-key locks permit foreign-key reads
 from the separate quota transaction. Public publishing uses the same writer as installation edits.

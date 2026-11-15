@@ -55,10 +55,13 @@ export type PublishState =
  * narrowed a public version to members may still publish it back, while `handoff`, whose version is
  * members-wide, would only ever come back as a clamp violation.
  */
-export function publishState(entry: CatalogEntry, canManage: boolean): PublishState {
+export function publishState(entry: CatalogEntry, canManage: boolean, clubLimitMicro = 1): PublishState {
   if (!canManage) return null;
   if (entry.isPublic && entry.status === 'enabled') return 'published';
   if (entry.status === 'retired') return 'retired';
+  // A club with no monthly quota cannot give the agent a budget, and the service refuses the
+  // publish outright — so the action is not offered rather than offered and failed.
+  if (clubLimitMicro <= 0) return 'unavailable';
   return entry.canPublishPublic ? 'available' : 'unavailable';
 }
 

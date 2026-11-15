@@ -24,12 +24,18 @@ describe.skipIf(!probe)('catalog · what the club has', () => {
     expect(entry(found, 'recruiting-qa')!.status).toBe('disabled');
   });
 
-  it('answers for a club the viewer does not belong to, with nothing marked usable', async () => {
-    const found = await catalog(await actorFor(USER.casey, ORG.startup), ORG.dance);
-    expect(found!.agents.length).toBeGreaterThan(0);
+  // §14 scopes the catalog to the club's members. It carries the club's monthly quota, each
+  // agent's budget, and for USG the configuration of an internal agent — none of which belongs to
+  // a student who merely knows the club's id.
+  it('refuses a student who is not in the club', async () => {
+    await expect(catalog(await actorFor(USER.casey, ORG.startup), ORG.dance))
+      .rejects.toMatchObject({ error: { code: 'forbidden' } });
+  });
+
+  it('lets a USG admin see any club, since they oversee all of them', async () => {
+    const found = await catalog(await actorFor(USER.avery, ORG.usg), ORG.dance);
+    expect(found!.agents.map((a) => a.templateSlug)).toContain('showcase-qa');
     expect(found!.canManage).toBe(false);
-    // Dance's showcase Q&A is public, so even an outsider may use that one.
-    expect(entry(found, 'showcase-qa')!.reasonLabel).toBe('All students');
   });
 
   it('returns null for a club with no installations at all', async () => {
@@ -68,8 +74,10 @@ describe.skipIf(!probe)('catalog · what the president may do', () => {
     expect((await catalog(await actorFor(USER.casey, ORG.startup), ORG.startup))!.canManage).toBe(false);
   });
 
-  it('does not let a president manage a club they are not acting in', async () => {
-    expect((await catalog(await actorFor(USER.sam, ORG.startup), ORG.dance))!.canManage).toBe(false);
+  // Morgan is Archery's treasurer and a plain member of Startup: she may read Startup's catalog,
+  // but acting in Archery she manages nothing here.
+  it('does not let someone manage a club they are not acting in as its president', async () => {
+    expect((await catalog(await actorFor(USER.morgan, ORG.archery), ORG.startup))!.canManage).toBe(false);
   });
 
   it('marks a required agent, which §8 says cannot be switched off', async () => {

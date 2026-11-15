@@ -4,7 +4,7 @@ import { requireUser } from '../api';
 import { isUuid, isUsgAdmin } from '../authz';
 import { now } from '../clock';
 import { AppError, type Actor, type AuditAction, type AuditEvent } from '../contracts';
-import { getDb, type Tx } from '../db/client';
+import { getDb, type Db, type Tx } from '../db/client';
 import { agentInstallations, agentTemplates, agentTemplateVersions, orgs, positions, quotaLimits, sources, usgClubPolicy } from '../db/schema';
 import { audit } from '../gateway/audit';
 import { clampInstallation, type ClampInput } from './clamps';
@@ -69,6 +69,20 @@ export async function clubBudget(tx: Tx, orgId: string): Promise<number> {
     .orderBy(desc(quotaLimits.setAt), desc(quotaLimits.createdAt)).limit(1);
   return q?.limitMicro ?? 0;
 }
+/** An installation's own limit, as opposed to the club limit `remaining()` falls back to when it
+ * has none (`gateway/quota.ts` levelRemaining). Null when it has no row of its own, which is what
+ * both the publish default and the catalog's budget figure turn on.
+ *
+ * TODO(verify): ask A to expose an own-or-inherited flag on `remaining()`, so B stops reading
+ * `quota_limits` at all. The null conditions mirror A's `limitRow` key, which the table has no
+ * check constraint to enforce. */
+export async function ownInstallationLimit(db: Db | Tx, installationId: string): Promise<number | null> {
+  const [row] = await db.select().from(quotaLimits)
+    .where(and(eq(quotaLimits.scope, 'installation'), eq(quotaLimits.installationId, installationId), isNull(quotaLimits.userId)))
+    .orderBy(desc(quotaLimits.setAt), desc(quotaLimits.createdAt)).limit(1);
+  return row?.limitMicro ?? null;
+}
+
 export async function clampWrite(tx: Tx, orgId: string, version: ClampInput['version'], installation: ClampInput['installation']) {
   const [policy] = await tx.select().from(usgClubPolicy).where(eq(usgClubPolicy.orgId, orgId));
   const held = await tx.select().from(positions).where(eq(positions.orgId, orgId));

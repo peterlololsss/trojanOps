@@ -5,14 +5,15 @@
 // retired — a president cannot turn an agent back on, or see why it stopped working, if the page
 // hides it. What each viewer may *use* is a separate question, answered per row.
 import { eq } from 'drizzle-orm';
-import { grantsFor, isUuid } from '../authz';
-import type { Actor, Audience, EffectiveAgent, Tier } from '../contracts';
+import { grantsFor, isUsgAdmin, isUuid } from '../authz';
+import { AppError, type Actor, type Audience, type EffectiveAgent, type Tier } from '../contracts';
 import { getDb } from '../db/client';
 import { orgs } from '../db/schema';
 import { remaining } from '../gateway/quota';
 import { canUseWithGrants } from './effective-config';
 import { reasonLabel } from './labels';
 import { loadAgents } from './queries';
+import { ownInstallationLimit } from './write-support';
 
 export interface CatalogEntry {
   installationId: string;
@@ -57,10 +58,23 @@ export interface ClubCatalog {
  * The club's catalog for one viewer. Null only when the club does not exist — a club with nothing
  * installed answers with an empty list, so the page can say "nothing yet" instead of 404.
  *
+ * §14 scopes this to the club's members (and USG admins, who oversee every club). It carries the
+ * club's monthly quota and each agent's budget, and for USG it carries the audience and max tier
+ * of an `usg_internal` agent — none of which belongs to a student who simply knows the club's id.
+ *
  * Grants are computed once for the club and reused for every row, rather than letting `canUse`
  * re-read the viewer's memberships per agent. They are read **in this club**, which is what keeps
  * a treasurer of another club from reading this one's officer-level agents as usable.
  */
+/** A club's identity, for a page that must name it before deciding what the viewer may see.
+ * Null when there is no such club — the club home's 404. Deliberately carries nothing sensitive,
+ * so it answers for any signed-in viewer, member or not. */
+export async function clubProfile(orgId: string): Promise<{ id: string; name: string } | null> {
+  if (!isUuid(orgId)) return null;
+  const [org] = await getDb().select({ id: orgs.id, name: orgs.name }).from(orgs).where(eq(orgs.id, orgId));
+  return org ?? null;
+}
+
 export async function catalog(actor: Actor, orgId: string): Promise<ClubCatalog | null> {
   if (!isUuid(orgId)) return null;
   const [org] = await getDb().select({ id: orgs.id, name: orgs.name }).from(orgs).where(eq(orgs.id, orgId));
@@ -68,6 +82,10 @@ export async function catalog(actor: Actor, orgId: string): Promise<ClubCatalog 
 
   const loaded = await loadAgents({ orgIds: [orgId] });
   const grants = actor.userId ? await grantsFor(actor.userId, orgId) : [];
+  if (!grants.includes(`${orgId}:*`) && !(await isUsgAdmin(actor))) {
+    throw new AppError({ code: 'forbidden', message: 'Only this club’s members can see its agent library.' });
+  }
+
   const canManage = actor.activeOrgId === orgId && actor.positions.includes('president');
   const club = await remaining({ scope: 'org', orgId });
 
@@ -79,7 +97,9 @@ export async function catalog(actor: Actor, orgId: string): Promise<ClubCatalog 
       // A switched-off or retired agent is listed but not offered: nobody can run it, so saying
       // "All members" next to it would be a lie.
       const verdict = agent.status === 'enabled' ? canUseWithGrants(agent, grants) : { ok: false as const };
-      const own = await remaining({ scope: 'installation', orgId, installationId: agent.installationId });
+      // The installation's OWN limit: `remaining()` falls back to the club's when it has none,
+      // which would make the publish confirmation name the club's whole quota as this agent's.
+      const own = await ownInstallationLimit(getDb(), agent.installationId);
       agents.push({
         installationId: agent.installationId,
         templateSlug: agent.templateSlug,
@@ -95,7 +115,7 @@ export async function catalog(actor: Actor, orgId: string): Promise<ClubCatalog 
         reasonLabel: verdict.ok ? reasonLabel(verdict.reason, agent.usableBy) : null,
         isPublic: agent.audience === 'public',
         canPublishPublic: canPublishPublic && agent.status !== 'retired',
-        limitMicro: own.limitMicro > 0 ? own.limitMicro : null,
+        limitMicro: own !== null && own > 0 ? own : null,
       });
     }
   }

@@ -92,7 +92,7 @@ export function CatalogTable({ data }: { data: ClubCatalog }) {
       header: 'Actions',
       cell: ({ row }) => {
         const entry = row.original;
-        const state = publishState(entry, data.canManage);
+        const state = publishState(entry, data.canManage, data.clubLimitMicro);
         const open = entry.status === 'enabled' && entry.reasonLabel !== null;
         return (
           <div className="flex items-center justify-end gap-3">
@@ -139,7 +139,7 @@ export function CatalogTable({ data }: { data: ClubCatalog }) {
           </span>
         </p>
       )}
-      {data.canManage && data.agents.some((entry) => publishState(entry, true) === 'unavailable') && (
+      {data.canManage && data.agents.some((entry) => publishState(entry, true, data.clubLimitMicro) === 'unavailable') && (
         <p className="text-muted-foreground">
           An agent can be opened to all students only when USG published its template for the whole
           campus and lets {data.orgName} publish. The others stay internal to the club.

@@ -2,11 +2,13 @@
 // this month"), loaded through the services that own each half: distribution for the agents, C's
 // library for the documents, A's quota ledger for the spend. Nothing here touches the database.
 //
-// `catalog()` is the distribution service that names a club, so it doubles as the club lookup: it
-// answers null only for a club that does not exist, which is this page's `notFound()`.
+// `clubProfile()` is the club lookup — §14 scopes the catalog itself to the club's members, and
+// this page has a state for a student who is not one, so it must not depend on the catalog to
+// learn the club's name.
 import { requireUser } from '@/lib/api';
 import type { Actor, LibraryDocument, MyAgentsClub, QuotaRemaining } from '@/lib/contracts';
-import { catalog, myAgents } from '@/lib/distribution';
+import { clubProfile, myAgents } from '@/lib/distribution';
+import { loadAgents } from '@/lib/distribution/queries';
 import { listLibraryDocuments } from '@/lib/documents/library';
 import { remaining } from '@/lib/gateway/quota';
 
@@ -26,14 +28,14 @@ export interface ClubHome {
 
 export async function getClubHome(actor: Actor, orgId: string): Promise<ClubHome | null> {
   const userId = requireUser(actor);
-  const found = await catalog(actor, orgId);
-  if (!found) return null;
-  const clubs = await myAgents(userId);
+  const org = await clubProfile(orgId);
+  if (!org) return null;
+  const [clubs, installed] = await Promise.all([myAgents(userId), loadAgents({ orgIds: [orgId] })]);
   return {
-    org: { id: found.orgId, name: found.orgName },
-    canManage: found.canManage,
+    org,
+    canManage: actor.activeOrgId === orgId && actor.positions.includes('president'),
     mine: clubs.find((club) => club.orgId === orgId) ?? null,
-    agentCount: found.agents.length,
+    agentCount: installed.length,
   };
 }
 

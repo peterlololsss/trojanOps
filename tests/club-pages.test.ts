@@ -194,15 +194,16 @@ describe.skipIf(!probe)('club home · page data', () => {
     const sam = await actorFor(USER.sam, ORG.startup);
     const startup = await catalog(sam, ORG.startup);
     const offered = startup!.agents
-      .filter((agent) => publishState(agent, startup!.canManage) === 'available')
+      .filter((agent) => publishState(agent, startup!.canManage, startup!.clubLimitMicro) === 'available')
       .map((agent) => agent.templateSlug);
     // Only the template version USG published campus-wide: `handoff` is members-wide, so a button on
     // it could only ever return a clamp violation.
     expect(offered).toEqual(['recruiting-qa']);
-    expect(publishState(startup!.agents.find((a) => a.templateSlug === 'handoff')!, true)).toBe('unavailable');
+    expect(publishState(startup!.agents.find((a) => a.templateSlug === 'handoff')!, true, startup!.clubLimitMicro)).toBe('unavailable');
 
-    const dance = await catalog(sam, ORG.dance);
-    expect(dance!.agents.every((agent) => publishState(agent, dance!.canManage) === null)).toBe(true);
+    // A member who is not the president is offered nothing.
+    const asCasey = await catalog(await actorFor(USER.casey, ORG.startup), ORG.startup);
+    expect(asCasey!.agents.every((agent) => publishState(agent, asCasey!.canManage, asCasey!.clubLimitMicro) === null)).toBe(true);
   });
 
   it('names the seeded $2.50 budget in the confirmation, not the rule that sets it', async () => {

@@ -27,7 +27,21 @@ export default async function ClubHomePage({ params }: { params: Promise<{ orgId
   }
 
   // Null is a club that does not exist; a club with nothing installed still has a home page.
-  const home = await getClubHome(actor, orgId);
+  // A failed load is a banner, not Next's error page: the two inner sections already handle their
+  // own failures that way, and this one is the only load that could take the whole page down.
+  let home;
+  try {
+    home = await getClubHome(actor, orgId);
+  } catch {
+    return (
+      <>
+        <PageHeader title="Club" description="Your agents, documents and spend in this club." />
+        <p role="alert" className="rounded-md border border-border p-4">
+          This club could not be loaded. Reload the page, or try again in a moment.
+        </p>
+      </>
+    );
+  }
   if (!home) notFound();
 
   return (
