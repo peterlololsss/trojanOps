@@ -5,6 +5,7 @@
 // clamps run the second time I7 asks for — on write *and* again at run time — so an installation
 // written before its version was narrowed cannot outlive it.
 import { AppError, type EffectiveAgent, type ModelClass, type Audience, type Tier } from '../contracts';
+import { classOf, DEMO_MODELS, orderedModelIds, type ModelId } from '../gateway/models';
 import { clampInstallation, type ClampInput } from './clamps';
 
 export interface ComposeInput {
@@ -19,6 +20,8 @@ export interface ComposeInput {
     tools: string[];
     modelClasses: ModelClass[];
     defaultModelClass: ModelClass;
+    modelIds: string[];
+    defaultModelId: string;
     systemPrompt: string;
   };
   installation: {
@@ -40,6 +43,10 @@ export interface ComposeInput {
 
 export interface ResolvedAgent extends EffectiveAgent {
   readonly allowedModelClasses: ModelClass[];
+  /** The template's models whose class the club and installation allow, in registry order. */
+  readonly allowedModelIds: ModelId[];
+  /** The template's default model, or the first allowed model of the effective class. */
+  readonly defaultModelId: ModelId;
   readonly fixedByClub: boolean;
   readonly limitedByTemplate: boolean;
 }
@@ -71,6 +78,14 @@ export function composeEffectiveAgent(input: ComposeInput): ResolvedAgent {
   }
 
   const effective = clamped.effective;
+  // Unknown stored ids drop out here; if none is left, the effective class's registry models stand in.
+  const offered = orderedModelIds(version.modelIds);
+  const fromTemplate = offered.filter((id) => effective.allowedModelClasses.includes(classOf(id)));
+  const allowedModelIds = fromTemplate.length ? fromTemplate
+    : DEMO_MODELS.filter((m) => m.modelClass === effective.modelClass).map((m) => m.id);
+  const defaultModelId = allowedModelIds.find((id) => id === version.defaultModelId && classOf(id) === effective.modelClass)
+    ?? allowedModelIds.find((id) => classOf(id) === effective.modelClass)
+    ?? allowedModelIds[0];
 
   // The gateway's step 1 reads this and refuses anything but 'enabled' (contracts.ts), so a
   // retired template or a switched-off installation is reported, not thrown.
@@ -94,8 +109,11 @@ export function composeEffectiveAgent(input: ComposeInput): ResolvedAgent {
     tools: effective.tools,
     modelClass: effective.modelClass,
     allowedModelClasses: effective.allowedModelClasses,
+    allowedModelIds,
+    defaultModelId,
     fixedByClub: installation.modelClass !== null,
-    limitedByTemplate: club.policy.allowedModelClasses.some((c) => !version.modelClasses.includes(c)),
+    // USG would allow a model in this club that the template does not offer.
+    limitedByTemplate: DEMO_MODELS.some((m) => club.policy.allowedModelClasses.includes(m.modelClass) && !offered.includes(m.id)),
     systemPrompt: installation.promptAddendum
       ? `${version.systemPrompt}\n\n${installation.promptAddendum}`
       : version.systemPrompt,

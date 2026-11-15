@@ -1,27 +1,26 @@
 'use client';
 
-import { AlertCircle, ArrowUpCircle, ChevronDown, LoaderCircle } from 'lucide-react';
-import { useId, useLayoutEffect, useState, type RefObject } from 'react';
+import { AlertCircle, ArrowUpCircle, LoaderCircle } from 'lucide-react';
+import { useId, useLayoutEffect, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import type { ModelClass } from '@/lib/contracts';
 import type { ChatConfig } from '@/lib/documents/run-config';
-import { creditLabel, MODEL_LABELS, priceMicro } from '@/lib/gateway/prices';
-import { DEMO_MODELS } from './demo-models';
+import { classOf, DEMO_MODELS, modelById, type ModelId } from '@/lib/gateway/models';
+import { creditLabel, priceMicro } from '@/lib/gateway/prices';
+import { ModelPicker } from './model-picker';
 
 export interface ComposerProps {
   readonly config?: ChatConfig;
   readonly agentName: string;
   readonly input: string;
-  readonly model: ModelClass;
+  readonly model: ModelId;
   readonly running: boolean;
   readonly playing: boolean;
   readonly error: string | null;
   readonly charge: number | null;
   readonly textareaRef: RefObject<HTMLTextAreaElement | null>;
   readonly onInput: (value: string) => void;
-  readonly onModel: (model: ModelClass) => void;
+  readonly onModel: (model: ModelId) => void;
   readonly onRun: () => void;
   readonly onStop: () => void;
 }
@@ -31,18 +30,19 @@ const MAX_FIELD_PX = 8 * 24 + 12;
 
 export function Composer({ textareaRef, ...p }: ComposerProps) {
   const id = useId();
-  const [choiceId, setChoiceId] = useState<string>('gpt-6-luna');
-  const choices = DEMO_MODELS.filter((choice) => (p.config?.models.allowed ?? [{ modelClass: p.model }]).some((allowed) => allowed.modelClass === choice.modelClass));
-  const selectedChoice = choices.find((choice) => choice.id === choiceId && choice.modelClass === p.model)
-    ?? choices.find((choice) => choice.modelClass === p.model);
+  const offered = p.config?.models.ids ?? [p.model];
+  const choices = DEMO_MODELS.filter((choice) => offered.includes(choice.id));
+  const modelName = modelById(p.model)?.label ?? p.model;
+  const price = priceMicro(classOf(p.model));
   const quota = p.config?.quota;
   const percent = quota ? Math.min(100, quota.limitMicro === 0 ? 100 : Math.floor(quota.spentMicro / quota.limitMicro * 100)) : 0;
   const daily = quota?.scope === 'student_daily';
   const reset = quota ? (daily ? 'resets at midnight PT' : `resets ${new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric' }).format(new Date(quota.resetsAt))}`) : '';
-  const low = quota && quota.remainingMicro > 0 && priceMicro(p.model) > quota.remainingMicro;
-  const economyAffordable = p.config?.models.allowed.some((m) => m.modelClass === 'economy' && m.priceMicro <= (quota?.remainingMicro ?? 0));
+  const low = quota && quota.remainingMicro > 0 && price > quota.remainingMicro;
+  // The first offered model that fits what is left.
+  const affordable = quota ? choices.find((c) => priceMicro(c.modelClass) <= quota.remainingMicro) : undefined;
   const restriction = p.config?.models.fixedByClub ? `${p.config.scope.billedClub} sets the available model pricing for this agent.`
-    : p.config?.models.limitedByTemplate ? 'Its USG template allows lower-cost demo models only.' : null;
+    : p.config?.models.limitedByTemplate ? 'Its USG template offers these models only.' : null;
 
   useLayoutEffect(() => {
     const field = textareaRef.current;
@@ -66,14 +66,8 @@ export function Composer({ textareaRef, ...p }: ComposerProps) {
         className="block w-full resize-none overflow-hidden bg-transparent px-3 pt-3 text-base leading-6 outline-none placeholder:text-muted-foreground [overflow-wrap:anywhere] focus-visible:outline-none" />
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-2 py-2">
         <div className="flex min-w-0 items-center gap-1">
-          <DropdownMenu><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="sm" className="max-w-48 px-2 font-mono text-xs" aria-label={`Demo model: ${selectedChoice?.label ?? MODEL_LABELS[p.model]}`}><span className="truncate">{selectedChoice?.label ?? MODEL_LABELS[p.model]}</span><ChevronDown aria-hidden className="size-3" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-80"><p className="px-2 py-2 text-xs text-muted-foreground">Demo models · mock runtime</p><DropdownMenuRadioGroup value={selectedChoice?.id} onValueChange={(value) => {
-              const choice = choices.find((item) => item.id === value);
-              if (choice) { setChoiceId(choice.id); p.onModel(choice.modelClass); }
-            }}>
-              {choices.map((choice) => <DropdownMenuRadioItem key={choice.id} value={choice.id}><span className="flex-1">{choice.label}</span><span className="text-xs tabular-nums text-muted-foreground">{creditLabel(priceMicro(choice.modelClass))}</span></DropdownMenuRadioItem>)}
-            </DropdownMenuRadioGroup>{restriction && <><DropdownMenuSeparator /><p className="px-3 py-2 text-xs leading-4">{restriction}</p></>}</DropdownMenuContent></DropdownMenu>
-          <span className="text-xs tabular-nums text-muted-foreground">{creditLabel(priceMicro(p.model))}</span>
+          <ModelPicker choices={choices} value={p.model} onChange={p.onModel} note={restriction} />
+          <span className="text-xs tabular-nums text-muted-foreground">{creditLabel(price)}</span>
         </div>
         <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
           {quota && <Popover><PopoverTrigger asChild><button type="button" aria-label={`${creditLabel(quota.remainingMicro)} left${daily ? ' today' : ''}, ${reset}`} className="min-h-9 rounded-sm px-2 text-right text-xs tabular-nums text-muted-foreground hover:bg-accent hover:text-foreground">{p.charge !== null ? `−${creditLabel(p.charge)}` : `${creditLabel(quota.remainingMicro)} left`}</button></PopoverTrigger>
@@ -85,6 +79,6 @@ export function Composer({ textareaRef, ...p }: ComposerProps) {
     </div>
     {p.error && <p id={`${id}-error`} className="mt-2 text-primary">{p.error}</p>}
     {p.input.length >= 7000 && <p className="mt-1 text-right text-xs tabular-nums">{p.input.length.toLocaleString('en-US')} / 8,000</p>}
-    {low && <p className="mt-2 text-sm text-attention-ink">{selectedChoice?.label ?? MODEL_LABELS[p.model]} needs about {creditLabel(priceMicro(p.model))} and you have {creditLabel(quota.remainingMicro)} left{daily ? ' today' : ' this month'}. {economyAffordable && <button type="button" onClick={() => { setChoiceId('gpt-6-luna'); p.onModel('economy'); }} className="min-h-9 px-1 font-semibold text-primary underline">Switch to gpt-6-luna</button>} {daily ? 'Or wait until midnight PT.' : `Or wait until the allowance ${reset}.`}</p>}
+    {low && <p className="mt-2 text-sm text-attention-ink">{modelName} needs about {creditLabel(price)} and you have {creditLabel(quota.remainingMicro)} left{daily ? ' today' : ' this month'}. {affordable && <button type="button" onClick={() => p.onModel(affordable.id)} className="min-h-9 px-1 font-semibold text-primary underline">Switch to {affordable.label}</button>} {daily ? 'Or wait until midnight PT.' : `Or wait until the allowance ${reset}.`}</p>}
   </form>;
 }

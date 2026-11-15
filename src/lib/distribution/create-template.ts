@@ -7,7 +7,7 @@ import type { Actor } from '../contracts';
 import { getDb } from '../db/client';
 import { agentTemplates, agentTemplateVersions, orgCohorts, orgs } from '../db/schema';
 import { audit } from '../gateway/audit';
-import { versionDraftSchema } from './versions';
+import { versionDraftSchema, withModelClasses } from './versions';
 import { checkedWrite, event, invalid, usgAdmin } from './write-support';
 
 const createTemplateSchema = z.object({
@@ -35,7 +35,7 @@ export async function createUsgTemplate(actor: Actor, input: unknown): Promise<{
     const slug = `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agent'}-${templateId}`;
     await tx.insert(agentTemplates).values({ id: templateId, slug, name, publisherOrgId: publisher.id,
       scope: 'global', distribution, target, status: 'active', latestVersion: 1, distributedAt: null, createdAt: at });
-    await tx.insert(agentTemplateVersions).values({ ...version, templateId, version: 1,
+    await tx.insert(agentTemplateVersions).values({ ...withModelClasses(version), templateId, version: 1,
       publishedBy: actor.userId, publishedAt: at, createdAt: at });
     await audit('template.publish', { ...event(actor, 'template', templateId), details: { version: 1, created: true } }, tx);
     return { templateId };

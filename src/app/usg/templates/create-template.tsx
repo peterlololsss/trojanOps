@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { UsgTarget } from '@/lib/distribution/usg-view';
 import { ErrorNotice, selectClass } from './console-ui';
+import { NEW_TEMPLATE_MODELS } from './template-config';
 import { createTemplateAction } from './create-action';
 
 export function CreateTemplate({ targets }: { readonly targets: readonly UsgTarget[] }) {
@@ -40,7 +41,7 @@ export function CreateTemplate({ targets }: { readonly targets: readonly UsgTarg
           <div><label htmlFor="new-template-target" className="mb-1 block font-semibold">Target</label>
             <select id="new-template-target" name="target" className={selectClass} defaultValue="all">{targets.map(target => <option key={target.slug} value={target.slug}>{target.name} ({target.clubs.length})</option>)}</select></div>
         </div>
-        <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">All members can use this agent after installation. It reads up to Members documents and uses Economy. You can adjust these settings on the template page before distribution.</p>
+        <p className="rounded-md bg-muted p-3 text-sm text-muted-foreground">All members can use this agent after installation. It reads up to Members documents, offers {NEW_TEMPLATE_MODELS.modelIds.length} Economy models and uses <span className="font-mono text-xs text-foreground">{NEW_TEMPLATE_MODELS.defaultModelId}</span> by default in chat. You can adjust these settings on the template page before distribution.</p>
         <DialogFooter><DialogClose asChild><Button type="button" variant="secondary" disabled={pending}>Cancel</Button></DialogClose>
           <Button type="submit" disabled={pending}>{pending ? 'Creating…' : 'Create template'}</Button></DialogFooter>
       </form>

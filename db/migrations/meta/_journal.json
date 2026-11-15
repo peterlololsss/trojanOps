@@ -36,6 +36,13 @@
       "when": 1794720469003,
       "tag": "0004_pinned_version_check",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794754341768,
+      "tag": "0005_template_model_ids",
+      "breakpoints": true
     }
   ]
 }

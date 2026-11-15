@@ -96,9 +96,9 @@ describe.skipIf(!probe)('catalog · versions and retirement', () => {
       await tx.execute(sql`update agent_templates set latest_version = 2 where id = ${TEMPLATE.handoff}`);
       await tx.execute(
         sql`insert into agent_template_versions (template_id, version, purpose, audience, usable_by, max_tier,
-              source_kinds, tools, model_classes, default_model_class, system_prompt, changelog, published_at, created_at)
+              source_kinds, tools, model_classes, default_model_class, model_ids, default_model_id, system_prompt, changelog, published_at, created_at)
             select template_id, 2, purpose, audience, usable_by, max_tier, source_kinds, tools, model_classes,
-              default_model_class, system_prompt, 'v2', now(), now()
+              default_model_class, model_ids, default_model_id, system_prompt, 'v2', now(), now()
             from agent_template_versions where template_id = ${TEMPLATE.handoff} and version = 1`,
       );
       const found = await catalog(await actorFor(USER.sam, ORG.startup), ORG.startup);

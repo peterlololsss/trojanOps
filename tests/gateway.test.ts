@@ -106,7 +106,7 @@ describe.skipIf(!probe)('runAgent', () => {
     const [row] = await withActor(taylor, {}, (t) => t.select().from(agentRuns).where(eq(agentRuns.id, run.runId)));
     expect(row).toMatchObject({
       installationId: INSTALLATION.startupFundingPrecheck, orgId: ORG.startup, billedOrgId: ORG.startup,
-      userId: USER.taylor, input: 'Can we fund pitch night?', status: 'completed', model: 'demo-standard', costMicro: 30_000,
+      userId: USER.taylor, input: 'Can we fund pitch night?', status: 'completed', model: 'claude-sonnet-5-5', costMicro: 30_000,
       templateVersion: 1, rulePackVersion: null,
       output: { reply: run.reply, citations: run.citations },
     });

@@ -22,6 +22,8 @@ const baseVersion = {
   tools: ['submit_to_queue'],
   modelClasses: ['standard', 'economy'] as ModelClass[],
   defaultModelClass: 'standard' as ModelClass,
+  modelIds: ['gpt-6-luna', 'gpt-6.1-sol', 'claude-sonnet-5-5'],
+  defaultModelId: 'claude-sonnet-5-5',
 };
 
 const baseClub = {
@@ -290,6 +292,29 @@ describe('composeEffectiveAgent · version ⊗ installation', () => {
       systemPrompt: 'You check requests.',
     });
     expect(agent).not.toHaveProperty('rulePack');
+  });
+
+  it('offers the template models the club allows, defaulting to the template default (decision 29)', () => {
+    expect(composeEffectiveAgent(input())).toMatchObject({
+      allowedModelIds: ['gpt-6-luna', 'gpt-6.1-sol', 'claude-sonnet-5-5'], defaultModelId: 'claude-sonnet-5-5', limitedByTemplate: true,
+    });
+    const economyOnly = { ...baseClub, policy: { ...baseClub.policy, allowedModelClasses: ['economy'] as ModelClass[] } };
+    expect(composeEffectiveAgent(input({ club: economyOnly }))).toMatchObject({
+      modelClass: 'economy', allowedModelIds: ['gpt-6-luna'], defaultModelId: 'gpt-6-luna',
+    });
+    const fixedStandard = { ...input().installation, modelClass: 'standard' as ModelClass };
+    expect(composeEffectiveAgent(input({ installation: fixedStandard }))).toMatchObject({
+      allowedModelIds: ['gpt-6.1-sol', 'claude-sonnet-5-5'], defaultModelId: 'claude-sonnet-5-5', fixedByClub: true,
+    });
+    const everyModel = { ...input().version, modelIds: ['gpt-6-luna', 'gpt-6.1-sol', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'gemini-4-hydrogen', 'gemini-4-carbon'] };
+    expect(composeEffectiveAgent(input({ version: everyModel })).limitedByTemplate).toBe(false);
+  });
+
+  it('falls back to the effective class models when a stored model id is no longer known', () => {
+    const renamed = { ...input().version, modelIds: ['gpt-legacy'], defaultModelId: 'gpt-legacy' };
+    expect(composeEffectiveAgent(input({ version: renamed }))).toMatchObject({
+      allowedModelIds: ['gpt-6.1-sol', 'claude-sonnet-5-5', 'gemini-4-carbon'], defaultModelId: 'gpt-6.1-sol',
+    });
   });
 
   it('reports retired over disabled, and disabled over enabled, instead of throwing', () => {
@@ -711,9 +736,9 @@ describe.skipIf(!probe)('effectiveAgent · tracks and versions', () => {
       .execute(
         sql`insert into agent_template_versions
               (template_id, version, purpose, audience, usable_by, max_tier, source_kinds, tools,
-               model_classes, default_model_class, system_prompt, changelog, published_at, created_at)
+               model_classes, default_model_class, model_ids, default_model_id, system_prompt, changelog, published_at, created_at)
             select template_id, 2, 'Second version.', audience, usable_by, max_tier, source_kinds, tools,
-                   model_classes, default_model_class, system_prompt, 'v2', published_at, created_at
+                   model_classes, default_model_class, model_ids, default_model_id, system_prompt, 'v2', published_at, created_at
             from agent_template_versions where template_id = ${TEMPLATE.handoff} and version = 1`,
       )
       .then(() => tx.execute(sql`update agent_templates set latest_version = 2 where id = ${TEMPLATE.handoff}`));

@@ -1,26 +1,32 @@
 'use client';
 
-// Owner: B. "Edit configuration" on /usg/templates/[templateId]: every setting of the next version as a
-// choice with a one-line explanation, then a review of what differs and who it reaches. The POST body
-// to /api/templates/:id/versions is the same as before (version-draft.ts).
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { CircleAlert } from 'lucide-react';
+// Owner: B. The Configure tab on /usg/templates/[templateId]: the next version as an always-editable
+// form on the left and a live chat preview on the right. The publish bar counts what differs from the
+// published version and reviews it, with who it reaches, before POST /api/templates/:id/versions
+// (version-draft.ts holds the body, validation and change list).
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { Check, CircleAlert, CircleDot } from 'lucide-react';
+import { ModelPicker } from '@/components/inspector/model-picker';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import type { Audience, ModelClass, Tier } from '@/lib/contracts';
+import type { Audience, Tier } from '@/lib/contracts';
 import type { UsgTemplateView } from '@/lib/distribution/usg-view';
-import { ErrorNotice, PendingButton, selectClass, SuccessNotice, useConsoleMutation } from '../console-ui';
-import { AUDIENCES, CLUB_TIERS, demoModelDefault, demoModelDescription, MODEL_CLASSES, MODEL_ORDER, scopeLabel, SOURCE_KINDS, TIERS, TOOLS, toolOption } from '../template-config';
+import { DEMO_MODELS, orderedModelIds, type ModelId } from '@/lib/gateway/models';
+import { absoluteTime, ErrorNotice, PendingButton, useConsoleMutation } from '../console-ui';
 import {
-  initialState, reachSentences, toBody, validate, versionChanges, type EditorField, type EditorState, type FieldChange,
+  AUDIENCES, CLUB_TIERS, modelClassName, modelPrice, MODELS_BY_PROVIDER, plural, scopeLabel, SOURCE_KINDS, TIERS, TOOLS, toolOption,
+} from '../template-config';
+import { TemplatePreview } from './template-preview';
+import {
+  initialState, reachSentences, toBody, validate, versionChanges, words, type EditorField, type EditorState, type FieldChange,
 } from './version-draft';
 
 export interface VersionReviewProps { templateName: string; nextVersion: number; currentVersion: number | null; changes: FieldChange[]; reach: string[]; changelog: string }
@@ -43,131 +49,200 @@ export function VersionReview({ templateName, nextVersion, currentVersion, chang
   </div>;
 }
 
-function Field({ legend, error, id, children }: { legend: string; error?: string; id: string; children: ReactNode }) {
-  return <fieldset aria-describedby={error ? `${id}-error` : undefined} className="space-y-2">
-    <legend className="font-semibold">{legend}</legend>
+/** A titled part of the form. The title takes focus when another tab links here. */
+function BuilderSection({ id, title, hint, children }: { id: string; title: ReactNode; hint?: string; children: ReactNode }) {
+  return <section id={id} aria-labelledby={`${id}-title`} className="space-y-3 border-t border-border pt-6 first:border-t-0 first:pt-0">
+    <div>
+      <h2 id={`${id}-title`} tabIndex={-1} className="text-base font-semibold leading-6">{title}</h2>
+      {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
+    </div>
     {children}
-    {error && <p id={`${id}-error`} className="flex items-center gap-1 text-primary"><CircleAlert aria-hidden="true" className="size-3 shrink-0" />{error}</p>}
-  </fieldset>;
+  </section>;
 }
-function Choice({ id, title, description, tag, control }: { id: string; title: string; description?: string; tag?: string; control: ReactNode }) {
-  return <div className="flex items-start gap-3 rounded-md border border-border px-3 py-2 has-[:checked]:border-input has-[:checked]:bg-muted has-[[data-state=checked]]:border-input has-[[data-state=checked]]:bg-muted">
-    <div className="flex h-5 items-center">{control}</div>
-    <div><label htmlFor={id} className="font-semibold">{title}</label>{tag && <Badge className="ml-2 align-middle">{tag}</Badge>}
-      {description && <p id={`${id}-hint`} className="text-muted-foreground">{description}</p>}</div>
-  </div>;
+function FieldError({ id, message }: { id: string; message?: string }) {
+  return message ? <p id={id} className="flex items-center gap-1 text-sm text-primary"><CircleAlert aria-hidden="true" className="size-3 shrink-0" />{message}</p> : null;
 }
+/** One option in a compact bordered list: the whole row is the control's label. */
+function OptionRow({ control, title, description, aside, descriptionId }: { control: ReactNode; title: ReactNode; description?: string; aside?: ReactNode; descriptionId?: string }) {
+  return <label className="flex min-h-10 cursor-pointer items-start gap-3 px-3 py-2 hover:bg-accent has-[:checked]:bg-muted has-[[data-state=checked]]:bg-muted has-[:disabled]:cursor-not-allowed">
+    <span className="flex h-6 items-center">{control}</span>
+    <span className="min-w-0 flex-1"><span className="block font-semibold leading-6">{title}</span>
+      {description && <span id={descriptionId} className="block text-xs leading-4 text-muted-foreground">{description}</span>}</span>
+    {aside && <span className="shrink-0 pt-0.5 text-xs leading-5 text-muted-foreground">{aside}</span>}
+  </label>;
+}
+const LIST = 'divide-y divide-border overflow-hidden rounded-md border border-border';
 const toggle = (values: string[], value: string, on: boolean) => on ? [...values.filter(v => v !== value), value] : values.filter(v => v !== value);
+/** The first control of the first invalid field, in the form's order. */
+const FIELD_TARGETS: ReadonlyArray<[EditorField, string]> = [
+  ['purpose', 'version-purpose'], ['systemPrompt', 'version-prompt'], ['sourceKinds', 'builder-knowledge-title'],
+  ['modelIds', 'builder-models-title'], ['usableBy', 'builder-access-title'],
+];
 
-export function VersionEditor({ data, editing, setEditing, focusSources = false }: { data: UsgTemplateView; editing: boolean; setEditing: (value: boolean) => void; focusSources?: boolean }) {
-  const latest = data.versions.find(v => v.version === data.template.latestVersion) ?? data.versions[0];
-  const next = data.template.latestVersion + 1;
+export function VersionEditor({ data }: { data: UsgTemplateView }) {
+  const { template } = data; const retired = template.status === 'retired';
+  const latest = data.versions.find(v => v.version === template.latestVersion) ?? data.versions[0];
+  const next = template.latestVersion + 1;
+  const formId = useId();
   const [state, setState] = useState<EditorState>(() => initialState(latest));
-  const [errors, setErrors] = useState<Partial<Record<EditorField, string>>>({});
+  const [submitted, setSubmitted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null); const [open, setOpen] = useState(false);
-  const heading = useRef<HTMLHeadingElement>(null); const mutation = useConsoleMutation();
+  const mutation = useConsoleMutation();
   const ctx = { positions: data.positions };
   const body = toBody(state); const changes = versionChanges(latest, body, ctx);
-  const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setState(s => ({ ...s, [key]: value }));
-
-  const sourceHeading = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (editing) (focusSources ? sourceHeading.current : heading.current)?.focus();
-  }, [editing, focusSources]);
+  // Validated on submit; after that, each error clears as soon as its field is fixed.
+  const errors = submitted ? validate(state) : {};
+  const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => { setFormError(null); setState(s => ({ ...s, [key]: value })); };
 
   const positionOptions = [...data.positions, ...state.usableBy.filter(slug => !data.positions.some(p => p.slug === slug)).map(slug => ({ slug, name: slug }))];
   const toolOptions = [...TOOLS, ...state.tools.filter(slug => !TOOLS.some(t => t.slug === slug)).map(toolOption)];
   // USG console templates are global, so USG internal notes stay out (kept only to let a stored choice be removed).
   const sourceOptions = SOURCE_KINDS.filter(s => s.slug !== 'usg_internal' || state.sourceKinds.includes(s.slug));
   const tierOptions: Tier[] = CLUB_TIERS.includes(state.maxTier) ? [...CLUB_TIERS] : [...CLUB_TIERS, state.maxTier];
+  const offered = DEMO_MODELS.filter(model => state.modelIds.includes(model.id));
 
+  function toggleModel(id: ModelId, on: boolean) {
+    setFormError(null);
+    setState(s => {
+      const ids = orderedModelIds(on ? [...s.modelIds, id] : s.modelIds.filter(x => x !== id));
+      return { ...s, modelIds: ids, defaultModelId: ids.includes(s.defaultModelId) ? s.defaultModelId : ids[0] ?? s.defaultModelId };
+    });
+  }
   function review(event: FormEvent) {
-    event.preventDefault(); setFormError(null);
-    const found = validate(state); setErrors(found);
-    if (Object.keys(found).length) { setFormError('Some settings need a fix. Each one says what to change.'); return; }
+    event.preventDefault(); if (retired) return;
+    setSubmitted(true); setFormError(null);
+    const found = validate(state);
+    const first = FIELD_TARGETS.find(([field]) => found[field]);
+    if (first) { setFormError('Some settings need a fix. Each one says what to change.'); document.getElementById(first[1])?.focus(); return; }
     if (latest && !changes.length) { setFormError(`Nothing differs from version ${latest.version} yet. Change a setting before publishing version ${next}.`); return; }
     mutation.clear(); setOpen(true);
   }
   function publish() {
     mutation.run(async () => {
-      const result = await mutation.request(`/api/templates/${data.template.id}/versions`, 'POST', body) as { version: number };
-      return `Version ${result.version} published.`;
-    }, () => { setOpen(false); setEditing(false); });
+      await mutation.request(`/api/templates/${template.id}/versions`, 'POST', body);
+      // The page remounts on the new version; its publish bar then reads "Version N · published".
+      return '';
+    }, () => setOpen(false));
   }
-  function cancel() { setState(initialState(latest)); setErrors({}); setFormError(null); setEditing(false); }
+  function discard() { setState(initialState(latest)); setSubmitted(false); setFormError(null); }
 
-  // Opened from the summary's "Edit configuration" button; nothing shows until then.
-  if (!editing) return mutation.success ? <SuccessNotice message={mutation.success} /> : null;
-  return <section id="edit-configuration" aria-labelledby="edit-configuration-title" className="space-y-4 rounded-md border border-border p-4">
-    <div><h2 id="edit-configuration-title" ref={heading} tabIndex={-1} className="text-xl font-semibold leading-7">Edit configuration</h2>
-      <p className="mt-1 text-muted-foreground">Publishes as version {next}</p></div>
-    <form onSubmit={review} noValidate className="max-w-[640px] space-y-6">
-      <div><Label htmlFor="version-purpose">Purpose</Label>
-        <Input id="version-purpose" value={state.purpose} onChange={e => set('purpose', e.target.value)} aria-invalid={!!errors.purpose} aria-describedby={errors.purpose ? 'version-purpose-error' : undefined} />
-        {errors.purpose && <p id="version-purpose-error" className="mt-1 flex items-center gap-1 text-primary"><CircleAlert aria-hidden="true" className="size-3 shrink-0" />{errors.purpose}</p>}</div>
-
-      <Field id="version-audience" legend="Audience">
-        <RadioGroup value={state.audience} onValueChange={v => set('audience', v as Audience)} className="gap-2" aria-label="Audience">
-          {AUDIENCES.map(a => <Choice key={a.slug} id={`audience-${a.slug}`} title={a.name} description={a.description}
-            control={<RadioGroupItem id={`audience-${a.slug}`} value={a.slug} aria-describedby={`audience-${a.slug}-hint`} className="size-5" />} />)}
-        </RadioGroup>
-      </Field>
-
-      {state.audience === 'positions' && <Field id="version-positions" legend="Positions" error={errors.usableBy}>
-        <div className="grid gap-2 sm:grid-cols-2">{positionOptions.map(p => <label key={p.slug} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 has-[:checked]:border-input has-[:checked]:bg-muted">
-          <Checkbox checked={state.usableBy.includes(p.slug)} onChange={e => set('usableBy', toggle(state.usableBy, p.slug, e.target.checked))} />{p.name}</label>)}</div>
-      </Field>}
-
-      <div><Label htmlFor="version-prompt">Instructions</Label>
-        <Textarea id="version-prompt" value={state.systemPrompt} onChange={e => set('systemPrompt', e.target.value)} rows={12} className="text-base leading-6" aria-invalid={!!errors.systemPrompt} aria-describedby={errors.systemPrompt ? 'version-prompt-error' : undefined} />
-        {errors.systemPrompt && <p id="version-prompt-error" className="mt-1 flex items-center gap-1 text-primary"><CircleAlert aria-hidden="true" className="size-3 shrink-0" />{errors.systemPrompt}</p>}</div>
-
-      <div ref={sourceHeading} tabIndex={-1} className="space-y-2">
-        <Field id="version-sources" legend="Knowledge sources" error={errors.sourceKinds}>
-          <div className="space-y-2">{sourceOptions.map(s => <Choice key={s.slug} id={`source-${s.slug}`} title={s.name} description={s.description} tag={scopeLabel(s.owner)}
-            control={<Checkbox id={`source-${s.slug}`} aria-describedby={`source-${s.slug}-hint`} checked={state.sourceKinds.includes(s.slug)} onChange={e => set('sourceKinds', toggle(state.sourceKinds, s.slug, e.target.checked))} />} />)}</div>
-        </Field>
-        <p className="text-sm text-muted-foreground">Source connections and access limits are saved in the new template version. Connected libraries supply their latest document versions.</p>
+  return <div className="space-y-6">
+    <div className="sticky top-0 z-20 -mx-6 border-b border-border bg-background px-6 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <div className="min-w-0">
+          <p className="font-semibold">{latest ? <>Version {latest.version} · published <time dateTime={latest.publishedAt} className="font-mono text-xs font-normal">{absoluteTime(latest.publishedAt)}</time></> : 'No version published yet'}</p>
+          <p className="flex items-center gap-1 text-sm text-muted-foreground">
+            {retired ? 'Retired templates cannot publish new versions.'
+              : !latest ? 'Draft of version 1'
+              : changes.length ? <><CircleDot aria-hidden="true" className="size-3 text-attention-ink" />{plural(changes.length, 'unpublished change')}</>
+              : <><Check aria-hidden="true" className="size-3 text-success" />No unpublished changes</>}
+          </p>
+        </div>
+        {!retired && <div className="flex flex-wrap gap-2">
+          {changes.length > 0 && latest && <Button type="button" variant="ghost" onClick={discard}>Discard</Button>}
+          <Button type="submit" form={formId}>Review and publish v{next}</Button>
+        </div>}
       </div>
+      {formError && <Alert variant="destructive" className="mt-3"><CircleAlert aria-hidden="true" /><div><AlertTitle>Cannot review yet</AlertTitle><AlertDescription>{formError}</AlertDescription></div></Alert>}
+    </div>
 
-      <Field id="version-tier" legend="Reads up to">
-        {state.audience === 'public' ? <p className="rounded-md border border-border px-3 py-2 font-semibold">{TIERS.public.name}</p>
-          : <><RadioGroup value={state.maxTier} onValueChange={v => set('maxTier', v as Tier)} className="gap-2" aria-label="Reads up to">
-            {tierOptions.map(t => <Choice key={t} id={`tier-${t}`} title={TIERS[t].name} description={TIERS[t].plain}
-              control={<RadioGroupItem id={`tier-${t}`} value={t} aria-describedby={`tier-${t}-hint`} className="size-5" />} />)}
-          </RadioGroup></>}
-      </Field>
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,640px)_1fr] lg:items-start">
+      <form id={formId} onSubmit={review} noValidate aria-label={`Configure version ${next}`}>
+        <fieldset disabled={retired} className="min-w-0 space-y-6">
+          <BuilderSection id="builder-details" title="Details">
+            <div><Label htmlFor="version-purpose">Purpose</Label>
+              <Input id="version-purpose" value={state.purpose} onChange={e => set('purpose', e.target.value)} aria-invalid={!!errors.purpose}
+                aria-describedby={errors.purpose ? 'version-purpose-error' : 'version-purpose-hint'} />
+              <p id="version-purpose-hint" className="mt-1 text-xs leading-4 text-muted-foreground">One sentence. Members see it above the chat.</p>
+              <FieldError id="version-purpose-error" message={errors.purpose} /></div>
+          </BuilderSection>
 
-      <Field id="version-tools" legend="Tools">
-        <div className="space-y-2">{toolOptions.map(t => <Choice key={t.slug} id={`tool-${t.slug}`} title={t.name} description={t.description}
-          control={<Checkbox id={`tool-${t.slug}`} aria-describedby={t.description ? `tool-${t.slug}-hint` : undefined} checked={state.tools.includes(t.slug)} onChange={e => set('tools', toggle(state.tools, t.slug, e.target.checked))} />} />)}</div>
-      </Field>
+          <BuilderSection id="builder-instructions" title={<label htmlFor="version-prompt">Instructions</label>} hint="What the agent follows before every request.">
+            <div><Textarea id="version-prompt" value={state.systemPrompt} onChange={e => set('systemPrompt', e.target.value)} rows={14} className="text-base leading-6"
+              aria-invalid={!!errors.systemPrompt} aria-describedby={`version-prompt-count${errors.systemPrompt ? ' version-prompt-error' : ''}`} />
+              <div className="mt-1 flex items-start justify-between gap-4">
+                <FieldError id="version-prompt-error" message={errors.systemPrompt} />
+                <p id="version-prompt-count" className="ml-auto text-xs leading-4 tabular-nums text-muted-foreground">{words(state.systemPrompt)}</p>
+              </div></div>
+          </BuilderSection>
 
-      <Field id="version-models" legend="Model classes" error={errors.modelClasses}>
-        <p className="text-muted-foreground">Demo models use the mock runtime. The allowed choices and default are saved by pricing class.</p>
-        <div className="grid gap-2 sm:grid-cols-2">{MODEL_ORDER.map(m => <Choice key={m} id={`model-${m}`} title={MODEL_CLASSES[m].name} description={demoModelDescription(m)}
-          control={<Checkbox id={`model-${m}`} aria-describedby={`model-${m}-hint`} checked={state.modelClasses.includes(m)} onChange={e => {
-            const classes = MODEL_ORDER.filter(x => x === m ? e.target.checked : state.modelClasses.includes(x));
-            setState(s => ({ ...s, modelClasses: classes, defaultModelClass: classes.includes(s.defaultModelClass) ? s.defaultModelClass : classes[0] ?? s.defaultModelClass }));
-          }} />} />)}</div>
-        <div className="max-w-xs"><Label htmlFor="version-model">Default model</Label>
-          <select id="version-model" className={selectClass} value={state.defaultModelClass} onChange={e => set('defaultModelClass', e.target.value as ModelClass)}>
-            {MODEL_ORDER.filter(m => state.modelClasses.includes(m)).map(m => <option key={m} value={m}>{demoModelDefault(m)} · {MODEL_CLASSES[m].name}</option>)}</select></div>
-      </Field>
+          <BuilderSection id="builder-knowledge" title="Knowledge" hint="Each club supplies its own documents; USG supplies its library. Permissions apply on every run.">
+            <div role="group" aria-label="Knowledge sources" className={LIST}>
+              {sourceOptions.map(s => <OptionRow key={s.slug} title={s.name} description={s.description} descriptionId={`source-${s.slug}-hint`} aside={scopeLabel(s.owner)}
+                control={<Checkbox aria-describedby={`source-${s.slug}-hint`} checked={state.sourceKinds.includes(s.slug)} onChange={e => set('sourceKinds', toggle(state.sourceKinds, s.slug, e.target.checked))} />} />)}
+            </div>
+            <FieldError id="version-sources-error" message={errors.sourceKinds} />
+            <div className="space-y-2 pt-2">
+              <h3 id="version-tier-title" className="text-sm font-semibold">Reads up to</h3>
+              {state.audience === 'public' ? <p className="rounded-md border border-border px-3 py-2"><span className="font-semibold">{TIERS.public.name}</span>
+                <span className="block text-xs leading-4 text-muted-foreground">Agents for all students read Public documents only.</span></p>
+                : <RadioGroup value={state.maxTier} onValueChange={v => set('maxTier', v as Tier)} aria-labelledby="version-tier-title" className={`${LIST} gap-0`}>
+                  {tierOptions.map(t => <OptionRow key={t} title={TIERS[t].name} description={TIERS[t].plain} descriptionId={`tier-${t}-hint`}
+                    control={<RadioGroupItem value={t} aria-describedby={`tier-${t}-hint`} className="size-5" />} />)}
+                </RadioGroup>}
+            </div>
+          </BuilderSection>
 
-      <div><Label htmlFor="version-changes">Change note</Label>
-        <Textarea id="version-changes" value={state.changelog} onChange={e => set('changelog', e.target.value)} rows={2} /></div>
+          <BuilderSection id="builder-tools" title="Tools" hint="Tools that change something wait for the member to confirm.">
+            <div className={LIST}>
+              {toolOptions.map(t => <OptionRow key={t.slug} title={t.name} description={t.description} descriptionId={`tool-${t.slug}-hint`}
+                control={<Switch checked={state.tools.includes(t.slug)} aria-describedby={t.description ? `tool-${t.slug}-hint` : undefined}
+                  onCheckedChange={on => set('tools', toggle(state.tools, t.slug, on))} />} />)}
+            </div>
+          </BuilderSection>
 
-      {formError && <Alert variant="destructive"><CircleAlert aria-hidden="true" /><div><AlertTitle>Cannot review yet</AlertTitle><AlertDescription>{formError}</AlertDescription></div></Alert>}
-      <div className="flex flex-wrap gap-2"><Button type="submit">Review version {next}</Button><Button type="button" variant="ghost" onClick={cancel}>Cancel</Button></div>
-    </form>
+          <BuilderSection id="builder-models" title="Models" hint="Members choose from these in chat. Each run is paid from the club’s budget at the model’s price.">
+            <div role="group" aria-label="Models offered" className={LIST}>
+              {MODELS_BY_PROVIDER.map(group => <div key={group.provider} role="group" aria-labelledby={`provider-${group.provider}`}>
+                <p id={`provider-${group.provider}`} className="bg-muted px-3 py-1 text-xs font-semibold leading-5 text-muted-foreground">{group.provider}</p>
+                {group.models.map(model => <label key={model.id} className="flex min-h-10 cursor-pointer items-center gap-3 border-t border-border px-3 py-2 hover:bg-accent has-[:disabled]:cursor-not-allowed">
+                  <Checkbox checked={state.modelIds.includes(model.id)} onChange={e => toggleModel(model.id, e.target.checked)} />
+                  <span className="min-w-0 flex-1 font-mono text-sm">{model.label}</span>
+                  <span className="w-20 text-sm text-muted-foreground">{modelClassName(model.id)}</span>
+                  <span className="w-32 text-right text-sm tabular-nums">{modelPrice(model.id)}</span>
+                </label>)}
+              </div>)}
+            </div>
+            <FieldError id="version-models-error" message={errors.modelIds} />
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+              <span className="text-sm font-semibold">Default in chat</span>
+              {offered.length ? <>
+                <ModelPicker choices={offered} value={state.defaultModelId} onChange={id => set('defaultModelId', id)} label="Default in chat" disabled={retired}
+                  className="h-9 border border-input px-3 text-sm" />
+                <span className="text-sm tabular-nums text-muted-foreground">{modelPrice(state.defaultModelId)}</span>
+              </> : <span className="text-sm text-muted-foreground">Choose a model above first.</span>}
+            </div>
+          </BuilderSection>
+
+          <BuilderSection id="builder-access" title="Access" hint="Who can use the agent in each club that installs it.">
+            <RadioGroup value={state.audience} onValueChange={v => set('audience', v as Audience)} aria-label="Audience" className={`${LIST} gap-0`}>
+              {AUDIENCES.map(a => <OptionRow key={a.slug} title={a.name} description={a.description} descriptionId={`audience-${a.slug}-hint`}
+                control={<RadioGroupItem value={a.slug} aria-describedby={`audience-${a.slug}-hint`} className="size-5" />} />)}
+            </RadioGroup>
+            {state.audience === 'positions' && <fieldset aria-describedby={errors.usableBy ? 'version-positions-error' : undefined} className="space-y-2">
+              <legend className="text-sm font-semibold">Positions</legend>
+              <div className="grid gap-2 sm:grid-cols-2">{positionOptions.map(p => <label key={p.slug} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 hover:bg-accent has-[:checked]:bg-muted">
+                <Checkbox checked={state.usableBy.includes(p.slug)} onChange={e => set('usableBy', toggle(state.usableBy, p.slug, e.target.checked))} />{p.name}</label>)}</div>
+              <FieldError id="version-positions-error" message={errors.usableBy} />
+            </fieldset>}
+          </BuilderSection>
+
+          <BuilderSection id="builder-note" title={<label htmlFor="version-changes">Change note</label>} hint="Shown in version history.">
+            <Textarea id="version-changes" value={state.changelog} onChange={e => set('changelog', e.target.value)} rows={2} />
+          </BuilderSection>
+        </fieldset>
+      </form>
+
+      <TemplatePreview name={template.name} slug={template.slug} versionLabel={changes.length || !latest ? `v${next} draft` : `v${latest.version}`}
+        purpose={state.purpose.trim()} modelIds={state.modelIds} defaultModelId={state.defaultModelId} onDefaultModel={id => set('defaultModelId', id)} disabled={retired} />
+    </div>
 
     <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-w-2xl" aria-describedby={undefined}>
-      <DialogHeader><DialogTitle>Publish version {next} of {data.template.name}?</DialogTitle></DialogHeader>
-      <VersionReview templateName={data.template.name} nextVersion={next} currentVersion={latest?.version ?? null} changes={changes}
-        reach={reachSentences(body, data.template.installedCount, ctx)} changelog={state.changelog} />
+      <DialogHeader><DialogTitle>Publish version {next} of {template.name}?</DialogTitle></DialogHeader>
+      <VersionReview templateName={template.name} nextVersion={next} currentVersion={latest?.version ?? null} changes={changes}
+        reach={reachSentences(body, template.installedCount, ctx)} changelog={state.changelog} />
       <ErrorNotice message={mutation.error} />
       <DialogFooter><Button type="button" variant="ghost" onClick={() => setOpen(false)}>Back to edit</Button><PendingButton pending={mutation.pending} onClick={publish}>Publish version {next}</PendingButton></DialogFooter>
     </DialogContent></Dialog>
-  </section>;
+  </div>;
 }

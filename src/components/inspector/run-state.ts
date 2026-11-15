@@ -2,11 +2,12 @@
 // pending action's status. Pure, so tests cover it without a browser.
 // The transcript lives in memory only: no browser storage and no history reload, because a run's
 // input and output are private to the user who ran it (I15).
-import type { ApiError, ModelClass, RunInspector, RunResult } from '@/lib/contracts';
+import type { ApiError, RunInspector, RunResult } from '@/lib/contracts';
+import type { ModelId } from '@/lib/gateway/models';
 
 export type Turn =
   | { kind: 'you'; key: string; text: string }
-  | { kind: 'agent'; key: string; result: RunResult; modelClass?: ModelClass }
+  | { kind: 'agent'; key: string; result: RunResult; modelId?: ModelId }
   | { kind: 'note'; key: string; error: ApiError; retry: boolean };
 
 /** A pending write action (I6) as the run page shows it. Confirm and Reject both go to the gateway. */
@@ -30,7 +31,7 @@ export interface RunState {
 
 export type RunEvent =
   | { type: 'submit'; text: string }
-  | { type: 'succeeded'; result: RunResult; modelClass?: ModelClass }
+  | { type: 'succeeded'; result: RunResult; modelId?: ModelId }
   | { type: 'failed'; error: ApiError; retry?: boolean }
   | { type: 'reset' }
   | { type: 'dismiss_error' }
@@ -74,7 +75,7 @@ export function runReducer(state: RunState, event: RunEvent): RunState {
       for (const a of event.result.pendingActions) actions[a.id] = { status: 'pending' };
       return {
         ...state,
-        turns: [...state.turns, { kind: 'agent', key: event.result.runId, result: event.result, ...(event.modelClass ? { modelClass: event.modelClass } : {}) }],
+        turns: [...state.turns, { kind: 'agent', key: event.result.runId, result: event.result, ...(event.modelId ? { modelId: event.modelId } : {}) }],
         running: false,
         actions,
       };
@@ -137,10 +138,10 @@ function isRunResult(body: unknown): body is RunResult {
 }
 
 /** One run through the gateway's route (I5): POST /api/agents/:installationId/runs { input }. */
-export async function requestRun(fetchFn: FetchJson, installationId: string, input: string, fallback: string, modelClass?: ModelClass): Promise<RunEvent> {
+export async function requestRun(fetchFn: FetchJson, installationId: string, input: string, fallback: string, modelId?: ModelId): Promise<RunEvent> {
   try {
-    const res = await postJson(fetchFn, `/api/agents/${encodeURIComponent(installationId)}/runs`, { input, ...(modelClass ? { modelClass } : {}) });
-    if (res.ok && isRunResult(res.body)) return { type: 'succeeded', result: res.body, ...(modelClass ? { modelClass } : {}) };
+    const res = await postJson(fetchFn, `/api/agents/${encodeURIComponent(installationId)}/runs`, { input, ...(modelId ? { modelId } : {}) });
+    if (res.ok && isRunResult(res.body)) return { type: 'succeeded', result: res.body, ...(modelId ? { modelId } : {}) };
     return { type: 'failed', error: apiErrorFrom(res.ok ? undefined : res.body, fallback), ...((res.status ?? 0) >= 500 || !res.body ? { retry: true } : {}) };
   } catch {
     return { type: 'failed', error: apiErrorFrom(undefined, fallback), retry: true };

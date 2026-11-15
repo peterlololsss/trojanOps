@@ -35,6 +35,9 @@ export const agentTemplateVersions = pgTable('agent_template_versions', {
   tools: text('tools').array().notNull().default(sql`'{}'`),
   modelClasses: text('model_classes').array().notNull().$type<ModelClass[]>(),
   defaultModelClass: text('default_model_class').notNull().$type<ModelClass>(),
+  // The specific demo models offered in chat; the class columns above are derived from them (decision 29).
+  modelIds: text('model_ids').array().notNull(),
+  defaultModelId: text('default_model_id').notNull(),
   systemPrompt: text('system_prompt').notNull(),
   rulePackSlug: text('rule_pack_slug'),
   changelog: text('changelog').notNull().default(''),
@@ -46,6 +49,7 @@ export const agentTemplateVersions = pgTable('agent_template_versions', {
   check('agent_template_versions_audience_check', sql`${t.audience} in ('public', 'members', 'positions')`),
   check('agent_template_versions_max_tier_check', sql`${t.maxTier} in ('public', 'members', 'officers', 'usg_internal')`),
   check('agent_template_versions_default_model_class_check', sql`${t.defaultModelClass} in ('standard', 'economy')`),
+  check('agent_template_versions_default_model_id_check', sql`${t.defaultModelId} = any(${t.modelIds})`),
 ]);
 
 // Null override columns mean "use the template version's value".

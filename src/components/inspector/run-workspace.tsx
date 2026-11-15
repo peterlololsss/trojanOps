@@ -4,7 +4,8 @@ import { AlertCircle, ArrowUpRight, LoaderCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useReducer, useRef, useState, type CSSProperties } from 'react';
 import { Button } from '@/components/ui/button';
-import type { ApiError, ModelClass } from '@/lib/contracts';
+import type { ApiError } from '@/lib/contracts';
+import type { ModelId } from '@/lib/gateway/models';
 import type { ChatConfig } from '@/lib/documents/run-config';
 import { refreshRunContext } from '@/lib/documents/run-actions';
 import { creditLabel } from '@/lib/gateway/prices';
@@ -40,7 +41,7 @@ export function RunWorkspace({ installationId, agentName, config, header, fill =
   const [state, dispatch] = useReducer(runReducer, initialRunState);
   const [context, setContext] = useState(config);
   const [input, setInput] = useState('');
-  const [model, setModel] = useState<ModelClass>(config?.models.defaultClass ?? 'economy');
+  const [model, setModel] = useState<ModelId>(config?.models.defaultId ?? 'gpt-6-luna');
   const [inputError, setInputError] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [stoppedId, setStoppedId] = useState<string | null>(null);
@@ -91,7 +92,7 @@ export function RunWorkspace({ installationId, agentName, config, header, fill =
   function refresh() {
     if (!config) return;
     void refreshRunContext(installationId).then((next) => {
-      if (next) { setContext(next); setModel((current) => next.models.allowed.some((m) => m.modelClass === current) ? current : next.models.defaultClass); }
+      if (next) { setContext(next); setModel((current) => next.models.ids.includes(current) ? current : next.models.defaultId); }
     }, () => setAnnouncement('The run finished. Reload the page to refresh allowance details.'));
   }
 
@@ -134,7 +135,7 @@ export function RunWorkspace({ installationId, agentName, config, header, fill =
   function stop() { setStoppedId(playingId); setPlayingId(null); setAnnouncement('Stopped showing the answer. The run had already finished.'); }
   function reset() {
     if (state.running || playingId) return;
-    dispatch({ type: 'reset' }); setInput(''); setModel(context?.models.defaultClass ?? 'economy'); setStoppedId(null); setSelectedRunId(null); setHighlightedId(null); setInputError(null); setCharge(null); setAnnouncement('New conversation. Earlier messages will not be sent.');
+    dispatch({ type: 'reset' }); setInput(''); setModel(context?.models.defaultId ?? 'gpt-6-luna'); setStoppedId(null); setSelectedRunId(null); setHighlightedId(null); setInputError(null); setCharge(null); setAnnouncement('New conversation. Earlier messages will not be sent.');
   }
   function inspect(documentId: string, runId: string) {
     setSelectedRunId(runId); setHighlightedId(documentId || null);

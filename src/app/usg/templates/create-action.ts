@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { AppError } from '@/lib/contracts';
 import { createUsgTemplate } from '@/lib/distribution/create-template';
 import { getActor } from '@/lib/identity';
+import { NEW_TEMPLATE_MODELS } from './template-config';
 
 export async function createTemplateAction(_previous: { readonly error: string | null }, form: FormData): Promise<{ readonly error: string | null }> {
   let templateId: string;
@@ -14,7 +15,7 @@ export async function createTemplateAction(_previous: { readonly error: string |
       version: {
         purpose: form.get('purpose'), systemPrompt: form.get('systemPrompt'),
         audience: 'members', usableBy: [], maxTier: 'members', sourceKinds: form.getAll('sourceKinds'),
-        tools: [], modelClasses: ['economy'], defaultModelClass: 'economy', changelog: 'First version.',
+        tools: [], modelIds: NEW_TEMPLATE_MODELS.modelIds, defaultModelId: NEW_TEMPLATE_MODELS.defaultModelId, changelog: 'First version.',
       },
     });
     templateId = created.templateId;

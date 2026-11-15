@@ -183,7 +183,7 @@ Every id is `uuid default gen_random_uuid()`; every table has `created_at` writt
 ### Distribution (B)
 
 - `agent_templates(id, slug text unique, name text, publisher_org_id, scope text check (scope in ('global','org')), distribution text check (distribution in ('required','default','optional')), target text default 'all', status text check (status in ('active','retired')), latest_version int, distributed_at timestamptz null)`
-- `agent_template_versions(id, template_id, version int, purpose text, audience text check (audience in ('public','members','positions')), usable_by text[], max_tier text, source_kinds text[], tools text[], model_classes text[], default_model_class text, system_prompt text, rule_pack_slug text null, changelog text, published_by, published_at, unique (template_id, version))`
+- `agent_template_versions(id, template_id, version int, purpose text, audience text check (audience in ('public','members','positions')), usable_by text[], max_tier text, source_kinds text[], tools text[], model_classes text[], default_model_class text, model_ids text[], default_model_id text check (default_model_id = any(model_ids)), system_prompt text, rule_pack_slug text null, changelog text, published_by, published_at, unique (template_id, version))`
 - `agent_installations(id, template_id, org_id, enabled bool, track text check (track in ('latest','pinned')), pinned_version int null (required when track = 'pinned'), audience text null, usable_by text[] null, prompt_addendum text, extra_source_ids uuid[], model_class text null, installed_by, installed_at, unique (template_id, org_id))`
 - `rule_packs(id, slug text, version int, status text check (status in ('draft','published')), label text, content jsonb, published_by, published_at, unique (slug, version))`
 - `usg_club_policy(org_id primary key, allowed_model_classes text[], allow_public_agents bool default true)`
@@ -492,15 +492,17 @@ export interface LLMProvider {              // used by the real runtime (WP-13)
 }
 ```
 
-## 7. Gateway: `runAgent(actor, installationId, input, { modelClass? }?)`
+## 7. Gateway: `runAgent(actor, installationId, input, { modelId?, modelClass? }?)`
 
 1. `agent = effectiveAgent(installationId)` (§8). Refuse retired templates and disabled
    installations with a reason. Runs need a signed-in user. Internal agents need
    `actor.activeOrgId = agent.orgId`; choosing one on `/me/agents` switches the active org first. Public
    agents can be run from the directory with any active org.
 2. `canUse(actor.userId, agent)`. Otherwise `authz.denied`, 403 `forbidden`.
-   An optional model class must belong to the resolved installation's allowed classes; otherwise
-   `authz.denied` with reason `model_class`, 422 `clamp_violation`, no hold and no runtime call.
+   Then the model: an optional `modelId` must be one of the template's models whose class the club
+   and installation allow (reason `model`); without one, an optional model class must belong to the
+   allowed classes (reason `model_class`). Otherwise `authz.denied`, 422 `clamp_violation`, no hold
+   and no runtime call.
 3. `runGrants = capGrants(grantsFor(actor.userId, agent.orgId), agent.orgId, agent.maxTier)`.
 4. Quota: hold = the estimated cost (mock: Economy $0.01 / 1 credit; Standard $0.03 / 3 credits). Block when `spent + hold > limit` at any
    level; a limit of 0 always blocks. Levels (checked in the order given in §11): platform; billed
@@ -733,7 +735,7 @@ Every handler: `const actor = await getActor(req)` → one service call → JSON
 | Method and path | Service | Who | Stream |
 |---|---|---|---|
 | POST `/api/session/persona`, POST `/api/session/active-org`, GET `/api/me` (returns `Actor`) | identity | `DEMO_MODE` / any | A |
-| POST `/api/agents/:installationId/runs` body `{ input, modelClass? }` | `gateway.runAgent` | per audience | A |
+| POST `/api/agents/:installationId/runs` body `{ input, modelId?, modelClass? }` | `gateway.runAgent` | per audience | A |
 | POST `/api/pending-actions/:id/confirm` (body `{}`) | `gateway.confirm` | the run's user, a member of the action's club (narrowed per tool) | A |
 | POST `/api/pending-actions/:id/reject` (body `{}`) | `gateway.reject` | the same as confirm | A |
 | PUT `/api/quota/limits` | `quota.setLimit` | USG admin (platform, org, student_daily), president (member, installation) | A |
@@ -941,6 +943,11 @@ validated against the resolved installation before any hold. This is an additive
 `RunResult`, `EffectiveAgent`, schema and migrations are unchanged. B's `ResolvedAgent` carries
 bounded model metadata for the UI. Economy holds and settles 10,000 micro-USD, Standard 30,000.
 Credits are presentation only: 1 credit = 10,000 micro-USD. Public runs still bill their club.
+Decision 29 amends this: a template version names its demo models (`model_ids`, `default_model_id`,
+migration `0005`; ids in `src/lib/gateway/models.ts`) and the classes are derived from them. The run
+endpoint also accepts `modelId`; the gateway refuses (audit reason `model`) an id outside the
+template's models that the club and installation allow, prices the run by the id's class and
+records the id as `agent_runs.model` and `ai_usage.model`. Club policy and overrides stay class-based.
 All quota scopes, RLS, audit and human confirmation remain real; mock answers make no model call.
 
 Additional pages are `/me/usage` (D), `/org/[orgId]/documents/[documentId]` (C) and

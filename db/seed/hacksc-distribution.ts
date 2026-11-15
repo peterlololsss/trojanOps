@@ -1,5 +1,6 @@
 import { now } from '@/lib/clock';
 import { agentInstallations, agentTemplates, agentTemplateVersions, usgClubPolicy } from '@/lib/db/schema';
+import { modelFields } from '@/lib/gateway/models';
 import type { SeedDb } from './index';
 import { INSTALLATION, ORG, TEMPLATE, USER } from './ids';
 
@@ -20,7 +21,7 @@ export async function seedHackscDistribution(db: SeedDb): Promise<void> {
   await db.insert(agentTemplateVersions).values(agents.map((agent) => ({
     templateId: agent.id, version: 1, purpose: agent.purpose, audience: 'members' as const,
     usableBy: [], maxTier: 'members' as const, sourceKinds: ['minutes', 'archive'], tools: [],
-    modelClasses: ['economy' as const], defaultModelClass: 'economy' as const,
+    ...modelFields(['gpt-6-luna', 'claude-haiku-5-5', 'gemini-4-hydrogen'], 'gpt-6-luna'),
     systemPrompt: 'Use only the permitted operational records. Cite the source for each fact. Explain prior problems, each planning stage and the recorded updated process. If no readable finance source is supplied, explain the access limitation and refer the user to an authorized officer.',
     publishedBy: USER.sam, publishedAt: createdAt, createdAt,
   }))).onConflictDoNothing();

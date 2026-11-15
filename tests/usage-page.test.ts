@@ -27,11 +27,11 @@ describe('Usage page states', () => {
 });
 
 describe.skipIf(!probe)('real usage rendering', () => {
-  it('shows the billed class, club and credits without the question or answer', () => inRolledBackApp(async () => {
+  it('shows the model, club and credits without the question or answer', () => inRolledBackApp(async () => {
     const actor = await actorFor(USER.casey, ORG.startup);
     const run = await runAgent(actor, INSTALLATION.startupHandoff, 'private usage page question', { modelClass: 'standard' });
     const html = renderToStaticMarkup(createElement(UsageView, { data: await myUsage(actor) }));
-    expect(html).toContain('Standard');
+    expect(html).toContain('claude-sonnet-5-5');
     expect(html).toContain('Startup Club');
     expect(html).toContain('−3 credits');
     expect(html).toContain('title="$0.03"');

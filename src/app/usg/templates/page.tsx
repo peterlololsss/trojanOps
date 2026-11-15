@@ -3,7 +3,7 @@ import { AppError } from '@/lib/contracts';
 import { usgTemplatesView } from '@/lib/distribution/usg-view';
 import { getActor } from '@/lib/identity';
 import { DeniedConsole } from './console-ui';
-import { TemplatesTable } from './templates-table';
+import { TemplatesGrid } from './templates-grid';
 import { CreateTemplate } from './create-template';
 
 export default async function TemplatesPage() {
@@ -15,5 +15,5 @@ export default async function TemplatesPage() {
     return <><PageHeader title="Agent templates" /><DeniedConsole /></>;
   }
   return <><PageHeader title="Agent templates" description="USG agent templates and where they are installed." action={<CreateTemplate targets={data.targets} />} />
-    <TemplatesTable key={`${actor.userId}:${actor.activeOrgId}`} data={data} /></>;
+    <TemplatesGrid key={`${actor.userId}:${actor.activeOrgId}`} data={data} /></>;
 }

@@ -14,7 +14,7 @@ const draft = {
   name: 'Meeting summary', target: 'pilot', distribution: 'default',
   version: {
     purpose: 'Summarize meeting decisions.', audience: 'members', usableBy: [], maxTier: 'members',
-    sourceKinds: ['minutes', 'archive'], tools: [], modelClasses: ['economy'], defaultModelClass: 'economy',
+    sourceKinds: ['minutes', 'archive'], tools: [], modelIds: ['gpt-6-luna', 'claude-haiku-5-5'], defaultModelId: 'claude-haiku-5-5',
     systemPrompt: 'Summarize the supplied minutes with citations.', changelog: 'First version.',
   },
 };
@@ -29,7 +29,8 @@ describe.skipIf(!probe)('USG template creation', () => {
     const [template] = await tx.select().from(agentTemplates).where(eq(agentTemplates.id, created.templateId));
     expect(template).toMatchObject({ publisherOrgId: ORG.usg, scope: 'global', latestVersion: 1, distributedAt: null });
     expect(await tx.select().from(agentTemplateVersions).where(eq(agentTemplateVersions.templateId, created.templateId)))
-      .toMatchObject([{ version: 1, audience: 'members', maxTier: 'members', modelClasses: ['economy'] }]);
+      .toMatchObject([{ version: 1, audience: 'members', maxTier: 'members', modelClasses: ['economy'], defaultModelClass: 'economy',
+        modelIds: ['gpt-6-luna', 'claude-haiku-5-5'], defaultModelId: 'claude-haiku-5-5' }]);
     expect(await tx.select().from(agentInstallations).where(eq(agentInstallations.templateId, created.templateId))).toEqual([]);
     expect(await tx.select().from(auditEvents).where(eq(auditEvents.targetId, created.templateId)))
       .toMatchObject([{ action: 'template.publish', details: { version: 1, created: true } }]);

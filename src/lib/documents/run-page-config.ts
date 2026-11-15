@@ -20,7 +20,7 @@ export async function buildRunConfig(actor: Actor, agent: ResolvedAgent, display
   return {
     orgId: agent.orgId,
     scope: { sentence: `${agent.name} reads its permitted sources up to ${tierLabels[agent.maxTier]}. It runs as you.`, grantLabels: labels, sources: sourceRows.map((s) => s.name), billedClub: display.club },
-    models: { allowed: agent.allowedModelClasses.map((modelClass) => ({ modelClass, priceMicro: priceMicro(modelClass) })), defaultClass: agent.modelClass, fixedByClub: agent.fixedByClub, limitedByTemplate: agent.limitedByTemplate },
+    models: { allowed: agent.allowedModelClasses.map((modelClass) => ({ modelClass, priceMicro: priceMicro(modelClass) })), defaultClass: agent.modelClass, ids: agent.allowedModelIds, defaultId: agent.defaultModelId, fixedByClub: agent.fixedByClub, limitedByTemplate: agent.limitedByTemplate },
     quota,
     blockedMessage: quota.remainingMicro < Math.min(...agent.allowedModelClasses.map(priceMicro)) ? quotaMessage(quota.scope, { club: display.club, agent: agent.name, ...quota }) : null,
     starters: STARTERS[agent.templateSlug === 'funding-precheck' && agent.orgId === ORG.hacksc ? 'hacksc-funding-precheck' : agent.templateSlug] ?? [],

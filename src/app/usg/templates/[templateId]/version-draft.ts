@@ -1,21 +1,22 @@
 // Owner: B. The configuration editor's draft: the POST body for /api/templates/:id/versions (the
 // same shape as versionDraftSchema), its validation, and the fields that differ from the current version.
-import type { Audience, ModelClass, Tier } from '@/lib/contracts';
+import type { Audience, Tier } from '@/lib/contracts';
+import { orderedModelIds, type ModelId } from '@/lib/gateway/models';
 import type { UsgPositionOption, UsgVersion } from '@/lib/distribution/usg-view';
-import { AUDIENCES, audienceLabel, demoModelDefault, MODEL_CLASSES, MODEL_ORDER, plural, SOURCE_KINDS, sourceName, TIERS, toolOption } from '../template-config';
+import { AUDIENCES, audienceLabel, NEW_TEMPLATE_MODELS, plural, SOURCE_KINDS, sourceName, TIERS, toolOption } from '../template-config';
 
 export interface EditorState {
   purpose: string; audience: Audience; usableBy: string[]; maxTier: Tier; sourceKinds: string[]; tools: string[];
-  modelClasses: ModelClass[]; defaultModelClass: ModelClass; systemPrompt: string; rulePackSlug: string; changelog: string;
+  modelIds: ModelId[]; defaultModelId: ModelId; systemPrompt: string; rulePackSlug: string; changelog: string;
 }
 export interface VersionBody {
   purpose: string; audience: Audience; usableBy: string[]; maxTier: Tier; sourceKinds: string[]; tools: string[];
-  modelClasses: ModelClass[]; defaultModelClass: ModelClass; systemPrompt: string; rulePackSlug: string | null; changelog: string;
+  modelIds: ModelId[]; defaultModelId: ModelId; systemPrompt: string; rulePackSlug: string | null; changelog: string;
 }
 export const initialState = (latest: UsgVersion | undefined): EditorState => ({
   purpose: latest?.purpose ?? '', audience: latest?.audience ?? 'members', usableBy: latest?.usableBy ?? [],
   maxTier: latest?.maxTier ?? 'members', sourceKinds: latest?.sourceKinds ?? [], tools: latest?.tools ?? [],
-  modelClasses: latest?.modelClasses ?? ['economy'], defaultModelClass: latest?.defaultModelClass ?? 'economy',
+  modelIds: latest?.modelIds ?? [...NEW_TEMPLATE_MODELS.modelIds], defaultModelId: latest?.defaultModelId ?? NEW_TEMPLATE_MODELS.defaultModelId,
   systemPrompt: latest?.systemPrompt ?? '', rulePackSlug: latest?.rulePackSlug ?? '', changelog: '',
 });
 /** The request body, unchanged from the slug-based form: positions only for a positions audience, Public for All students.
@@ -23,17 +24,18 @@ export const initialState = (latest: UsgVersion | undefined): EditorState => ({
 export const toBody = (s: EditorState): VersionBody => ({
   purpose: s.purpose.trim(), audience: s.audience, usableBy: s.audience === 'positions' ? s.usableBy : [],
   maxTier: s.audience === 'public' ? 'public' : s.maxTier, sourceKinds: s.sourceKinds, tools: s.tools,
-  modelClasses: MODEL_ORDER.filter(m => s.modelClasses.includes(m)), defaultModelClass: s.defaultModelClass,
+  modelIds: orderedModelIds(s.modelIds), defaultModelId: s.defaultModelId,
   systemPrompt: s.systemPrompt, rulePackSlug: s.rulePackSlug.trim() || null, changelog: s.changelog,
 });
 
-export type EditorField = 'purpose' | 'usableBy' | 'sourceKinds' | 'modelClasses' | 'systemPrompt';
+export type EditorField = 'purpose' | 'usableBy' | 'sourceKinds' | 'modelIds' | 'systemPrompt';
 export function validate(s: EditorState): Partial<Record<EditorField, string>> {
   const errors: Partial<Record<EditorField, string>> = {};
   if (!s.purpose.trim()) errors.purpose = 'Say in one sentence what it does, for example “Checks a funding request against the USG funding rules before you submit it.”';
   if (s.audience === 'positions' && !s.usableBy.length) errors.usableBy = 'Choose at least one position, or choose All members.';
   if (s.sourceKinds.some(k => !SOURCE_KINDS.some(o => o.slug === k))) errors.sourceKinds = 'Use only the knowledge sources listed here.';
-  if (!s.modelClasses.length || !s.modelClasses.includes(s.defaultModelClass)) errors.modelClasses = 'Allow at least one model class and make the default one of them.';
+  if (!s.modelIds.length) errors.modelIds = 'Offer at least one model.';
+  else if (!s.modelIds.includes(s.defaultModelId)) errors.modelIds = 'Choose a default model from the models you offer.';
   if (!s.systemPrompt.trim()) errors.systemPrompt = 'Write the instructions the agent follows before every request.';
   return errors;
 }
@@ -43,7 +45,8 @@ export interface ChangeContext { positions: UsgPositionOption[] }
 const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every(x => b.includes(x));
 const list = (values: string[], name: (v: string) => string) => values.length ? values.map(name).join(', ') : 'None';
 const audienceName = (a: Audience) => AUDIENCES.find(x => x.slug === a)?.name ?? a;
-const words = (text: string) => plural(text.trim() ? text.trim().split(/\s+/).length : 0, 'word');
+/** "182 words": the instructions' length, as the builder and the review show it. */
+export const words = (text: string) => plural(text.trim() ? text.trim().split(/\s+/).length : 0, 'word');
 
 /** Each setting whose value differs from `before` (the current version), in the editor's order. */
 export function versionChanges(before: UsgVersion | undefined, after: VersionBody, ctx: ChangeContext): FieldChange[] {
@@ -57,10 +60,8 @@ export function versionChanges(before: UsgVersion | undefined, after: VersionBod
   add('Knowledge sources', !sameSet(before?.sourceKinds ?? [], after.sourceKinds), list(before?.sourceKinds ?? [], sourceName), list(after.sourceKinds, sourceName));
   add('Reads up to', before?.maxTier !== after.maxTier, before ? TIERS[before.maxTier].name : none, TIERS[after.maxTier].name);
   add('Tools', !sameSet(before?.tools ?? [], after.tools), list(before?.tools ?? [], t => toolOption(t).name), list(after.tools, t => toolOption(t).name));
-  add('Model classes', !sameSet(before?.modelClasses ?? [], after.modelClasses), list(MODEL_ORDER.filter(m => before?.modelClasses.includes(m)), m => MODEL_CLASSES[m as ModelClass].name), list(after.modelClasses, m => MODEL_CLASSES[m as ModelClass].name));
-  add('Default model', before?.defaultModelClass !== after.defaultModelClass,
-    before ? `${demoModelDefault(before.defaultModelClass)} · ${MODEL_CLASSES[before.defaultModelClass].name}` : none,
-    `${demoModelDefault(after.defaultModelClass)} · ${MODEL_CLASSES[after.defaultModelClass].name}`);
+  add('Models', !sameSet(before?.modelIds ?? [], after.modelIds), list(orderedModelIds(before?.modelIds ?? []), id => id), list(after.modelIds, id => id));
+  add('Default model', before?.defaultModelId !== after.defaultModelId, before?.defaultModelId ?? none, after.defaultModelId);
   return changes;
 }
 

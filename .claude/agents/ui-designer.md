@@ -63,7 +63,8 @@ Every screen uses real seed data (club names, document titles); never lorem ipsu
 
 ## Page patterns
 
-- **Lists and directories** are dense rows or tables, not card grids.
+- **Lists and directories** are dense rows or tables, not card grids. Exception: USG templates are
+  few, separate objects, so `/usg/templates` is a card grid.
   - Club row: initials tile, name, tagline and categories; members; next event; public agents. USG
     adds the monthly quota meter and USG funding.
   - Department row: name and purpose, lead, members, next event; the president adds the budget.
@@ -128,7 +129,11 @@ Every screen uses real seed data (club names, document titles); never lorem ipsu
   - Enabled/Disabled, audience, actions.
   - Required agents show a lock icon and no Disable action.
 - **USG templates:**
-  - A table, plus a detail page with version history.
+  - A card grid: name and version, purpose, distribution and status chips, "Installed in X of Y"
+    with a thin bar, default model, last distributed.
+  - Detail page in builder style: header with Distribute and More (Retire); tabs Configure ·
+    Knowledge · Distribution · Versions. Configure is a sticky publish bar (unpublished changes,
+    Discard, Review and publish), an always-editable form and a sticky chat preview.
   - Distribute dialog: choose target (all clubs or a cohort) and show how many clubs it affects.
 - **Integrations panel:** table of connectors:
   - kind;

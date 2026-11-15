@@ -2,6 +2,7 @@
 import { now } from '@/lib/clock';
 import { agentInstallations, agentTemplates, agentTemplateVersions } from '@/lib/db/schema';
 import type { Audience, Tier } from '@/lib/contracts';
+import { modelFields } from '@/lib/gateway/models';
 import type { SeedDb } from './index';
 import { INSTALLATION, ORG, TEMPLATE, USER } from './ids';
 
@@ -56,8 +57,8 @@ export async function seedSampleAgents(db: SeedDb): Promise<void> {
   await db.insert(agentTemplateVersions).values(SAMPLE_AGENTS.map((agent) => ({
     templateId: agent.templateId, version: 1, purpose: agent.purpose,
     audience: agent.audience, usableBy: [], maxTier: agent.maxTier,
-    sourceKinds: agent.sourceKinds, tools: [], modelClasses: ['economy' as const],
-    defaultModelClass: 'economy' as const, systemPrompt: agent.systemPrompt,
+    sourceKinds: agent.sourceKinds, tools: [], ...modelFields(['gpt-6-luna', 'claude-haiku-5-5', 'gemini-4-hydrogen'], 'gpt-6-luna'),
+    systemPrompt: agent.systemPrompt,
     rulePackSlug: null, changelog: 'First version.', publishedBy: agent.publishedBy,
     publishedAt: createdAt, createdAt,
   }))).onConflictDoNothing();

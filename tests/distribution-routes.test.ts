@@ -309,8 +309,8 @@ describe.skipIf(!probe)('template versions and retirement (§8)', () => {
             maxTier: 'officers',
             sourceKinds: ['rulebook', 'finance'],
             tools: [],
-            modelClasses: ['standard', 'economy'],
-            defaultModelClass: 'standard',
+            modelIds: ['gpt-6.1-sol', 'claude-sonnet-5-5'],
+            defaultModelId: 'claude-sonnet-5-5',
             systemPrompt: 'You check club funding requests against the USG rule pack.',
             rulePackSlug: 'usg-funding',
             changelog: 'Second version.',
@@ -319,7 +319,9 @@ describe.skipIf(!probe)('template versions and retirement (§8)', () => {
       );
       expect(res.status).toBe(200);
       expect(await res.json()).toMatchObject({ version: 2 });
-      expect((await effectiveAgent(INSTALLATION.startupFundingPrecheck)).templateVersion).toBe(2);
+      expect(await effectiveAgent(INSTALLATION.startupFundingPrecheck)).toMatchObject({
+        templateVersion: 2, modelClass: 'standard', allowedModelIds: ['gpt-6.1-sol', 'claude-sonnet-5-5'], defaultModelId: 'claude-sonnet-5-5',
+      });
     }));
 
   it('retires a template, which drops it out of the directory rather than failing on open', () =>

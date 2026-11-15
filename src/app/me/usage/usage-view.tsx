@@ -17,7 +17,7 @@ const column = createColumnHelper<typeof features, Data['runs'][number]>();
 const columns = column.columns([
   column.accessor('startedAt', { id: 'time', header: 'Time', cell: ({ getValue }) => <time dateTime={getValue().toISOString()}>{formatPacific(getValue())}</time> }),
   column.accessor('agent', { id: 'agent', header: 'Agent' }),
-  column.accessor('model', { id: 'model', header: 'Model', cell: ({ getValue }) => { const model = getValue(); return model === 'demo-standard' ? 'Standard' : model === 'demo-economy' ? 'Economy' : model === 'mock' ? 'Demo (legacy)' : model ?? 'Not recorded'; } }),
+  column.accessor('model', { id: 'model', header: 'Model', cell: ({ getValue }) => { const model = getValue(); return model === 'demo-standard' ? 'Standard' : model === 'demo-economy' ? 'Economy' : model === 'mock' ? 'Demo (legacy)' : model ? <span className="font-mono text-xs">{model}</span> : 'Not recorded'; } }),
   column.accessor('club', { id: 'club', header: 'Club billed' }),
   column.accessor('documentsRead', { id: 'documents', header: 'Documents read' }),
   column.accessor('costMicro', { id: 'credits', header: 'Cost', cell: ({ getValue, row }) => <span title={`$${(getValue() / 1_000_000).toFixed(2)}`}>{row.original.status === 'failed' ? 'Failed · ' : getValue() > 0 ? '−' : ''}{creditLabel(getValue())}</span> }),

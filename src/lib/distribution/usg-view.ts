@@ -10,6 +10,7 @@ import { uploadDocumentInput } from '../documents/library';
 import { documentAudience } from '../documents/knowledge-library';
 import { audit } from '../gateway/audit';
 import { remaining } from '../gateway/quota';
+import { isModelId, MODEL_IDS, orderedModelIds, type ModelId } from '../gateway/models';
 import { loadAgents } from './queries';
 
 export interface UsgTemplateRow {
@@ -18,11 +19,13 @@ export interface UsgTemplateRow {
   installedCount: number; targetCount: number;
   /** From the latest published version; empty before the first version. */
   purpose: string;
+  /** The latest version's models; empty and null before the first version. */
+  modelIds: ModelId[]; defaultModelId: ModelId | null;
 }
 export interface UsgTarget { slug: string; name: string; clubs: Array<{ id: string; name: string }> }
 export interface UsgVersion {
   version: number; purpose: string; audience: Audience; usableBy: string[]; maxTier: Tier;
-  sourceKinds: string[]; tools: string[]; modelClasses: ModelClass[]; defaultModelClass: ModelClass;
+  sourceKinds: string[]; tools: string[]; modelClasses: ModelClass[]; defaultModelClass: ModelClass; modelIds: ModelId[]; defaultModelId: ModelId;
   systemPrompt: string; rulePackSlug: string | null; changelog: string; publishedAt: string;
 }
 export interface UsgTemplatesView { templates: UsgTemplateRow[]; targets: UsgTarget[] }
@@ -75,7 +78,8 @@ async function templateData(): Promise<UsgTemplatesView> {
     db.select({ id: orgs.id, name: orgs.name, status: orgs.status }).from(orgs).where(eq(orgs.kind, 'rso')).orderBy(orgs.name),
     db.select().from(orgCohorts),
     db.select({ templateId: agentInstallations.templateId }).from(agentInstallations),
-    db.select({ templateId: agentTemplateVersions.templateId, purpose: agentTemplateVersions.purpose })
+    db.select({ templateId: agentTemplateVersions.templateId, purpose: agentTemplateVersions.purpose,
+      modelIds: agentTemplateVersions.modelIds, defaultModelId: agentTemplateVersions.defaultModelId })
       .from(agentTemplateVersions).innerJoin(agentTemplates, and(eq(agentTemplates.id, agentTemplateVersions.templateId), eq(agentTemplates.latestVersion, agentTemplateVersions.version))),
   ]);
   const active = clubs.filter(c => c.status === 'active').map(({ id, name }) => ({ id, name }));
@@ -88,7 +92,7 @@ async function templateData(): Promise<UsgTemplatesView> {
     status: t.status, latestVersion: t.latestVersion, distributedAt: t.distributedAt?.toISOString() ?? null,
     installedCount: installations.filter(i => i.templateId === t.id).length,
     targetCount: targets.find(x => x.slug === t.target)?.clubs.length ?? 0,
-    purpose: latest.find(v => v.templateId === t.id)?.purpose ?? '',
+    ...(v => ({ purpose: v?.purpose ?? '', modelIds: orderedModelIds(v?.modelIds ?? []), defaultModelId: v && isModelId(v.defaultModelId) ? v.defaultModelId : null }))(latest.find(v => v.templateId === t.id)),
   })) };
 }
 export async function usgTemplatesView(actor: Actor): Promise<UsgTemplatesView> {
@@ -111,6 +115,7 @@ export async function usgTemplateView(actor: Actor, id: string): Promise<UsgTemp
   return { template, targets: data.targets, positions: positionOptions, ...knowledge, versions: rows.map(v => ({
     version: v.version, purpose: v.purpose, audience: v.audience, usableBy: v.usableBy, maxTier: v.maxTier,
     sourceKinds: v.sourceKinds, tools: v.tools, modelClasses: v.modelClasses, defaultModelClass: v.defaultModelClass,
+    modelIds: orderedModelIds(v.modelIds), defaultModelId: isModelId(v.defaultModelId) ? v.defaultModelId : orderedModelIds(v.modelIds)[0] ?? MODEL_IDS[0],
     systemPrompt: v.systemPrompt, rulePackSlug: v.rulePackSlug, changelog: v.changelog, publishedAt: v.publishedAt.toISOString(),
   })) };
 }

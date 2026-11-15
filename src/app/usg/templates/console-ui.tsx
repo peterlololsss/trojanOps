@@ -4,10 +4,11 @@
 import Link from 'next/link';
 import { useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, CircleAlert, LockKeyhole } from 'lucide-react';
+import { Check, CircleAlert, CircleSlash, Lock, LockKeyhole } from 'lucide-react';
 import { auditTime } from '@/components/inspector/format';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 export const money = (micro: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(micro / 1_000_000);
@@ -15,6 +16,16 @@ export const absoluteTime = (iso: string | null) => iso ? auditTime(new Date(iso
 export const label = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 export const selectClass = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm';
 export const chipClass = 'inline-flex items-center gap-1 rounded-sm border border-border px-2 text-xs';
+
+/** A template's status as icon + word. */
+export function TemplateStatus({ status }: { status: 'active' | 'retired' }) {
+  return status === 'active' ? <Badge variant="success"><Check aria-hidden="true" />Active</Badge>
+    : <Badge><CircleSlash aria-hidden="true" />Retired</Badge>;
+}
+/** Required, Default or Optional; Required carries a lock. */
+export function DistributionChip({ distribution }: { distribution: 'required' | 'default' | 'optional' }) {
+  return <Badge>{distribution === 'required' && <Lock aria-hidden="true" />}{label(distribution)}</Badge>;
+}
 
 export function DeniedConsole() {
   return <Alert><LockKeyhole aria-hidden="true" /><div><AlertTitle>USG administrator access required</AlertTitle>
@@ -58,7 +69,7 @@ export function SearchBar({ value, onChange, count, placeholder = 'Search by nam
 }) {
   return <div className="flex items-end justify-between gap-4"><div className="w-full max-w-sm"><label htmlFor="console-search" className="mb-1 block font-semibold">Search</label>
     <Input id="console-search" value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} /></div>
-    <p role="status" className="whitespace-nowrap text-muted-foreground">{count} results{value && <Button type="button" variant="link" className="ml-2" onClick={() => onChange('')}>Clear filters</Button>}</p></div>;
+    <p role="status" className="whitespace-nowrap text-muted-foreground">{count} {count === 1 ? 'result' : 'results'}{value && <Button type="button" variant="link" className="ml-2" onClick={() => onChange('')}>Clear filters</Button>}</p></div>;
 }
 export function Pagination({ page, setPage, total, pageSize = 10 }: { page: number; setPage: (page: number) => void; total: number; pageSize?: number }) {
   const last = Math.max(1, Math.ceil(total / pageSize));
@@ -74,4 +85,3 @@ export function ConsoleNav() {
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return <section className="space-y-4 rounded-md border border-border p-4"><h2 className="text-xl font-semibold leading-7">{title}</h2>{children}</section>;
 }
-export function BackToTemplates() { return <Link className={buttonVariants({ variant: 'secondary' })} href="/usg/templates">All templates</Link>; }

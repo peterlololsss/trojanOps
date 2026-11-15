@@ -20,7 +20,8 @@
 - **Which models members may pick is already in the data.** A template version lists its model
   classes and USG lists the classes each club may use. An installation with no model class lets
   members choose among both lists; a club that sets one fixes it. Runs never leave what the
-  template and USG allow (I7).
+  template and USG allow (I7). Since decision 29 a template version names its specific models
+  and the classes are derived from them; chat lists those models.
 - **Knowledge pages, Dify-style, without its workflow canvas:**
   - Documents becomes the knowledge base: who can read each document, index status, chunks,
     agents and real citation counts.

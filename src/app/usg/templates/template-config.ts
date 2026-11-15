@@ -1,8 +1,8 @@
 // Owner: B. Plain-English names and one-line explanations for agent-template settings, shared by the
-// read-only summary and the configuration editor on /usg/templates/[templateId].
-import { DEMO_MODELS } from '@/components/inspector/demo-models';
-import type { Audience, ModelClass, Tier } from '@/lib/contracts';
-import { creditLabel, priceMicro } from '@/lib/gateway/prices';
+// template cards, the builder and its preview on /usg/templates.
+import { classOf, DEMO_MODELS, MODEL_PROVIDERS, type DemoModel, type ModelId } from '@/lib/gateway/models';
+import type { Audience, Tier } from '@/lib/contracts';
+import { creditLabel, MODEL_LABELS, priceMicro } from '@/lib/gateway/prices';
 import { positionName } from '@/lib/distribution/labels';
 
 export type SourceKind = 'public' | 'minutes' | 'archive' | 'finance' | 'rulebook' | 'usg_internal';
@@ -42,17 +42,17 @@ export const TOOLS: readonly ToolOption[] = [
 ];
 export const toolOption = (slug: string): ToolOption => TOOLS.find(t => t.slug === slug) ?? { slug, name: slug };
 
-export const MODEL_CLASSES: Record<ModelClass, { name: string }> = {
-  economy: { name: 'Economy' },
-  standard: { name: 'Standard' },
+/** The models a new template offers: every economy model, with gpt-6-luna first in chat. */
+export const NEW_TEMPLATE_MODELS: { readonly modelIds: ModelId[]; readonly defaultModelId: ModelId } = {
+  modelIds: ['gpt-6-luna', 'claude-haiku-5-5', 'gemini-4-hydrogen'], defaultModelId: 'gpt-6-luna',
 };
-export const MODEL_ORDER: readonly ModelClass[] = ['economy', 'standard'];
-export const demoModelNames = (modelClass: ModelClass) =>
-  DEMO_MODELS.filter(model => model.modelClass === modelClass).map(model => model.label);
-export const demoModelDefault = (modelClass: ModelClass) =>
-  demoModelNames(modelClass)[0] ?? MODEL_CLASSES[modelClass].name;
-export const demoModelDescription = (modelClass: ModelClass) =>
-  `${demoModelNames(modelClass).join(', ')} · ${creditLabel(priceMicro(modelClass))} per run`;
+/** "Economy" or "Standard": the pricing class a model id is billed at. */
+export const modelClassName = (id: ModelId) => MODEL_LABELS[classOf(id)];
+/** "1 credit per run" or "3 credits per run". */
+export const modelPrice = (id: ModelId) => `${creditLabel(priceMicro(classOf(id)))} per run`;
+/** The registry's models grouped by provider, in registry order. */
+export const MODELS_BY_PROVIDER: ReadonlyArray<{ provider: string; models: readonly DemoModel[] }> =
+  MODEL_PROVIDERS.map(provider => ({ provider, models: DEMO_MODELS.filter(model => model.provider === provider) }));
 
 /** "All students", "All members", or the position names ("Treasurer, President"). */
 export function audienceLabel(audience: Audience, usableBy: string[], names: ReadonlyArray<{ slug: string; name: string }> = []): string {

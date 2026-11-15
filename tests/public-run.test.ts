@@ -23,7 +23,8 @@ describe.skipIf(!probe)('shared directory chat', () => {
     const html = await renderPage(INSTALLATION.danceShowcaseQa);
     expect(html).toMatch(/<h1[^>]*>Showcase Q&amp;A<\/h1>/);
     expect(html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')).toMatch(/Dance Club · v\d+ · Events Performances/);
-    expect(html).toContain('Demo model: gpt-6-luna');
+    // Showcase Q&A's template defaults to gemini-4-hydrogen.
+    expect(html).toContain('Demo model: gemini-4-hydrogen');
     expect(html).toContain('Run details');
     expect(html).not.toMatch(/All students|Template v|Only you can see/);
     expect(html).not.toContain('Sponsor contacts');

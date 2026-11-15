@@ -8,6 +8,7 @@ import {
 } from '@/lib/db/schema';
 import { now } from '@/lib/clock';
 import type { ModelClass } from '@/lib/contracts';
+import { modelFields } from '@/lib/gateway/models';
 import type { SeedDb } from './index';
 import { INSTALLATION, ORG, RULE_PACK, TEMPLATE, USER } from './ids';
 import pack from '../../rules/packs/usg-funding.v1.json';
@@ -128,8 +129,7 @@ export async function seedDistribution(db: SeedDb): Promise<void> {
       maxTier: 'officers',
       sourceKinds: ['rulebook', 'finance'],
       tools: ['submit_to_queue'],
-      modelClasses: ['standard', 'economy'],
-      defaultModelClass: 'standard',
+      ...modelFields(['gpt-6-luna', 'gpt-6.1-sol', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'gemini-4-hydrogen', 'gemini-4-carbon'], 'claude-sonnet-5-5'),
       systemPrompt: ['You are Funding pre-check, a USG agent for club treasurers and presidents.',
         'Before the club submits a funding application on EngageSC, check the draft against the USG Funding Department Guidelines in the USG rulebook.',
         'For each budget line and date: say whether it passes, fails or needs a reviewer, cite the rule by section (for example "§5 Food per person"), and when it fails say exactly what to change.',
@@ -152,8 +152,7 @@ export async function seedDistribution(db: SeedDb): Promise<void> {
       tools: [],
       // §15: this version allows economy only — D2's rejected widening is a club
       // trying to give it the standard class.
-      modelClasses: ['economy'],
-      defaultModelClass: 'economy',
+      ...modelFields(['gpt-6-luna', 'claude-haiku-5-5', 'gemini-4-hydrogen'], 'gpt-6-luna'),
       systemPrompt: ['You are Event planning, a USG agent for club presidents and secretaries.',
         'Help the officer choose a date and venue and list the approvals the event needs, each with its due date. Use the club’s past events and meeting minutes.',
         'If the event will ask USG for funding, remind the officer to run Funding pre-check before the Wednesday deadline.'].join('\n\n'),
@@ -172,8 +171,7 @@ export async function seedDistribution(db: SeedDb): Promise<void> {
       maxTier: 'public',
       sourceKinds: ['public'],
       tools: [],
-      modelClasses: ['standard', 'economy'],
-      defaultModelClass: 'economy',
+      ...modelFields(['gpt-6-luna', 'gpt-6.1-sol', 'claude-haiku-5-5'], 'claude-haiku-5-5'),
       systemPrompt: ['You answer prospective members’ questions about Startup Club: what it does, when it meets and how to join.',
         'Use only the club’s public documents. If the answer is not there, say so and point to the club’s contact. Never share anything about members, budgets or sponsors.'].join('\n\n'),
       rulePackSlug: null,
@@ -191,8 +189,7 @@ export async function seedDistribution(db: SeedDb): Promise<void> {
       maxTier: 'public',
       sourceKinds: ['public'],
       tools: [],
-      modelClasses: ['standard', 'economy'],
-      defaultModelClass: 'economy',
+      ...modelFields(['gpt-6-luna', 'gpt-6.1-sol', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'gemini-4-hydrogen', 'gemini-4-carbon'], 'gemini-4-hydrogen'),
       systemPrompt: ['You answer questions about the Dance Club spring showcase: dates, location, tickets and auditions.',
         'Use only the club’s public documents. If the answer is not there, say so.'].join('\n\n'),
       rulePackSlug: null,
@@ -210,8 +207,7 @@ export async function seedDistribution(db: SeedDb): Promise<void> {
       maxTier: 'officers',
       sourceKinds: ['public', 'minutes', 'archive', 'finance'],
       tools: [],
-      modelClasses: ['standard', 'economy'],
-      defaultModelClass: 'standard',
+      ...modelFields(['gpt-6-luna', 'gpt-6.1-sol', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'gemini-4-hydrogen', 'gemini-4-carbon'], 'claude-sonnet-5-5'),
       systemPrompt: ['You brief incoming officers and members on what the club did before they joined: decisions, past events and budgets.',
         'Answer only from the documents you can read for this person, and name the document behind every fact. If the documents do not answer the question, say so; do not guess.'].join('\n\n'),
       rulePackSlug: null,
@@ -229,8 +225,7 @@ export async function seedDistribution(db: SeedDb): Promise<void> {
       maxTier: 'usg_internal',
       sourceKinds: ['rulebook', 'usg_internal'],
       tools: [],
-      modelClasses: ['standard', 'economy'],
-      defaultModelClass: 'standard',
+      ...modelFields(['gpt-6-luna', 'gpt-6.1-sol', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'gemini-4-hydrogen', 'gemini-4-carbon'], 'gpt-6.1-sol'),
       systemPrompt: ['You help USG funding reviewers apply the Funding Department Guidelines.',
         'For each application, list the rules it passes and the rules it breaks, with their section numbers.',
         'Draft a one-sentence denial reason the club can act on; §2 requires a detailed reason for every denial. The reviewer makes the decision.'].join('\n\n'),

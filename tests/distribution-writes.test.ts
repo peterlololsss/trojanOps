@@ -12,8 +12,8 @@ afterAll(async () => { if (probe) await closeAppDb(); });
 const avery = () => actorFor(USER.avery, ORG.usg);
 const sam = () => actorFor(USER.sam, ORG.startup);
 const draft: VersionDraft = { purpose: 'Plan club events', audience: 'positions', usableBy: ['president', 'secretary'],
-  maxTier: 'members', sourceKinds: ['archive', 'minutes'], tools: [], modelClasses: ['economy'],
-  defaultModelClass: 'economy', systemPrompt: 'Plan events with the club.', changelog: 'Second version' };
+  maxTier: 'members', sourceKinds: ['archive', 'minutes'], tools: [], modelIds: ['gpt-6-luna', 'claude-haiku-5-5'],
+  defaultModelId: 'claude-haiku-5-5', systemPrompt: 'Plan events with the club.', changelog: 'Second version' };
 
 // §8 gives a club two different powers: narrowing its own installation, and opening an agent to
 // the whole campus. Only the second checks the club has a budget, gives the installation one and
@@ -126,7 +126,10 @@ describe.skipIf(!probe)('distribution writes', () => {
     await expect(publishVersion(await sam(), TEMPLATE.eventPlanning, draft)).rejects.toMatchObject({ error: { code: 'forbidden' } });
     await expect(publishVersion(await sam(), TEMPLATE.handoff, { ...draft, audience: 'members', usableBy: [] })).resolves.toMatchObject({ version: 2 });
     await expect(publishVersion(await sam(), TEMPLATE.handoff, { ...draft, audience: 'members', usableBy: [], maxTier: 'usg_internal' })).rejects.toMatchObject({ error: { code: 'invalid' } });
-    await expect(publishVersion(await avery(), TEMPLATE.eventPlanning, { ...draft, modelClasses: [] })).rejects.toMatchObject({ error: { code: 'invalid' } });
+    await expect(publishVersion(await avery(), TEMPLATE.eventPlanning, { ...draft, modelIds: [] })).rejects.toMatchObject({ error: { code: 'invalid' } });
+    await expect(publishVersion(await avery(), TEMPLATE.eventPlanning, { ...draft, modelIds: ['gpt-6-luna'], defaultModelId: 'claude-haiku-5-5' })).rejects.toMatchObject({ error: { code: 'invalid' } });
+    await expect(publishVersion(await avery(), TEMPLATE.eventPlanning, { ...draft, modelIds: ['gpt-7'] as never })).rejects.toMatchObject({ error: { code: 'invalid' } });
+    await expect(publishVersion(await avery(), TEMPLATE.eventPlanning, { ...draft, modelClasses: ['economy'] } as never)).rejects.toMatchObject({ error: { code: 'invalid' } });
     await expect(publishVersion(await avery(), TEMPLATE.eventPlanning, { ...draft, audience: 'public', maxTier: 'officers' })).rejects.toMatchObject({ error: { code: 'invalid' } });
   }));
   it('retires across pins, hides public listings and refuses later publish/distribute/update', () => inRolledBackApp(async () => {
@@ -158,7 +161,7 @@ describe.skipIf(!probe)('distribution writes', () => {
   it('validates a pin’s model cap and refuses a retired installation update', () => inRolledBackApp(async tx => {
     await distribute(await avery(), TEMPLATE.eventPlanning);
     const [row] = await tx.execute<{ id: string }>(sql`select id from agent_installations where template_id = ${TEMPLATE.eventPlanning} and org_id = ${ORG.startup}`);
-    await publishVersion(await avery(), TEMPLATE.eventPlanning, { ...draft, modelClasses: ['economy', 'standard'], defaultModelClass: 'standard' });
+    await publishVersion(await avery(), TEMPLATE.eventPlanning, { ...draft, modelIds: ['gpt-6-luna', 'gpt-6.1-sol'], defaultModelId: 'gpt-6.1-sol' });
     await updateInstallation(await sam(), row.id, { modelClass: 'standard' });
     await expect(updateInstallation(await sam(), row.id, { track: 'pinned', pinnedVersion: 1 })).rejects.toMatchObject({ error: { code: 'clamp_violation' } });
     expect((await effectiveAgent(row.id)).templateVersion).toBe(2);

@@ -5,19 +5,25 @@ import type { Actor } from '../contracts';
 import { now } from '../clock';
 import { getDb } from '../db/client';
 import { agentInstallations, agentTemplates, agentTemplateVersions, orgs } from '../db/schema';
+import { MODEL_IDS, modelFields, type ModelId } from '../gateway/models';
 import { active, audited, checkedWrite, clampWrite, ensurePublicBudget, invalid, lockClub, lockTemplate, president, usgAdmin } from './write-support';
 
 export const versionDraftSchema = z.object({
   purpose: z.string().trim().min(1), audience: z.enum(['public', 'members', 'positions']), usableBy: z.array(z.string().min(1)).default([]),
   maxTier: z.enum(['public', 'members', 'officers', 'usg_internal']),
   sourceKinds: z.array(z.enum(['public', 'minutes', 'finance', 'archive', 'rulebook', 'usg_internal'])), tools: z.array(z.string().min(1)),
-  modelClasses: z.array(z.enum(['standard', 'economy'])).min(1), defaultModelClass: z.enum(['standard', 'economy']),
+  modelIds: z.array(z.enum(MODEL_IDS, { message: 'Choose models from the list.' })).min(1, 'Offer at least one model.'),
+  defaultModelId: z.enum(MODEL_IDS, { message: 'Choose models from the list.' }),
   systemPrompt: z.string().min(1), rulePackSlug: z.string().min(1).nullable().optional(), changelog: z.string().default(''),
 }).strict().superRefine((v, ctx) => {
-  if (!v.modelClasses.includes(v.defaultModelClass)) ctx.addIssue({ code: 'custom', message: 'The default model must be allowed.' });
+  if (!v.modelIds.includes(v.defaultModelId)) ctx.addIssue({ code: 'custom', message: 'The default model must be one of the offered models.' });
   if (v.audience === 'public' && v.maxTier !== 'public') ctx.addIssue({ code: 'custom', message: 'A public agent can read only public documents.' });
   if ((v.audience === 'positions') !== (v.usableBy.length > 0)) ctx.addIssue({ code: 'custom', message: 'Name positions only for a positions audience.' });
 });
+/** The stored row adds the pricing classes the models span, so clamps, club policy and prices stay class-based (decision 29). */
+export function withModelClasses<T extends { modelIds: string[]; defaultModelId: ModelId }>(draft: T) {
+  return { ...draft, ...modelFields(draft.modelIds, draft.defaultModelId) };
+}
 export type VersionDraft = z.input<typeof versionDraftSchema>;
 export async function publishVersion(actor: Actor, templateId: string, input: VersionDraft): Promise<{ version: number }> {
   const version = await checkedWrite(actor, 'template', templateId, () => getDb().transaction(async tx => {
@@ -26,7 +32,7 @@ export async function publishVersion(actor: Actor, templateId: string, input: Ve
     active(template);
     const parsed = versionDraftSchema.safeParse(input);
     if (!parsed.success) throw invalid(parsed.error.issues[0].message);
-    const draft = parsed.data;
+    const draft = withModelClasses(parsed.data);
     const [publisher] = await tx.select().from(orgs).where(eq(orgs.id, template.publisherOrgId));
     if (publisher?.status !== 'active') throw invalid('This publisher is inactive.');
     // USG-internal reads belong only to USG's own template installations, never RSO agents (I4).

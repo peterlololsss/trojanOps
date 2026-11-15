@@ -9,12 +9,13 @@ import type { ChatConfig } from '@/lib/documents/run-config';
 
 const config: ChatConfig = {
   orgId: 'club', scope: { sentence: 'Public sources only.', grantLabels: ['Any signed-in student'], sources: ['Public'], billedClub: 'Startup Club' },
-  models: { allowed: [{ modelClass: 'economy', priceMicro: 10_000 }, { modelClass: 'standard', priceMicro: 30_000 }], defaultClass: 'economy', fixedByClub: false, limitedByTemplate: false },
+  models: { allowed: [{ modelClass: 'economy', priceMicro: 10_000 }, { modelClass: 'standard', priceMicro: 30_000 }], defaultClass: 'economy',
+    ids: ['gpt-6-luna', 'gpt-6.1-sol', 'claude-haiku-5-5', 'claude-sonnet-5-5'], defaultId: 'gpt-6-luna', fixedByClub: false, limitedByTemplate: false },
   quota: { scope: 'student_daily', limitMicro: 50_000, spentMicro: 40_000, remainingMicro: 10_000, resetsAt: '2026-11-16T08:00:00Z' },
   blockedMessage: null, starters: [], audienceLabel: 'All students', templateVersion: 1,
 };
 const renderComposer = (over: Partial<Parameters<typeof Composer>[0]> = {}) => renderToStaticMarkup(createElement(Composer, {
-  config, agentName: 'Recruiting Q&A', input: '', model: 'standard', running: false, playing: false, error: null, charge: null,
+  config, agentName: 'Recruiting Q&A', input: '', model: 'gpt-6.1-sol', running: false, playing: false, error: null, charge: null,
   textareaRef: createRef<HTMLTextAreaElement>(), onInput: () => {}, onModel: () => {}, onRun: () => {}, onStop: () => {}, ...over,
 }));
 

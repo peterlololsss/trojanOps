@@ -15,6 +15,7 @@ import { canUse, effectiveAgent } from '../distribution';
 import { listAccessibleDocuments, listBlockedDocuments } from '../documents/access';
 import { getRuntime } from '../runtime';
 import { audit } from './audit';
+import { classOf, isModelId } from './models';
 import { headroom, hold, settle, type QuotaHold } from './quota';
 import { confirm, reject } from './confirm';
 import { toolKind } from './tools';
@@ -32,7 +33,7 @@ async function sourceNames(ids: string[]): Promise<Array<{ id: string; name: str
   return ids.map((id) => ({ id, name: names.get(id) ?? 'Source' }));
 }
 
-export async function runAgent(actor: Actor, installationId: string, input: string, options?: { readonly modelClass?: ModelClass }): Promise<RunResult> {
+export async function runAgent(actor: Actor, installationId: string, input: string, options?: { readonly modelId?: string; readonly modelClass?: ModelClass }): Promise<RunResult> {
   if (!actor.userId) throw new AppError({ code: 'unauthenticated', message: 'Choose a persona to run agents.' });
   const userId = actor.userId;
   const event = { actorUserId: userId, actingOrgId: actor.activeOrgId, installationId };
@@ -43,21 +44,28 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
 
   // 1. Effective agent. Internal agents run only with their club active; public ones from anywhere.
   const resolved = await effectiveAgent(installationId);
-  const modelClass = options?.modelClass ?? resolved.modelClass;
-  if (!resolved.allowedModelClasses.includes(modelClass)) {
-    await deny({ code: 'clamp_violation', message: `${resolved.name} may run on ${resolved.allowedModelClasses.join(' or ')} only.` }, 'model_class');
-  }
-  const agent = { ...resolved, modelClass };
-  const club = await orgName(agent.orgId);
-  if (agent.status === 'retired') await deny({ code: 'forbidden', message: 'Retired by USG.' }, 'retired');
-  if (agent.status === 'disabled') await deny({ code: 'forbidden', message: `${agent.name} is turned off in ${club}.` }, 'disabled');
-  if (agent.audience !== 'public' && actor.activeOrgId !== agent.orgId) {
-    await deny({ code: 'forbidden', message: `Switch to ${club} to use ${agent.name}.` }, 'inactive_org');
+  const club = await orgName(resolved.orgId);
+  if (resolved.status === 'retired') await deny({ code: 'forbidden', message: 'Retired by USG.' }, 'retired');
+  if (resolved.status === 'disabled') await deny({ code: 'forbidden', message: `${resolved.name} is turned off in ${club}.` }, 'disabled');
+  if (resolved.audience !== 'public' && actor.activeOrgId !== resolved.orgId) {
+    await deny({ code: 'forbidden', message: `Switch to ${club} to use ${resolved.name}.` }, 'inactive_org');
   }
 
-  // 2. Audience
-  const verdict = await canUse(userId, agent);
-  if (!verdict.ok) await deny({ code: 'forbidden', message: `You are not in the audience for ${agent.name}.` }, 'audience');
+  // 2. Audience, then the model: one the template offers and the club allows (decision 29). A bare
+  // class (older clients) picks that class's first offered model. The model's class prices the run.
+  const verdict = await canUse(userId, resolved);
+  if (!verdict.ok) await deny({ code: 'forbidden', message: `You are not in the audience for ${resolved.name}.` }, 'audience');
+  if (options?.modelId !== undefined && !(isModelId(options.modelId) && resolved.allowedModelIds.includes(options.modelId))) {
+    await deny({ code: 'clamp_violation', message: `${resolved.name} offers ${resolved.allowedModelIds.join(', ')} only.` }, 'model');
+  }
+  const requestedClass = options?.modelClass ?? resolved.modelClass;
+  if (options?.modelId === undefined && !resolved.allowedModelClasses.includes(requestedClass)) {
+    await deny({ code: 'clamp_violation', message: `${resolved.name} may run on ${resolved.allowedModelClasses.join(' or ')} only.` }, 'model_class');
+  }
+  const modelId = options?.modelId !== undefined && isModelId(options.modelId) ? options.modelId
+    : classOf(resolved.defaultModelId) === requestedClass ? resolved.defaultModelId
+    : resolved.allowedModelIds.find((id) => classOf(id) === requestedClass) ?? resolved.defaultModelId;
+  const agent = { ...resolved, modelClass: classOf(modelId) };
 
   // 3. Grants, capped by max tier
   const runGrants = capGrants(await grantsFor(userId, agent.orgId), agent.orgId, agent.maxTier);
@@ -110,20 +118,21 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
     const accessible = new Set(docs.map((d) => d.id));
     citations = result.citations.filter((c) => accessible.has(c.documentId));
     cited = [...new Set(citations.map((c) => c.documentId))];
-    const { reply, usage } = result;
+    const { reply } = result;
     await withActor(actor, {}, (tx) => tx.update(agentRuns)
       .set({
         output: { reply, citations },
         accessibleDocumentIds: docs.map((d) => d.id),
         citedDocumentIds: cited,
-        model: usage.model,
+        // The model the member chose; the mock runtime only knows its pricing class.
+        model: modelId,
         costMicro,
         status: 'completed',
         finishedAt: now(),
       })
       .where(eq(agentRuns.id, runId)));
     done.completed = true;
-    await settle(held, costMicro, usage.model);
+    await settle(held, costMicro, modelId);
     done.settled = true;
     auditEventId = await audit('agent.run', { ...runEvent, details: { runId, costMicro } });
   } catch (err) {
