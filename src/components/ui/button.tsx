@@ -29,7 +29,8 @@ export function Button({
   className,
   variant,
   size,
+  type = 'button',
   ...props
 }: React.ComponentProps<'button'> & VariantProps<typeof buttonVariants>) {
-  return <button data-slot="button" className={cn(buttonVariants({ variant, size }), className)} {...props} />;
+  return <button type={type} data-slot="button" className={cn(buttonVariants({ variant, size }), className)} {...props} />;
 }
