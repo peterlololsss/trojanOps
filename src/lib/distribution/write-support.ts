@@ -1,5 +1,5 @@
 // Owner: B. Shared write checks; all installation candidates use the same pure I7 clamps.
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { requireUser } from '../api';
 import { isUuid, isUsgAdmin } from '../authz';
 import { now } from '../clock';
@@ -7,6 +7,7 @@ import { AppError, type Actor, type AuditAction, type AuditEvent } from '../cont
 import { getDb, type Tx } from '../db/client';
 import { agentInstallations, agentTemplates, agentTemplateVersions, orgs, positions, quotaLimits, sources, usgClubPolicy } from '../db/schema';
 import { audit } from '../gateway/audit';
+import { lockQuota, ownLimitMicro } from '../gateway/quota';
 import { clampInstallation, type ClampInput } from './clamps';
 
 export const invalid = (message: string) => new AppError({ code: 'invalid', message });
@@ -64,10 +65,7 @@ export async function versionFor(tx: Tx, template: Template, installation?: Pick
   return v;
 }
 export async function clubBudget(tx: Tx, orgId: string): Promise<number> {
-  const [q] = await tx.select().from(quotaLimits)
-    .where(and(eq(quotaLimits.scope, 'org'), eq(quotaLimits.orgId, orgId), isNull(quotaLimits.userId), isNull(quotaLimits.installationId)))
-    .orderBy(desc(quotaLimits.setAt), desc(quotaLimits.createdAt)).limit(1);
-  return q?.limitMicro ?? 0;
+  return (await ownLimitMicro(tx, { scope: 'org', orgId })) ?? 0;
 }
 export async function clampWrite(tx: Tx, orgId: string, version: ClampInput['version'], installation: ClampInput['installation']) {
   const [policy] = await tx.select().from(usgClubPolicy).where(eq(usgClubPolicy.orgId, orgId));
@@ -83,18 +81,15 @@ export async function clampWrite(tx: Tx, orgId: string, version: ClampInput['ver
   }
   return result.effective;
 }
-/** Shared protocol with A's quota writer; this only serializes bootstrap inserts.
- * TODO(verify): ask A to export this lock helper so the advisory key has one definition. */
+/** A's quota lock, so these bootstrap inserts serialize with every hold and setLimit. */
 export async function lockQuotaBootstrap(tx: Tx): Promise<void> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('trojanops:quota'))`);
+  await lockQuota(tx);
 }
 /** New public installations need a budget in the same transaction as their creation (§11).
  * Existing limits stay intact; interactive changes are handled by quota.setLimit, never here. */
 export async function ensurePublicBudget(tx: Tx, actor: Actor, installationId: string, orgId: string) {
   await lockQuotaBootstrap(tx);
-  const [limit] = await tx.select().from(quotaLimits)
-    .where(and(eq(quotaLimits.scope, 'installation'), eq(quotaLimits.installationId, installationId), isNull(quotaLimits.userId)));
-  if (limit) return;
+  if ((await ownLimitMicro(tx, { scope: 'installation', installationId })) !== null) return;
   const half = Math.floor(await clubBudget(tx, orgId) / 2);
   // A club with no quota of its own would get a limit of 0 here, which publishes the agent and
   // then blocks every run of it. Leave no row instead: publishToAllStudents refuses that case

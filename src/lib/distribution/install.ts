@@ -1,11 +1,11 @@
 // Owner: B. Partial patches are merged with the stored row before clamping against the selected version.
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { isUuid } from '../authz';
 import { AppError, type Actor, type EffectiveAgent } from '../contracts';
 import { getDb, type Tx } from '../db/client';
-import { agentInstallations, quotaLimits } from '../db/schema';
-import { setLimit } from '../gateway/quota';
+import { agentInstallations } from '../db/schema';
+import { ownLimitMicro, setLimit } from '../gateway/quota';
 import { effectiveAgent } from './effective-config';
 import { active, audited, checkedWrite, clampWrite, ensurePublicBudget, clubBudget, invalid, lockClub, lockTemplate, missing, president, versionFor, type Installation, type Template } from './write-support';
 
@@ -115,17 +115,9 @@ export async function writeInstallation(
 const reachesCampus = (enabled: boolean, audience: string) => enabled && audience === 'public';
 
 /** The installation's own limit, as opposed to the club limit it falls back to; null when it has
- * no row of its own.
- *
- * TODO(verify): ask A to expose an own-limit flag on `remaining()`, so B stops reading
- * `quota_limits` directly. The null conditions mirror A's `limitRow` key, which `quota_limits` has
- * no check constraint to enforce. */
-async function ownInstallationLimit(tx: Tx, installationId: string): Promise<number | null> {
-  const [row] = await tx.select().from(quotaLimits)
-    .where(and(eq(quotaLimits.scope, 'installation'), eq(quotaLimits.installationId, installationId), isNull(quotaLimits.userId)))
-    .orderBy(desc(quotaLimits.setAt), desc(quotaLimits.createdAt)).limit(1);
-  return row?.limitMicro ?? null;
-}
+ * no row of its own. */
+const ownInstallationLimit = (tx: Tx, installationId: string) =>
+  ownLimitMicro(tx, { scope: 'installation', installationId });
 
 /** Was this installation already on the campus directory before the patch? Clamped the same way a
  * read would clamp it, so a row the clamps now refuse counts as not public and the patch is

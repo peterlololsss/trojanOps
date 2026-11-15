@@ -672,7 +672,7 @@ UI copy for `quota_exceeded`, by scope:
 
 ## 12. Audit
 
-`audit()` in `gateway/audit.ts` is the only writer; `details` hold ids and numbers only. Actions:
+`audit(action, event, tx?)` in `gateway/audit.ts` is the only writer; pass `tx` to commit the row with the change it records. `details` hold ids and numbers only. Actions:
 
 - `agent.run`, `run.access`, `tool.call`, `tool.confirm`
 - `authz.denied`, `quota.blocked`, `quota.limit.set`

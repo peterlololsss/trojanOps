@@ -92,17 +92,17 @@ export async function uploadDocument(actor: Actor, orgId: string, input: UploadD
 
   const id = randomUUID();
   const createdAt = now();
-  // No RETURNING: it would need SELECT on the new row (§5). Never write read_grants.
-  await withActor(actor, {}, (tx) => tx.insert(documents).values({
-    id, orgId, sourceId: source.id, title: input.title, tier: input.tier, allowedPositions,
-    version: 1, bodyMd: input.bodyMd, uploadedBy: userId, createdAt,
-  }));
-
-  // After the commit: A's audit writer uses its own connection. details hold ids and numbers only (I8).
-  // TODO(verify): if audit() fails here the document stays without an audit row; revisit with A's real writer.
-  await audit('document.upload', {
-    actorUserId: userId, actingOrgId: orgId, targetType: 'document', targetId: id,
-    details: { sourceId: source.id, tier: input.tier, version: 1 },
+  // No RETURNING: it would need SELECT on the new row (§5). Never write read_grants. The audit row
+  // commits with the document: details hold ids and numbers only (I8).
+  await withActor(actor, {}, async (tx) => {
+    await tx.insert(documents).values({
+      id, orgId, sourceId: source.id, title: input.title, tier: input.tier, allowedPositions,
+      version: 1, bodyMd: input.bodyMd, uploadedBy: userId, createdAt,
+    });
+    await audit('document.upload', {
+      actorUserId: userId, actingOrgId: orgId, targetType: 'document', targetId: id,
+      details: { sourceId: source.id, tier: input.tier, version: 1 },
+    }, tx);
   });
 
   return { id, title: input.title, tier: input.tier, sourceId: source.id, sourceName: source.name, version: 1, createdAt };

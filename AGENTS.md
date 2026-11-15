@@ -79,7 +79,7 @@ fixture data lives in the owner's `fixtures.ts`; delete it once the function rea
 | `getActor()`, `grantsFor`, `capGrants`, `grantLabels` | `@/lib/identity`, `@/lib/authz` | A | B, C, D | H7 |
 | `audit()`, `listAudit()` | `@/lib/gateway/audit` | A | all; C (audit views) | H9 |
 | `runAgent()` (mock `RunResult`) | `@/lib/gateway` | A | C (agent page), D (directory runs) | H9 |
-| `setLimit()`, `remaining()` | `@/lib/gateway/quota` | A | B (club and USG pages) | H11 |
+| `setLimit()`, `remaining()`, `ownLimitMicro()`, `lockQuota()` | `@/lib/gateway/quota` | A | B (club and USG pages, installation budgets) | H11 |
 | `effectiveAgent()`, `canUse()` | `@/lib/distribution` | B | A, C, D | H6 |
 | `directory()`, `myAgents()`, `provisionOrg()`, `publishToAllStudents()` | `@/lib/distribution` | B | D | H7 |
 | `transferPosition()` | `@/lib/lifecycle/transfer` | B | D (roster import) | H9 |

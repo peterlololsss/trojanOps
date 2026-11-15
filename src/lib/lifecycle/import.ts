@@ -3,7 +3,7 @@ import { requireUser } from '../api';
 import { isUsgAdmin } from '../authz';
 import { now } from '../clock';
 import { getConnectors, recordRosterSync } from '../connectors/registry';
-import { AppError, type Actor, type RosterRow } from '../contracts';
+import { AppError, type Actor, type AuditEvent, type RosterRow } from '../contracts';
 import { getDb } from '../db/client';
 import { memberships, orgs, positions, rosterState, users } from '../db/schema';
 import { provisionOrg } from '../distribution';
@@ -45,7 +45,7 @@ function groupRoster(rows: readonly RosterRow[]) {
   return { clubs, people };
 }
 
-async function reconcileRoster(rows: readonly RosterRow[]) {
+async function reconcileRoster(rows: readonly RosterRow[], event: AuditEvent) {
   const incoming = groupRoster(rows);
   return getDb().transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('trojanops.roster.import'))`);
@@ -131,22 +131,22 @@ async function reconcileRoster(rows: readonly RosterRow[]) {
       }
       clubs.push(clubResult);
     }
+    // The audit row commits with the roster changes: if it can't be written, nothing changes.
+    try {
+      await audit('roster.import', { ...event, details: counts }, tx);
+    } catch {
+      throw new AppError({ code: 'invalid', message: 'The roster sync could not be recorded in the audit log, so no changes were applied. Retry the sync.' });
+    }
     return { ...counts, clubs };
   });
 }
 
 export async function importRoster(actor: Actor): Promise<RosterImportResult> {
   await requireRosterAdmin(actor);
-  const event = { actorUserId: actor.userId, actingOrgId: actor.activeOrgId, targetType: 'connector', targetId: 'roster' };
+  const event: AuditEvent = { actorUserId: actor.userId, actingOrgId: actor.activeOrgId, targetType: 'connector', targetId: 'roster', details: {} };
   try {
-    const roster = await reconcileRoster(await getConnectors().roster.fetch());
+    const roster = await reconcileRoster(await getConnectors().roster.fetch(), event);
     const { clubs, ...counts } = roster;
-    // audit() opens its own connection, so it cannot join the reconcile transaction; a failure here is reported, not rolled back.
-    try {
-      await audit('roster.import', { ...event, details: counts });
-    } catch {
-      throw new AppError({ code: 'invalid', message: 'The roster changed but the audit record could not be written. Run the sync again to reconcile.' });
-    }
     const provisioned: RosterImportResult['clubs'] = [];
     for (const club of clubs) {
       const { installed } = await provisionOrg(club.orgId, actor);

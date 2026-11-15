@@ -88,5 +88,4 @@ Say "mock runtime" and keep the Mock labels visible. If a real agent misbehaves,
 
 ## Open requests
 
-- **A / deps:** add TanStack Table in a separate deps PR for later data-table pages.
-- **A:** `AppError` has no server-error code, so a failed roster audit surfaces as `invalid` (400).
+- **A:** `AppError` has no server-error code, so a failed roster audit (which rolls the sync back) surfaces as `invalid` (400).
