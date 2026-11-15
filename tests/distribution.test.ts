@@ -1,9 +1,12 @@
 // Owner: B (WP-5). Invariant I7: distribution never widens. A template version is the ceiling and
 // usg_club_policy is a second ceiling above it; an installation may only narrow. These are the
 // acceptance check for D2's rejected widening, and they are pure — no database.
-import { describe, expect, it } from 'vitest';
+import type postgres from 'postgres';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { clampInstallation } from '@/lib/distribution/clamps';
+import { FIXTURE_AGENTS, resetDistributionFixtures } from '@/lib/distribution/fixtures';
 import type { Audience, ModelClass, Tier } from '@/lib/contracts';
+import { appSql } from './db';
 
 const baseVersion = {
   audience: 'positions' as Audience,
@@ -11,10 +14,10 @@ const baseVersion = {
   maxTier: 'officers' as Tier,
   tools: ['submit_to_queue'],
   modelClasses: ['standard', 'economy'] as ModelClass[],
+  defaultModelClass: 'standard' as ModelClass,
 };
 
 const baseClub = {
-  orgId: 'org-startup',
   policy: {
     allowedModelClasses: ['standard', 'economy'] as ModelClass[],
     allowPublicAgents: true,
@@ -90,6 +93,13 @@ describe('clamps · max tier', () => {
     const r = clamp({ audience: 'public', maxTier: 'public' }, { audience: 'members' });
     expect(allowed(r).maxTier).toBe('public');
   });
+
+  // The version row itself can carry a tier above what I4 allows for its audience; narrowing the
+  // audience must not hand the installation reads the version never had.
+  it('caps the version at the public tier before the installation narrows the audience', () => {
+    const r = clamp({ audience: 'public', maxTier: 'officers' }, { audience: 'members' });
+    expect(allowed(r).maxTier).toBe('public');
+  });
 });
 
 describe('clamps · usable_by', () => {
@@ -122,6 +132,19 @@ describe('clamps · usable_by', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.violation.field).toBe('usableBy');
   });
+
+  // contracts.ts: usableBy is empty unless the audience is 'positions'. A stray list would
+  // otherwise reach AgentListing.reasonLabel and name positions on a members-wide agent.
+  it('drops a position list on an audience that is not positions', () => {
+    const r = clamp({ audience: 'members', usableBy: [] }, { usableBy: ['president'] });
+    expect(allowed(r).usableBy).toEqual([]);
+  });
+
+  it('refuses a positions audience that names nobody', () => {
+    const r = clamp({ audience: 'members', usableBy: [] }, { audience: 'positions', usableBy: [] });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.violation.field).toBe('usableBy');
+  });
 });
 
 describe('clamps · model class', () => {
@@ -148,6 +171,31 @@ describe('clamps · model class', () => {
 
   it('accepts one that both the version and USG allow', () => {
     expect(allowed(clamp({}, { modelClass: 'economy' })).modelClass).toBe('economy');
+  });
+
+  // §5 has a default_model_class column; without it, seeded agents whose default is economy
+  // would silently run on standard and stop matching the fixtures.
+  it("inherits the version's default when the club sets nothing", () => {
+    expect(allowed(clamp({ defaultModelClass: 'economy' }, {})).modelClass).toBe('economy');
+  });
+
+  it('falls back to an allowed class when USG forbids the default', () => {
+    const r = clamp(
+      { defaultModelClass: 'standard' },
+      {},
+      { policy: { allowedModelClasses: ['economy'], allowPublicAgents: true } },
+    );
+    expect(allowed(r).modelClass).toBe('economy');
+  });
+
+  it('refuses when USG allows none of the version’s classes', () => {
+    const r = clamp(
+      { modelClasses: ['standard'], defaultModelClass: 'standard' },
+      {},
+      { policy: { allowedModelClasses: ['economy'], allowPublicAgents: true } },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.violation.field).toBe('modelClass');
   });
 });
 
@@ -191,6 +239,46 @@ describe('clamps · every violation is reportable', () => {
       expect(r.violation.field).toBeTruthy();
       expect(r.violation.allowed).toBeDefined();
       expect(r.violation.message.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+// db/seed/ids.ts: "Stubs and tests use these, so fixtures match the real seed." Until WP-5
+// resolves installations from the database, the stubs are what C and D render, so the two have to
+// say the same thing — a divergence shows up on stage, not in a type error.
+describe('seed · the stubs and the seeded rows agree', () => {
+  let sql: postgres.Sql | null = null;
+
+  beforeAll(async () => {
+    resetDistributionFixtures();
+    sql = await appSql();
+  });
+
+  afterAll(async () => {
+    await sql?.end({ timeout: 1 });
+  });
+
+  it('agrees on slug, audience, positions, max tier, model class, rule pack and enabled state', async () => {
+    if (!sql) return; // appSql already warned that the database is unreachable
+    const rows = await sql`
+      select i.id, i.enabled, t.slug, v.audience, v.usable_by, v.max_tier,
+             v.default_model_class, v.rule_pack_slug
+      from agent_installations i
+      join agent_templates t on t.id = i.template_id
+      join agent_template_versions v on v.template_id = t.id and v.version = t.latest_version`;
+
+    expect(rows.length).toBe(Object.keys(FIXTURE_AGENTS).length);
+
+    for (const row of rows) {
+      const fixture = FIXTURE_AGENTS[row.id as string];
+      expect(fixture, `no fixture for seeded installation ${row.id}`).toBeDefined();
+      expect(fixture.templateSlug).toBe(row.slug);
+      expect(fixture.audience).toBe(row.audience);
+      expect(fixture.usableBy).toEqual(row.usable_by);
+      expect(fixture.maxTier).toBe(row.max_tier);
+      expect(fixture.modelClass).toBe(row.default_model_class);
+      expect(Boolean(fixture.rulePack)).toBe(row.rule_pack_slug !== null);
+      expect(fixture.status === 'enabled').toBe(row.enabled);
     }
   });
 });

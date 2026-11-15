@@ -224,7 +224,10 @@ export async function seedDistribution(db: SeedDb): Promise<void> {
       modelClasses: ['standard', 'economy'],
       defaultModelClass: 'standard',
       systemPrompt: 'You help USG reviewers apply the funding rules.',
-      rulePackSlug: 'usg-funding',
+      // §8 attaches the usg-funding pack to funding-precheck only, and the mock runtime prints
+      // the pack's label and cap into the reply, so giving it to this agent too would show up
+      // on stage in D4 and D8.
+      rulePackSlug: null,
       changelog: 'First version.',
       publishedBy: USER.avery,
       publishedAt: createdAt,
@@ -308,7 +311,8 @@ export async function seedDistribution(db: SeedDb): Promise<void> {
     },
   ]);
 
-  // §15: every club may use both model classes and may publish public agents.
+  // §15: every club may use both model classes and may publish public agents. USG gets a row too,
+  // because usg-review-assistant is installed in USG and the clamps look policy up by org id.
   await db.insert(usgClubPolicy).values(
     [ORG.usg, ORG.startup, ORG.archery, ORG.dance].map((orgId) => ({
       orgId,
