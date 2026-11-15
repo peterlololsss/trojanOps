@@ -65,16 +65,8 @@ export function versionChanges(before: UsgVersion | undefined, after: VersionBod
 
 const and = (items: string[]) => items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 
-/** Who the new version reaches and what it may read, for the review step. */
+/** The one-line consequence for the review step: who gets the version, and when. */
 export function reachSentences(body: VersionBody, installedCount: number, ctx: ChangeContext): string[] {
-  const clubs = installedCount ? `each of the ${plural(installedCount, 'installed club')}` : 'each club that installs it (none yet)';
-  const who = body.audience === 'public' ? `Any signed-in student can use it, through ${clubs}.`
-    : body.audience === 'members' ? `Every member of ${clubs} can use it.`
-    : `${and(body.usableBy.map(slug => audienceLabel('positions', [slug], ctx.positions)))} in ${clubs} can use it.`;
-  const sources = body.sourceKinds.length ? `from ${and(body.sourceKinds.map(sourceName))}` : 'but has no knowledge sources';
-  return [
-    who,
-    'Clubs tracking Latest use it on their next run. Clubs that pinned an older version keep theirs and see “Update available”.',
-    `It can read up to ${TIERS[body.maxTier].name} documents ${sources}. It never reads more than the person running it can.`,
-  ];
+  const who = body.audience === 'public' ? 'All students' : body.audience === 'members' ? 'All members' : and(body.usableBy.map(slug => audienceLabel('positions', [slug], ctx.positions)));
+  return [`Reaches ${who} in ${plural(installedCount, 'club')} on the next run; pinned installations keep their version.`];
 }

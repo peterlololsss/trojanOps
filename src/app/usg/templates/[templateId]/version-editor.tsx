@@ -9,7 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { Audience, ModelClass, Tier } from '@/lib/contracts';
 import type { UsgTemplateView } from '@/lib/distribution/usg-view';
 import { ErrorNotice, PendingButton, selectClass, SuccessNotice, useConsoleMutation } from '../console-ui';
-import { AUDIENCES, CLUB_TIERS, MODEL_CLASSES, MODEL_ORDER, SOURCE_KINDS, TIERS, TOOLS, toolOption } from '../template-config';
+import { AUDIENCES, CLUB_TIERS, MODEL_CLASSES, MODEL_ORDER, scopeLabel, SOURCE_KINDS, TIERS, TOOLS, toolOption } from '../template-config';
 import {
   initialState, reachSentences, toBody, validate, versionChanges, type EditorField, type EditorState, type FieldChange,
 } from './version-draft';
@@ -28,7 +28,7 @@ export interface VersionReviewProps { templateName: string; nextVersion: number;
 export function VersionReview({ templateName, nextVersion, currentVersion, changes, reach, changelog }: VersionReviewProps) {
   return <div className="space-y-5">
     <section aria-labelledby="version-review-changes" className="space-y-2">
-      <h3 id="version-review-changes" className="font-semibold">{currentVersion ? `What changes from version ${currentVersion}` : `First version of ${templateName}`}</h3>
+      <h3 id="version-review-changes" className="font-semibold">{currentVersion ? 'Changes' : `First version of ${templateName}`}</h3>
       <div className="rounded-md border border-border"><Table className="min-w-[560px]">
         <TableHeader><TableRow className="hover:bg-transparent"><TableHead>Setting</TableHead><TableHead>{currentVersion ? `Now (v${currentVersion})` : 'Now'}</TableHead><TableHead>After (v{nextVersion})</TableHead></TableRow></TableHeader>
         <TableBody>{changes.map(c => <TableRow key={c.field} className="align-top hover:bg-transparent">
@@ -39,27 +39,22 @@ export function VersionReview({ templateName, nextVersion, currentVersion, chang
       </Table></div>
     </section>
     {changelog.trim() && <p><span className="font-semibold">Change note:</span> {changelog.trim()}</p>}
-    <section aria-labelledby="version-review-reach" className="space-y-1">
-      <h3 id="version-review-reach" className="font-semibold">Who it reaches</h3>
-      {reach.map(s => <p key={s}>{s}</p>)}
-      <p className="text-muted-foreground">Versions cannot be edited after publishing. If a club’s own settings would fall outside this version, publishing stops and nothing changes.</p>
-    </section>
+    {reach.map(s => <p key={s}>{s}</p>)}
   </div>;
 }
 
-function Field({ legend, hint, error, id, children }: { legend: string; hint: string; error?: string; id: string; children: ReactNode }) {
-  return <fieldset aria-describedby={`${id}-hint${error ? ` ${id}-error` : ''}`} className="space-y-2">
+function Field({ legend, error, id, children }: { legend: string; error?: string; id: string; children: ReactNode }) {
+  return <fieldset aria-describedby={error ? `${id}-error` : undefined} className="space-y-2">
     <legend className="font-semibold">{legend}</legend>
-    <p id={`${id}-hint`} className="text-muted-foreground">{hint}</p>
     {children}
     {error && <p id={`${id}-error`} className="flex items-center gap-1 text-primary"><CircleAlert aria-hidden="true" className="size-3 shrink-0" />{error}</p>}
   </fieldset>;
 }
-function Choice({ id, title, description, tag, control }: { id: string; title: string; description: string; tag?: string; control: ReactNode }) {
+function Choice({ id, title, description, tag, control }: { id: string; title: string; description?: string; tag?: string; control: ReactNode }) {
   return <div className="flex items-start gap-3 rounded-md border border-border px-3 py-2 has-[:checked]:border-input has-[:checked]:bg-muted has-[[data-state=checked]]:border-input has-[[data-state=checked]]:bg-muted">
     <div className="flex h-5 items-center">{control}</div>
     <div><label htmlFor={id} className="font-semibold">{title}</label>{tag && <Badge className="ml-2 align-middle">{tag}</Badge>}
-      <p id={`${id}-hint`} className="text-muted-foreground">{description}</p></div>
+      {description && <p id={`${id}-hint`} className="text-muted-foreground">{description}</p>}</div>
   </div>;
 }
 const toggle = (values: string[], value: string, on: boolean) => on ? [...values.filter(v => v !== value), value] : values.filter(v => v !== value);
@@ -93,7 +88,7 @@ export function VersionEditor({ data, editing, setEditing }: { data: UsgTemplate
   function publish() {
     mutation.run(async () => {
       const result = await mutation.request(`/api/templates/${data.template.id}/versions`, 'POST', body) as { version: number };
-      return `Version ${result.version} published. Clubs tracking Latest use it on their next run; pinned clubs keep their version.`;
+      return `Version ${result.version} published.`;
     }, () => { setOpen(false); setEditing(false); });
   }
   function cancel() { setState(initialState(latest)); setErrors({}); setFormError(null); setEditing(false); }
@@ -102,57 +97,54 @@ export function VersionEditor({ data, editing, setEditing }: { data: UsgTemplate
   if (!editing) return mutation.success ? <SuccessNotice message={mutation.success} /> : null;
   return <section id="edit-configuration" aria-labelledby="edit-configuration-title" className="space-y-4 rounded-md border border-border p-4">
     <div><h2 id="edit-configuration-title" ref={heading} tabIndex={-1} className="text-xl font-semibold leading-7">Edit configuration</h2>
-      <p className="mt-1 text-muted-foreground">Changes publish as version {next}. Clubs tracking Latest get it on their next run; clubs that pinned a version keep theirs.</p></div>
+      <p className="mt-1 text-muted-foreground">Publishes as version {next}</p></div>
     <form onSubmit={review} noValidate className="max-w-[640px] space-y-6">
       <div><Label htmlFor="version-purpose">Purpose</Label>
-        <Input id="version-purpose" value={state.purpose} onChange={e => set('purpose', e.target.value)} aria-invalid={!!errors.purpose} aria-describedby={`version-purpose-hint${errors.purpose ? ' version-purpose-error' : ''}`} />
-        <p id="version-purpose-hint" className="mt-1 text-muted-foreground">One sentence. Students see it on My agents and in each club’s catalog.</p>
+        <Input id="version-purpose" value={state.purpose} onChange={e => set('purpose', e.target.value)} aria-invalid={!!errors.purpose} aria-describedby={errors.purpose ? 'version-purpose-error' : undefined} />
         {errors.purpose && <p id="version-purpose-error" className="mt-1 flex items-center gap-1 text-primary"><CircleAlert aria-hidden="true" className="size-3 shrink-0" />{errors.purpose}</p>}</div>
 
-      <Field id="version-audience" legend="Audience" hint="Who may open it in each club that has it installed.">
+      <Field id="version-audience" legend="Audience">
         <RadioGroup value={state.audience} onValueChange={v => set('audience', v as Audience)} className="gap-2" aria-label="Audience">
           {AUDIENCES.map(a => <Choice key={a.slug} id={`audience-${a.slug}`} title={a.name} description={a.description}
             control={<RadioGroupItem id={`audience-${a.slug}`} value={a.slug} aria-describedby={`audience-${a.slug}-hint`} className="size-5" />} />)}
         </RadioGroup>
       </Field>
 
-      {state.audience === 'positions' && <Field id="version-positions" legend="Positions" hint="Each club fills these positions with its own people. Choosing Treasurer means whoever holds Treasurer in that club." error={errors.usableBy}>
+      {state.audience === 'positions' && <Field id="version-positions" legend="Positions" error={errors.usableBy}>
         <div className="grid gap-2 sm:grid-cols-2">{positionOptions.map(p => <label key={p.slug} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 has-[:checked]:border-input has-[:checked]:bg-muted">
           <Checkbox checked={state.usableBy.includes(p.slug)} onChange={e => set('usableBy', toggle(state.usableBy, p.slug, e.target.checked))} />{p.name}</label>)}</div>
       </Field>}
 
       <div><Label htmlFor="version-prompt">Instructions</Label>
-        <p id="version-prompt-hint" className="mb-2 text-muted-foreground">The system prompt: what the agent is told before every request. Say who it serves, what to check, what to cite and what it must never do.</p>
-        <Textarea id="version-prompt" value={state.systemPrompt} onChange={e => set('systemPrompt', e.target.value)} rows={12} className="text-base leading-6" aria-invalid={!!errors.systemPrompt} aria-describedby={`version-prompt-hint${errors.systemPrompt ? ' version-prompt-error' : ''}`} />
+        <Textarea id="version-prompt" value={state.systemPrompt} onChange={e => set('systemPrompt', e.target.value)} rows={12} className="text-base leading-6" aria-invalid={!!errors.systemPrompt} aria-describedby={errors.systemPrompt ? 'version-prompt-error' : undefined} />
         {errors.systemPrompt && <p id="version-prompt-error" className="mt-1 flex items-center gap-1 text-primary"><CircleAlert aria-hidden="true" className="size-3 shrink-0" />{errors.systemPrompt}</p>}</div>
 
-      <Field id="version-sources" legend="Knowledge sources" hint="The kinds of documents it may look in. Club sources resolve inside each club; USG sources come from USG’s library." error={errors.sourceKinds}>
-        <div className="space-y-2">{sourceOptions.map(s => <Choice key={s.slug} id={`source-${s.slug}`} title={s.name} description={s.description} tag={s.owner === 'usg' ? 'USG library' : 'Each club'}
+      <Field id="version-sources" legend="Knowledge sources" error={errors.sourceKinds}>
+        <div className="space-y-2">{sourceOptions.map(s => <Choice key={s.slug} id={`source-${s.slug}`} title={s.name} description={s.description} tag={scopeLabel(s.owner)}
           control={<Checkbox id={`source-${s.slug}`} aria-describedby={`source-${s.slug}-hint`} checked={state.sourceKinds.includes(s.slug)} onChange={e => set('sourceKinds', toggle(state.sourceKinds, s.slug, e.target.checked))} />} />)}</div>
       </Field>
 
-      <Field id="version-tier" legend="Reads up to" hint="The max tier: the most sensitive documents it may read. It still never reads more than the person running it can.">
-        {state.audience === 'public' ? <p className="rounded-md border border-border px-3 py-2"><span className="font-semibold">Public only.</span> An agent for all students can read only public documents.</p>
+      <Field id="version-tier" legend="Reads up to">
+        {state.audience === 'public' ? <p className="rounded-md border border-border px-3 py-2 font-semibold">{TIERS.public.name}</p>
           : <><RadioGroup value={state.maxTier} onValueChange={v => set('maxTier', v as Tier)} className="gap-2" aria-label="Reads up to">
             {tierOptions.map(t => <Choice key={t} id={`tier-${t}`} title={TIERS[t].name} description={TIERS[t].plain}
               control={<RadioGroupItem id={`tier-${t}`} value={t} aria-describedby={`tier-${t}-hint`} className="size-5" />} />)}
-          </RadioGroup><p className="text-muted-foreground">USG internal is not offered here or under Knowledge sources: agents that USG distributes to clubs never read reviewers’ notes.</p></>}
+          </RadioGroup></>}
       </Field>
 
       <div><Label htmlFor="version-rulepack">Rule pack</Label>
-        <p id="version-rulepack-hint" className="mb-2 text-muted-foreground">The USG policy this agent is built to apply. Each run uses the newest published version of the pack.</p>
-        <select id="version-rulepack" className={selectClass} value={state.rulePackSlug} onChange={e => set('rulePackSlug', e.target.value)} aria-describedby="version-rulepack-hint">
+        <select id="version-rulepack" className={selectClass} value={state.rulePackSlug} onChange={e => set('rulePackSlug', e.target.value)}>
           <option value="">None</option>
           {data.rulePacks.map(p => <option key={p.slug} value={p.slug}>{`${p.label} (v${p.version}, ${p.ruleCount} rules)`}</option>)}
           {state.rulePackSlug && !data.rulePacks.some(p => p.slug === state.rulePackSlug) && <option value={state.rulePackSlug}>{`${state.rulePackSlug} (no published version)`}</option>}
         </select></div>
 
-      <Field id="version-tools" legend="Tools" hint="Actions it can take besides answering. Leave all unchecked for an agent that only answers. Every write waits for the user to confirm.">
+      <Field id="version-tools" legend="Tools">
         <div className="space-y-2">{toolOptions.map(t => <Choice key={t.slug} id={`tool-${t.slug}`} title={t.name} description={t.description}
-          control={<Checkbox id={`tool-${t.slug}`} aria-describedby={`tool-${t.slug}-hint`} checked={state.tools.includes(t.slug)} onChange={e => set('tools', toggle(state.tools, t.slug, e.target.checked))} />} />)}</div>
+          control={<Checkbox id={`tool-${t.slug}`} aria-describedby={t.description ? `tool-${t.slug}-hint` : undefined} checked={state.tools.includes(t.slug)} onChange={e => set('tools', toggle(state.tools, t.slug, e.target.checked))} />} />)}</div>
       </Field>
 
-      <Field id="version-models" legend="Model classes" hint="How strong a model runs it. Clubs choose among the classes you allow, within their USG policy." error={errors.modelClasses}>
+      <Field id="version-models" legend="Model classes" error={errors.modelClasses}>
         <div className="grid gap-2 sm:grid-cols-2">{MODEL_ORDER.map(m => <Choice key={m} id={`model-${m}`} title={MODEL_CLASSES[m].name} description={MODEL_CLASSES[m].description}
           control={<Checkbox id={`model-${m}`} aria-describedby={`model-${m}-hint`} checked={state.modelClasses.includes(m)} onChange={e => {
             const classes = MODEL_ORDER.filter(x => x === m ? e.target.checked : state.modelClasses.includes(x));
@@ -164,16 +156,14 @@ export function VersionEditor({ data, editing, setEditing }: { data: UsgTemplate
       </Field>
 
       <div><Label htmlFor="version-changes">Change note</Label>
-        <Textarea id="version-changes" value={state.changelog} onChange={e => set('changelog', e.target.value)} rows={2} aria-describedby="version-changes-hint" />
-        <p id="version-changes-hint" className="mt-1 text-muted-foreground">Shown in the version history, for example “Cite §5 for every food line.”</p></div>
+        <Textarea id="version-changes" value={state.changelog} onChange={e => set('changelog', e.target.value)} rows={2} /></div>
 
       {formError && <Alert variant="destructive"><CircleAlert aria-hidden="true" /><div><AlertTitle>Cannot review yet</AlertTitle><AlertDescription>{formError}</AlertDescription></div></Alert>}
       <div className="flex flex-wrap gap-2"><Button type="submit">Review version {next}</Button><Button type="button" variant="ghost" onClick={cancel}>Cancel</Button></div>
     </form>
 
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-w-2xl">
-      <DialogHeader><DialogTitle>Publish version {next} of {data.template.name}?</DialogTitle>
-        <DialogDescription>Check what changes and who it reaches before it goes to clubs.</DialogDescription></DialogHeader>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-w-2xl" aria-describedby={undefined}>
+      <DialogHeader><DialogTitle>Publish version {next} of {data.template.name}?</DialogTitle></DialogHeader>
       <VersionReview templateName={data.template.name} nextVersion={next} currentVersion={latest?.version ?? null} changes={changes}
         reach={reachSentences(body, data.template.installedCount, ctx)} changelog={state.changelog} />
       <ErrorNotice message={mutation.error} />

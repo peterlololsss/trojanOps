@@ -6,7 +6,7 @@ import { useState, type FormEvent } from 'react';
 import { CircleAlert, PenLine } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -19,26 +19,23 @@ import type { UsgPack, UsgPackUser } from '@/lib/distribution/usg-view';
 import { ErrorNotice, PendingButton, SuccessNotice, useConsoleMutation } from '../templates/console-ui';
 import { audienceLabel, plural } from '../templates/template-config';
 
-/** "Applies to Funding pre-check in 4 clubs on the next run, including pinned installations." */
-export function reachSentences(usedBy: UsgPackUser[], nextVersion: number): string[] {
-  if (!usedBy.length) return ['No agent template uses this rule pack yet, so no run changes until a template names it.'];
-  return usedBy.flatMap(u => [
-    `Applies to ${u.name} in ${plural(u.installedCount, 'club')} on the next run, including pinned installations.`,
-    `${audienceLabel(u.audience, u.usableBy)} in ${u.installedCount === 1 ? 'that club' : 'those clubs'} get answers based on v${nextVersion}.`,
-  ]);
+/** "Applies to Funding pre-check (Treasurer, President) in 3 clubs on the next run, including pinned installations." */
+export function reachSentences(usedBy: UsgPackUser[]): string[] {
+  if (!usedBy.length) return ['No agent template uses this rule pack.'];
+  return usedBy.map(u => `Applies to ${u.name} (${audienceLabel(u.audience, u.usableBy)}) in ${plural(u.installedCount, 'club')} on the next run, including pinned installations.`);
 }
 
 export interface PackReviewProps {
   /** Prefix for element ids, the pack slug. */
   idPrefix?: string;
-  label: string; nextVersion: number; labelChange: { before: string; after: string } | null;
+  labelChange: { before: string; after: string } | null;
   changes: ValueChange[]; changeNote: string; usedBy: UsgPackUser[]; json?: Record<string, unknown>;
 }
 /** The review step: only what differs from the current version, and who it reaches. */
-export function PackReview({ idPrefix = 'pack', label, nextVersion, labelChange, changes, changeNote, usedBy, json }: PackReviewProps) {
+export function PackReview({ idPrefix = 'pack', labelChange, changes, changeNote, usedBy, json }: PackReviewProps) {
   return <div className="space-y-5">
     <section aria-labelledby={`${idPrefix}-review-changes`} className="space-y-2">
-      <h3 id={`${idPrefix}-review-changes`} className="font-semibold">What changes in {label} v{nextVersion}</h3>
+      <h3 id={`${idPrefix}-review-changes`} className="font-semibold">Changes</h3>
       {json ? <pre className="max-h-64 overflow-auto rounded-md border border-border bg-muted p-3 font-mono text-xs">{JSON.stringify(json, null, 2)}</pre>
         : <dl className="divide-y divide-border rounded-md border border-border">
           {labelChange && <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 px-3 py-2"><dt>Label</dt><dd className="text-right">{`${labelChange.before} → ${labelChange.after}`}</dd></div>}
@@ -47,13 +44,11 @@ export function PackReview({ idPrefix = 'pack', label, nextVersion, labelChange,
             <dd className="text-right"><span className="font-semibold tabular-nums">{`${c.before} → ${c.after}`}</span>{c.unit && <span className="ml-1 text-muted-foreground">{c.unit}</span>}</dd>
           </div>)}
         </dl>}
-      {!json && <p className="text-muted-foreground">Every other rule, its USG wording and its example carry over unchanged.</p>}
     </section>
     {changeNote.trim() && <p><span className="font-semibold">Change note:</span> {changeNote.trim()}</p>}
     <section aria-labelledby={`${idPrefix}-review-reach`} className="space-y-1">
       <h3 id={`${idPrefix}-review-reach`} className="font-semibold">Who it reaches</h3>
-      {reachSentences(usedBy, nextVersion).map(s => <p key={s}>{s}</p>)}
-      <p className="text-muted-foreground">Published versions cannot be edited. To undo, publish another version with the old values.</p>
+      {reachSentences(usedBy).map(s => <p key={s}>{s}</p>)}
     </section>
   </div>;
 }
@@ -109,8 +104,7 @@ export function PublishPackDialog({ pack }: { pack: UsgPack }) {
     if (!prepared) return;
     mutation.run(async () => {
       const result = await mutation.request(`/api/usg/rule-packs/${encodeURIComponent(pack.slug)}/versions`, 'POST', { label: label.trim(), content: prepared.content }) as { version: number };
-      const users = pack.usedBy.map(u => u.name).join(', ');
-      return `${label.trim()} v${result.version} published. ${users ? `The next ${users} run uses it.` : 'No agent uses this pack yet.'}`;
+      return `${label.trim()} v${result.version} published.`;
     }, () => setOpen(false));
   }
 
@@ -118,14 +112,12 @@ export function PublishPackDialog({ pack }: { pack: UsgPack }) {
     <Button type="button" onClick={() => reset(true)}>Publish new version</Button>
     <SuccessNotice message={mutation.success} />
     <Dialog open={open} onOpenChange={reset}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{step === 'review' ? `Publish ${label.trim()} v${next}?` : `New version of ${base?.label ?? pack.slug}`}</DialogTitle>
-          <DialogDescription>{step === 'review' ? 'Check what changes and who it reaches.'
-            : parsed ? 'Change the values USG updated. The USG wording, examples and every other rule carry over.' : 'This pack has no rule list, so edit its content as JSON.'}</DialogDescription>
         </DialogHeader>
         {step === 'review' && prepared ? <>
-          <PackReview idPrefix={pack.slug} label={label.trim()} nextVersion={next} changes={prepared.changes} changeNote={note} usedBy={pack.usedBy}
+          <PackReview idPrefix={pack.slug} changes={prepared.changes} changeNote={note} usedBy={pack.usedBy}
             labelChange={base && label.trim() !== base.label ? { before: base.label, after: label.trim() } : null} json={parsed ? undefined : prepared.content} />
           <ErrorNotice message={mutation.error} />
           <DialogFooter><Button type="button" variant="ghost" onClick={() => setStep('edit')}>Back to edit</Button>
@@ -135,8 +127,7 @@ export function PublishPackDialog({ pack }: { pack: UsgPack }) {
           {parsed ? <ValuesTable idPrefix={pack.slug} rules={editableRules(parsed)} inputs={inputs} errors={errors}
             onChange={(id, value) => { setInputs(v => ({ ...v, [id]: value })); setTouched(t => new Set(t).add(id)); }} onBlur={blur} />
             : <div><Label htmlFor={`${pack.slug}-json`}>Content (JSON)</Label><Textarea id={`${pack.slug}-json`} value={json} onChange={e => setJson(e.target.value)} rows={12} className="font-mono text-xs" /></div>}
-          <div><Label htmlFor={`${pack.slug}-note`}>Change note</Label><Textarea id={`${pack.slug}-note`} value={note} onChange={e => setNote(e.target.value)} rows={2} aria-describedby={`${pack.slug}-note-hint`} />
-            <p id={`${pack.slug}-note-hint`} className="mt-1 text-muted-foreground">Optional. Shown in the version history, for example “Annual cap raised after the fall budget vote.”</p></div>
+          <div><Label htmlFor={`${pack.slug}-note`}>Change note</Label><Textarea id={`${pack.slug}-note`} value={note} onChange={e => setNote(e.target.value)} rows={2} /></div>
           <div className="sticky -bottom-6 -mx-6 -mb-6 space-y-3 border-t border-border bg-background px-6 py-4">
             {formError && <Alert variant="destructive"><CircleAlert aria-hidden="true" /><div><AlertTitle>Cannot review yet</AlertTitle><AlertDescription>{formError}</AlertDescription></div></Alert>}
             <DialogFooter><Button type="button" variant="ghost" onClick={() => reset(false)}>Cancel</Button><Button type="submit">Review v{next}</Button></DialogFooter>

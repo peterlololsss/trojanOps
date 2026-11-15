@@ -785,10 +785,9 @@ Pages (18):
 as 13 rules. `content` keys:
 - `annualCapUsd` (8000): the mock runtime prints it;
 - `source`: title, publisher, `currentAsOf`, `retrievedAt`, links, `edits` (typos corrected);
-- `rules[]`: `{id, group, section, title, value?, unit?, check, quote, example, items?, note?,
+- `rules[]`: `{id, group, section, title, value?, unit?, check, quote, items?, note?,
   amendedFrom?}`, grouped as deadlines, limits and not eligible. `check` is `precheck` or
-  `reviewer`; `quote` is the guideline text; `example` uses seed data (Startup's Demo day catering
-  at $40 a person, its "Speaker gifts" line). A published value that differs from USG's carries
+  `reviewer`; `quote` is the guideline text. A published value that differs from USG's carries
   `amendedFrom` with USG's value;
 - `changeNote`: the publisher's note for that version.
 

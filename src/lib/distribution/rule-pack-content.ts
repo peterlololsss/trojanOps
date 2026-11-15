@@ -7,10 +7,10 @@ export type RuleCheck = 'precheck' | 'reviewer';
 
 export interface PackRule {
   id: string; group: RuleGroup; section: string; title: string;
-  value?: number | string; unit?: string; check: RuleCheck; quote: string; example: string; items?: string[];
+  value?: number | string; unit?: string; check: RuleCheck; quote: string; items?: string[];
   /** USG's wording for an exception, shown under the rule. */
   note?: string;
-  /** USG's original value, set once USG admins publish a different one; the quote and example still describe it. */
+  /** USG's original value, set once USG admins publish a different one; the quote still describes it. */
   amendedFrom?: number | string;
 }
 export interface PackSource {
@@ -20,17 +20,12 @@ export interface PackSource {
 }
 export interface PackContent { annualCapUsd?: number; source: PackSource | null; rules: PackRule[]; changeNote?: string }
 
-export const RULE_GROUPS: ReadonlyArray<{ id: RuleGroup; title: string; description: string }> = [
-  { id: 'deadlines', title: 'Deadlines', description: 'When to apply, and what to send after the event.' },
-  { id: 'limits', title: 'Limits', description: 'How much USG pays per club, per event and per item.' },
-  { id: 'not-eligible', title: 'Not eligible', description: 'Expenses USG does not fund, unless its board grants an exception.' },
+export const RULE_GROUPS: ReadonlyArray<{ id: RuleGroup; title: string }> = [
+  { id: 'deadlines', title: 'Deadlines' },
+  { id: 'limits', title: 'Limits' },
+  { id: 'not-eligible', title: 'Not eligible' },
 ];
-export const CHECKS: Record<RuleCheck, { label: string; description: string }> = {
-  precheck: { label: 'Pre-check', description: 'Meant for the agent to flag before the club submits.' },
-  reviewer: { label: 'USG reviewer', description: 'A USG reviewer checks it, because it depends on what the club sends later.' },
-};
-/** Shown where a pack is described while the mock runtime answers (WP-14 brings rule-by-rule checks). */
-export const DEMO_RUNTIME_PACK_NOTE = 'Demo runtime: runs show this pack’s version and annual cap; rule-by-rule checks come with the real agent.';
+export const CHECK_LABELS: Record<RuleCheck, string> = { precheck: 'Pre-check', reviewer: 'USG reviewer' };
 /** The rule whose value the mock runtime reads back as `annualCapUsd` (demo beat D6). */
 export const ANNUAL_CAP_RULE = 'annual-cap';
 
@@ -45,8 +40,8 @@ const optionalStr = (v: unknown) => v === undefined || typeof v === 'string';
 
 function parseRule(raw: unknown): PackRule | null {
   if (!isRecord(raw)) return null;
-  const { id, group, section, title, value, unit, check, quote, example, items, note, amendedFrom } = raw;
-  if (![id, section, title, quote, example].every(str)) return null;
+  const { id, group, section, title, value, unit, check, quote, items, note, amendedFrom } = raw;
+  if (![id, section, title, quote].every(str)) return null;
   if (!RULE_GROUPS.some(g => g.id === group) || (check !== 'precheck' && check !== 'reviewer')) return null;
   if (value !== undefined && !(typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value)))) return null;
   if (!optionalStr(unit) || !optionalStr(note)) return null;
@@ -55,7 +50,7 @@ function parseRule(raw: unknown): PackRule | null {
   return {
     id: id as string, group: group as RuleGroup, section: section as string, title: title as string,
     ...(value === undefined ? {} : { value: value as number | string }), ...(unit === undefined ? {} : { unit: unit as string }),
-    check, quote: quote as string, example: example as string, ...(items === undefined ? {} : { items: items as string[] }),
+    check, quote: quote as string, ...(items === undefined ? {} : { items: items as string[] }),
     ...(typeof note === 'string' && note ? { note } : {}), ...(amendedFrom === undefined ? {} : { amendedFrom: amendedFrom as number | string }),
   };
 }
