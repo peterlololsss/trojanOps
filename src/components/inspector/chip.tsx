@@ -1,6 +1,6 @@
 // Owner: C. Local status chip (ui-designer.md "Badge / status chip"): 2px radius, icon + word,
 // tokens only. A stop-gap until stream D ships `ui/badge` (requested in the WP-9 PR).
-// TODO(verify): replace with @/components/ui/badge once it exists.
+// TODO(verify): @/components/ui/badge now exists; switch to it.
 import type { LucideIcon } from 'lucide-react';
 
 export type ChipTone = 'neutral' | 'success' | 'attention';

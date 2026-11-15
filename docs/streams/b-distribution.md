@@ -119,8 +119,7 @@ Confirm these guardrails when building the admin form.
 The service never modifies `roster_state`. This preserves the original imported holders, so an
 unchanged roster still compares equal and must not override the manual assignment (§13). Stream D
 must compare incoming roster positions against `roster_state`, not current memberships, and should
-coordinate membership writes with this service's club-row lock. `TODO(verify):` D's
-`src/lib/lifecycle/import.ts` does not exist on this branch yet: the transfer tests verify the
-preserved baseline against the seed CSV, not a simulated or end-to-end roster sync. Add the full
-sync-after-transfer regression when that service lands. The transfer API and admin form remain
+coordinate membership writes with this service's club-row lock. D's
+`src/lib/lifecycle/import.ts` compares against `roster_state`; `tests/roster-import.test.ts` covers a
+sync after a manual transfer. The transfer API and admin form remain
 separate slices.

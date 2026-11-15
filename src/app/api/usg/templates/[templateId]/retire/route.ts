@@ -2,7 +2,7 @@
 //
 // Retiring blocks runs with "Retired by USG" and drops the agent out of the directory and My
 // agents, rather than leaving it listed and failing when opened. Installations and documents are
-// left alone, so it is reversible by publishing again.
+// left alone; a retired template cannot be published again.
 import { z } from 'zod';
 import { parseBody, requireUser, route } from '@/lib/api';
 import { retire } from '@/lib/distribution';

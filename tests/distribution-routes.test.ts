@@ -170,7 +170,7 @@ describe.skipIf(!probe)('distribute and narrow an installation (D2)', () => {
         distributeRoute.POST,
         `http://localhost/api/usg/templates/${TEMPLATE.eventPlanning}/distribute`,
         { templateId: TEMPLATE.eventPlanning },
-        { userId: USER.avery, orgId: ORG.usg },
+        { body: {}, userId: USER.avery, orgId: ORG.usg },
       );
       expect(distributed.status).toBe(200);
       // The seed has exactly three active RSOs and event-planning targets them all.
@@ -207,9 +207,20 @@ describe.skipIf(!probe)('distribute and narrow an installation (D2)', () => {
         distributeRoute.POST,
         `http://localhost/api/usg/templates/${TEMPLATE.eventPlanning}/distribute`,
         { templateId: TEMPLATE.eventPlanning },
-        { userId: USER.sam, orgId: ORG.startup },
+        { body: {}, userId: USER.sam, orgId: ORG.startup },
       );
       expect(res.status).toBe(403);
+    }));
+
+  it('refuses a distribute request without a JSON body (cross-site form guard)', () =>
+    inRolledBackApp(async () => {
+      const res = await post(
+        distributeRoute.POST,
+        `http://localhost/api/usg/templates/${TEMPLATE.eventPlanning}/distribute`,
+        { templateId: TEMPLATE.eventPlanning },
+        { userId: USER.avery, orgId: ORG.usg },
+      );
+      expect(res.status).toBe(400);
     }));
 
   const patch = (installationId: string, userId: string, orgId: string, pathOrgId = ORG.startup) =>
