@@ -6,15 +6,15 @@ import { documents } from '../db/schema';
 import { withActor } from '../db/with-actor';
 
 /** The documents a run may read: read_grants overlap runGrants and the source is one of the agent's
- * (gateway step 5). Oldest first, then by title: the order is stable across runs, and the mock
- * runtime cites the first three. */
+ * (gateway step 5), with the agent's max tier enforced by RLS. Oldest first, then by title: the
+ * order is stable across runs, and the mock runtime cites the first three. */
 export async function listAccessibleDocuments(
   actor: Actor,
   runGrants: Grant[],
-  sourceIds: string[],
+  agent: Pick<EffectiveAgent, 'sourceIds' | 'maxTier'>,
 ): Promise<AccessibleDocument[]> {
   // No where clause: the documents_read policy is the filter, and a copy of it here would hide an RLS failure.
-  return withActor(actor, { grants: runGrants, sourceIds }, async (tx) =>
+  return withActor(actor, { grants: runGrants, sourceIds: agent.sourceIds, maxTier: agent.maxTier }, async (tx) =>
     tx.select({ id: documents.id, title: documents.title, tier: documents.tier, bodyMd: documents.bodyMd })
       .from(documents)
       .orderBy(asc(documents.createdAt), asc(documents.title)));

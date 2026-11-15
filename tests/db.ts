@@ -45,7 +45,8 @@ const globalForDb = globalThis as unknown as { trojanopsDb?: Db };
 
 /** Clears the four RLS settings, as a fresh pooled connection would have them. */
 const RESET_SETTINGS = sql`select set_config('app.user_id', '', true), set_config('app.grants', '', true),
-  set_config('app.agent_sources', '', true), set_config('app.manage_org', '', true)`;
+  set_config('app.agent_sources', '', true), set_config('app.manage_org', '', true),
+  set_config('app.max_tier', '', true)`;
 
 /**
  * Runs fn inside one app-role transaction that is always rolled back. While it runs, getDb() returns

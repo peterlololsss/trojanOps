@@ -1,6 +1,7 @@
 // Owner: A. The roles/RLS migration (db/migrations/0001_roles_rls.sql) as seen by trojanops_app, with
 // raw set_config. tests/rls.test.ts checks the same policies through withActor.
 import { afterAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { ORG, SOURCE } from '@db/seed/ids';
 import { appSql, rolledBack } from './db';
 
@@ -45,33 +46,36 @@ describe.skipIf(!sql)('roles and RLS migration', () => {
   });
 
   it('lets only the managing president insert documents, into their own sources', async () => {
+    const financeSource = randomUUID();
+    const rulebookSource = randomUUID();
     await rolledBack(db, async (tx) => {
       await tx`insert into sources (id, org_id, slug, name, kind, created_at)
-               values (${SOURCE.startup.finance}, ${ORG.startup}, 'finance', 'Finance', 'finance', now()),
-                      (${SOURCE.usg.rulebook}, ${ORG.usg}, 'rulebook', 'Rulebook', 'rulebook', now())`;
+               values (${financeSource}, ${ORG.startup}, ${financeSource}, 'Finance', 'finance', now()),
+                      (${rulebookSource}, ${ORG.usg}, ${rulebookSource}, 'Rulebook', 'rulebook', now())`;
       await set(tx, 'app.manage_org', ORG.startup);
       await expect(tx`insert into documents (org_id, source_id, title, tier, body_md, created_at)
-                      values (${ORG.startup}, ${SOURCE.usg.rulebook}, 'Planted', 'public', 'x', now())`)
+                      values (${ORG.startup}, ${rulebookSource}, 'Planted', 'public', 'x', now())`)
         .rejects.toThrow(/documents_source_org_fk/);
     });
     await rolledBack(db, async (tx) => {
       await tx`insert into sources (id, org_id, slug, name, kind, created_at)
-               values (${SOURCE.startup.finance}, ${ORG.startup}, 'finance', 'Finance', 'finance', now())`;
+               values (${financeSource}, ${ORG.startup}, ${financeSource}, 'Finance', 'finance', now())`;
       await expect(tx`insert into documents (org_id, source_id, title, tier, body_md, created_at)
-                      values (${ORG.startup}, ${SOURCE.startup.finance}, 'x', 'members', 'x', now())`)
+                      values (${ORG.startup}, ${financeSource}, 'x', 'members', 'x', now())`)
         .rejects.toThrow(/row-level security/);
     });
   });
 
   it('computes read_grants in the trigger and filters by grants and sources', async () => {
+    const financeSource = randomUUID();
     await rolledBack(db, async (tx) => {
       await tx`insert into sources (id, org_id, slug, name, kind, created_at)
-               values (${SOURCE.startup.finance}, ${ORG.startup}, 'finance', 'Finance', 'finance', now())`;
+               values (${financeSource}, ${ORG.startup}, ${financeSource}, 'Finance', 'finance', now())`;
       await set(tx, 'app.manage_org', ORG.startup);
       await tx`insert into documents (org_id, source_id, title, tier, allowed_positions, read_grants, body_md, created_at) values
-        (${ORG.startup}, ${SOURCE.startup.finance}, 'Budget', 'officers', '{treasurer}', '{*}', 'x', now()),
-        (${ORG.startup}, ${SOURCE.startup.finance}, 'Minutes', 'members', '{}', '{}', 'x', now())`;
-      await set(tx, 'app.agent_sources', `{"${SOURCE.startup.finance}"}`);
+        (${ORG.startup}, ${financeSource}, 'Budget', 'officers', '{treasurer}', '{*}', 'x', now()),
+        (${ORG.startup}, ${financeSource}, 'Minutes', 'members', '{}', '{}', 'x', now())`;
+      await set(tx, 'app.agent_sources', `{"${financeSource}"}`);
       await set(tx, 'app.grants', `{"*","${ORG.startup}:*","${ORG.startup}:treasurer"}`);
       const all = await tx`select title, read_grants from documents order by title`;
       expect(all).toEqual([
@@ -85,4 +89,32 @@ describe.skipIf(!sql)('roles and RLS migration', () => {
     });
   });
 
+  it('caps document tiers in RLS even when the same role grants both tiers', async () => {
+    const sourceId = randomUUID();
+    await rolledBack(db, async (tx) => {
+      await tx`insert into sources (id, org_id, slug, name, kind, created_at)
+               values (${sourceId}, ${ORG.usg}, ${sourceId}, 'Tier test', 'usg_internal', now())`;
+      await set(tx, 'app.manage_org', ORG.usg);
+      await tx`insert into documents (org_id, source_id, title, tier, allowed_positions, body_md, created_at) values
+        (${ORG.usg}, ${sourceId}, 'Officers', 'officers', '{reviewer,admin}', 'x', now()),
+        (${ORG.usg}, ${sourceId}, 'Internal', 'usg_internal', '{}', 'x', now())`;
+      await set(tx, 'app.agent_sources', `{"${sourceId}"}`);
+      for (const role of ['reviewer', 'admin']) {
+        await set(tx, 'app.grants', `{"*","${ORG.usg}:${role}"}`);
+        for (const [tier, titles] of [
+          ['public', []], ['members', []], ['officers', ['Officers']],
+          ['usg_internal', ['Internal', 'Officers']], ['', ['Internal', 'Officers']], ['invalid', []],
+        ] as const) {
+          await set(tx, 'app.max_tier', tier);
+          expect((await tx`select title from documents order by title`).map((r) => r.title)).toEqual(titles);
+        }
+      }
+      await set(tx, 'app.max_tier', 'usg_internal');
+      await set(tx, 'app.grants', '{}');
+      expect(await tx`select title from documents`).toEqual([]);
+      await set(tx, 'app.grants', `{"${ORG.usg}:reviewer"}`);
+      await set(tx, 'app.agent_sources', '{}');
+      expect(await tx`select title from documents`).toEqual([]);
+    });
+  });
 });

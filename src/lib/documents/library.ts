@@ -28,7 +28,7 @@ async function librarySourceIds(orgId: string): Promise<string[]> {
 
 /** The documents the actor can read in one club's library, newest first, then by title. Sources are
  * all of the viewed org's (`orgId`) plus USG public ones; grants come from the actor's memberships in
- * `orgId` (recomputed here, I3), not from the active org. See docs/decisions.md #15. */
+ * `orgId` (recomputed here, I3), not from the active org. See docs/decisions.md #16. */
 export async function listLibraryDocuments(actor: Actor, orgId: string): Promise<LibraryDocument[]> {
   if (!isUuid(orgId)) return [];
   const sourceIds = await librarySourceIds(orgId);
