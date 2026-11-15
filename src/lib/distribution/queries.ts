@@ -52,6 +52,10 @@ export interface LoadedAgent {
   /** §8's "Update available": a pinned installation whose template has published past it.
    * It lives here rather than on `EffectiveAgent`, which is stream A's contract. */
   updateAvailable: boolean;
+  /** Whether "Publish to all students" could succeed: the *version* allows a public audience and
+   * USG allows this club public agents. The effective audience cannot answer this — a club that
+   * narrowed a public version to members may still publish it back. */
+  canPublishPublic: boolean;
 }
 
 /**
@@ -77,7 +81,10 @@ export async function loadAgents(filter: AgentFilter): Promise<LoadedAgent[]> {
     try {
       const agent = composeEffectiveAgent(input);
       if (filter.enabledOnly && agent.status !== 'enabled') continue;
-      loaded.push({ agent, orgName, distribution, updateAvailable });
+      loaded.push({
+        agent, orgName, distribution, updateAvailable,
+        canPublishPublic: input.version.audience === 'public' && input.club.policy.allowPublicAgents,
+      });
     } catch (err) {
       if (filter.installationId && err instanceof AppError && err.error.code === 'clamp_violation') {
         // I7 runs the clamps at run time too: a version narrowed under an installation lands here.
