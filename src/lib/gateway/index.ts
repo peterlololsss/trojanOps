@@ -126,7 +126,7 @@ export async function runAgent(actor: Actor, installationId: string, input: stri
     throw err;
   }
 
-  const quotaLeft = await headroom(agent, userId);
+  const quotaLeft = await headroom(agent, userId, held.isMember);
   return {
     runId,
     reply: result.reply,

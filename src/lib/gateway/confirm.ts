@@ -1,6 +1,11 @@
 // Owner: A (WP-4). gateway.confirm: a human confirms a pending write action (I6, §14). The run's own
 // user confirms, holding an active membership in the action's club, and a position that may confirm
-// that tool when the tool names any. Nothing executes here: no write tool has an executor yet (TODO(WP-14)), so this records the decision.
+// that tool when the tool names any. Nothing executes here: no write tool has an executor yet, so
+// this records the decision.
+// TODO(WP-14): before executing a write tool, re-run effectiveAgent and canUse at confirm time: the
+// agent may have been disabled, retired or restricted since the run.
+// TODO(verify): a non-member who ran a public agent cannot confirm its pending actions (the club
+// membership check). Confirm with the team whether such actions need another confirmer.
 import { and, eq } from 'drizzle-orm';
 import { AppError, type Actor } from '../contracts';
 import { activeMemberships, isUuid } from '../authz';

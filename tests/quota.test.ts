@@ -175,7 +175,7 @@ describe.skipIf(!probe)('setLimit', () => {
 describe.skipIf(!probe)('ai_usage ledger', () => {
   const held = (over: Partial<QuotaHold> = {}): QuotaHold => ({
     runId: crypto.randomUUID(), holdMicro: 10_000, billedOrgId: ORG.startup, userId: USER.casey,
-    installationId: INSTALLATION.startupHandoff, isPublic: false, createdAt: now(), ...over,
+    installationId: INSTALLATION.startupHandoff, isPublic: false, isMember: true, createdAt: now(), ...over,
   });
   const club: QuotaTarget = { scope: 'org', orgId: ORG.startup };
   const insertHold = (tx: Tx, h: QuotaHold, ageMs: number) => {
@@ -416,7 +416,9 @@ describe.skipIf(!probe)('hold: levels and fallbacks (§7 step 4, §11)', () => {
 
 describe.skipIf(!probe)('hold: concurrent runs', () => {
   // Six holds on separate pooled connections, committed for real: the app role cannot delete, so the
-  // limit is restored and the winning hold is settled at 0 afterwards. TODO(verify): the lock is
+  // limit is restored and the winning hold is settled at 0 afterwards. This test commits net-zero
+  // ledger rows and a few append-only audit events, and briefly lowers Casey's limit: run it only
+  // against the test database, never one a dev server is using. TODO(verify): the lock is
   // what makes exactly one win; an unlocked read-then-insert would let both pass most of the time.
   it('lets exactly one of six simultaneous holds through at the limit', async () => {
     const sam = await actorFor(USER.sam, ORG.startup);
@@ -435,8 +437,11 @@ describe.skipIf(!probe)('hold: concurrent runs', () => {
       const lost = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
       expect(lost.reason).toMatchObject({ status: 429 });
     } finally {
-      for (const w of winners) await settle(w, 0);
-      await setLimit(sam, { ...target, limitMicro: original });
+      try {
+        for (const w of winners) await settle(w, 0);
+      } finally {
+        await setLimit(sam, { ...target, limitMicro: original });
+      }
     }
     expect(await remaining(target)).toMatchObject({ limitMicro: original, spentMicro: spent });
   });

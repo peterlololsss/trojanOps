@@ -108,17 +108,27 @@ export async function remaining(target: QuotaTarget): Promise<QuotaRemaining> {
   requireFields(t);
   const at = now();
   return getDb().transaction(async (tx) => {
-    const [{ free }] = await tx.execute<{ free: boolean }>(sql`select pg_try_advisory_xact_lock(hashtext('trojanops:quota')) as free`);
-    if (free) await releaseStaleHolds(tx, at);
-    let limit = (await limitRow(tx, t))?.limitMicro;
-    if (limit === undefined && (t.scope === 'member' || t.scope === 'installation')) {
-      const orgId = t.scope === 'member' ? t.orgId! : await installationOrg(tx, t.installationId!);
-      limit = orgId ? (await limitRow(tx, { scope: 'org', orgId }))?.limitMicro : undefined;
-    }
-    const limitMicro = limit ?? 0;
-    const spent = await spentMicro(tx, t, at);
-    return { scope: t.scope, limitMicro, spentMicro: spent, remainingMicro: Math.max(0, limitMicro - spent) };
+    await releaseStaleHoldsIfFree(tx, at);
+    return levelRemaining(tx, t, at);
   });
+}
+
+/** The non-blocking stale release a read does: skipped when a writer holds the lock. */
+async function releaseStaleHoldsIfFree(tx: Tx, at: Date): Promise<void> {
+  const [{ free }] = await tx.execute<{ free: boolean }>(sql`select pg_try_advisory_xact_lock(hashtext('trojanops:quota')) as free`);
+  if (free) await releaseStaleHolds(tx, at);
+}
+
+/** One level's limit and spend inside an open transaction (no stale release). */
+async function levelRemaining(tx: Tx, t: QuotaTarget, at: Date): Promise<QuotaRemaining> {
+  let limit = (await limitRow(tx, t))?.limitMicro;
+  if (limit === undefined && (t.scope === 'member' || t.scope === 'installation')) {
+    const orgId = t.scope === 'member' ? t.orgId! : await installationOrg(tx, t.installationId!);
+    limit = orgId ? (await limitRow(tx, { scope: 'org', orgId }))?.limitMicro : undefined;
+  }
+  const limitMicro = limit ?? 0;
+  const spent = await spentMicro(tx, t, at);
+  return { scope: t.scope, limitMicro, spentMicro: spent, remainingMicro: Math.max(0, limitMicro - spent) };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -244,6 +254,8 @@ export interface QuotaHold {
   userId: string;
   installationId: string;
   isPublic: boolean;
+  /** Whether the user was an active member of the billed club when the hold was taken. */
+  isMember: boolean;
   /** When the hold was written. The settle row is stamped with it, so both fall in one period. */
   createdAt: Date;
 }
@@ -258,9 +270,10 @@ export async function hold(
   const at = now();
   const held: QuotaHold = {
     runId, holdMicro, billedOrgId: agent.orgId, userId, installationId: agent.installationId, isPublic: agent.audience === 'public',
-    createdAt: at,
+    createdAt: at, isMember: false,
   };
   const isMember = (await activeMemberships(userId))?.some((m) => m.orgId === agent.orgId) ?? false;
+  held.isMember = isMember;
 
   const blocked = await getDb().transaction(async (tx) => {
     await lock(tx);
@@ -330,23 +343,28 @@ export async function settle(held: QuotaHold, actualMicro: number, model?: strin
 
 /** The smallest remaining amount over the levels that apply to a run of `agent` by `userId`: member
  * (an active member of the billed club), student_daily (public agents), installation, club and
- * platform. What the user can still spend before a run would be blocked. */
+ * platform. What the user can still spend before a run would be blocked. One transaction: stale
+ * holds are released once, then each level is read. Pass `isMember` when it is already known (the
+ * run's hold carries it). */
 export async function headroom(
-  agent: Pick<EffectiveAgent, 'orgId' | 'installationId' | 'audience'>, userId: string,
+  agent: Pick<EffectiveAgent, 'orgId' | 'installationId' | 'audience'>, userId: string, isMember?: boolean,
 ): Promise<number> {
+  const member = isMember ?? ((await activeMemberships(userId))?.some((m) => m.orgId === agent.orgId) ?? false);
   const targets: QuotaTarget[] = [];
-  if ((await activeMemberships(userId))?.some((m) => m.orgId === agent.orgId)) {
-    targets.push({ scope: 'member', orgId: agent.orgId, userId });
-  }
+  if (member) targets.push({ scope: 'member', orgId: agent.orgId, userId });
   if (agent.audience === 'public') targets.push({ scope: 'student_daily', userId });
   targets.push(
     { scope: 'installation', installationId: agent.installationId },
     { scope: 'org', orgId: agent.orgId },
     { scope: 'platform' },
   );
-  let smallest = Infinity;
-  for (const target of targets) smallest = Math.min(smallest, (await remaining(target)).remainingMicro);
-  return smallest;
+  const at = now();
+  return getDb().transaction(async (tx) => {
+    await releaseStaleHoldsIfFree(tx, at);
+    let smallest = Infinity;
+    for (const target of targets) smallest = Math.min(smallest, (await levelRemaining(tx, target, at)).remainingMicro);
+    return smallest;
+  });
 }
 
 export const quota = { setLimit, remaining, hold, settle, headroom };
