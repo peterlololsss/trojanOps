@@ -14,14 +14,18 @@ import { clampProposedChange, installationOrgId } from './queries';
  * out of an agent the whole campus can now open. */
 const PUBLIC_OVERRIDE: { audience: 'public'; usableBy: string[] } = { audience: 'public', usableBy: [] };
 
-/** An installation's own limit row, as opposed to the club's limit it falls back to. */
-async function hasInstallationLimit(installationId: string): Promise<boolean> {
+/**
+ * An installation's own limit, as opposed to the club's limit it falls back to; null when it has
+ * no row. TODO(verify): ask A to expose an own-limit flag on `remaining()`, so this read of
+ * `quota_limits` can go.
+ */
+async function ownInstallationLimit(installationId: string): Promise<number | null> {
   const [row] = await getDb()
-    .select({ id: quotaLimits.id })
+    .select({ limitMicro: quotaLimits.limitMicro })
     .from(quotaLimits)
     .where(and(eq(quotaLimits.scope, 'installation'), eq(quotaLimits.installationId, installationId)))
     .limit(1);
-  return !!row;
+  return row?.limitMicro ?? null;
 }
 
 /**
@@ -95,6 +99,15 @@ export async function publishToAllStudents(
     });
   }
 
+  // The limit the installation ends up with must be above 0: a public agent with a zero budget
+  // would be published and then block every run. An own limit of 0 counts as absent, so the
+  // default applies.
+  const zeroBudget = () =>
+    new AppError({
+      code: 'invalid',
+      message: `${agent.name} would get a monthly budget of $0 and could not run. Choose a larger budget.`,
+    });
+
   let limitMicro: number | null = input.limitMicro ?? null;
   if (limitMicro !== null) {
     if (!Number.isSafeInteger(limitMicro) || limitMicro < 0) {
@@ -103,6 +116,7 @@ export async function publishToAllStudents(
         message: 'A limit must be a whole number of micro-dollars, zero or more.',
       });
     }
+    if (limitMicro === 0) throw zeroBudget();
     if (limitMicro > club.limitMicro) {
       throw new AppError({
         code: 'clamp_violation',
@@ -110,8 +124,9 @@ export async function publishToAllStudents(
         cap: { scope: 'org', limitMicro: club.limitMicro, field: 'limitMicro', allowed: club.limitMicro },
       });
     }
-  } else if (!(await hasInstallationLimit(installationId))) {
+  } else if (((await ownInstallationLimit(installationId)) ?? 0) === 0) {
     limitMicro = Math.floor(club.limitMicro / 2);
+    if (limitMicro === 0) throw zeroBudget();
   }
 
   if (limitMicro !== null) {

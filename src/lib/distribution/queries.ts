@@ -17,7 +17,6 @@ import {
   sources,
   usgClubPolicy,
 } from '../db/schema';
-import { audit } from '../gateway/audit';
 import { clampInstallation, type ClampInput, type ClampResult } from './clamps';
 import { composeEffectiveAgent, type ComposeInput } from './compose';
 
@@ -58,7 +57,7 @@ export interface LoadedAgent {
  * resolved, or that a clamp now rejects, is skipped with a warning rather than throwing —
  * `directory()` serves the whole campus, so a single bad row must not 500 it. Asking for one
  * installation by id is different: the caller is about to act on it, so a clamp violation is
- * audited as `installation.rejected` and rethrown instead of reading as "no such agent".
+ * thrown, in a generic form, instead of reading as "no such agent".
  */
 export async function loadAgents(filter: AgentFilter): Promise<LoadedAgent[]> {
   // An id from a URL reaches us as free text. Postgres would reject a malformed uuid with a query
@@ -77,32 +76,21 @@ export async function loadAgents(filter: AgentFilter): Promise<LoadedAgent[]> {
     } catch (err) {
       if (filter.installationId && err instanceof AppError && err.error.code === 'clamp_violation') {
         // I7 runs the clamps at run time too: a version narrowed under an installation lands here.
-        // There is no actor on a read, so the row records the installation and the field only.
-        const { field, allowed } = err.error.cap ?? {};
-        await audit('installation.rejected', {
-          actorUserId: null,
-          actingOrgId: input.installation.orgId,
-          installationId: input.installation.id,
-          targetType: 'installation',
-          targetId: input.installation.id,
-          details: {
-            field: typeof field === 'string' ? field : null,
-            allowed: toAuditValue(allowed),
-          },
+        // Any signed-in user can ask for an installation by id (the gateway composes it before the
+        // audience check), so nothing is audited and nothing internal leaves: the clamp's field,
+        // allowed values and message can name another club's sources and positions.
+        // `installation.rejected` belongs to the write paths.
+        console.warn(`distribution: installation ${input.installation.id} is outside its version:`, err.error);
+        throw new AppError({
+          code: 'clamp_violation',
+          message: 'This agent is configured beyond what its template allows, so it cannot run.',
         });
-        throw err;
       }
       // A clamp that now rejects a row written earlier, or a club with no usg_club_policy.
       console.warn(`distribution: skipping installation ${input.installation.id}:`, err);
     }
   }
   return loaded;
-}
-
-function toAuditValue(allowed: unknown): string | number | string[] | null {
-  if (typeof allowed === 'string' || typeof allowed === 'number') return allowed;
-  if (Array.isArray(allowed) && allowed.every((a) => typeof a === 'string')) return allowed;
-  return null;
 }
 
 /** The club that owns an installation, or null for an unknown or malformed id. */

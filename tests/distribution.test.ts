@@ -369,7 +369,7 @@ describe.skipIf(!probe)('effectiveAgent · version, clamps and rule pack', () =>
   });
 
   it('refuses an installation that does not exist', async () => {
-    await expect(effectiveAgent(ORG.usg)).rejects.toThrow();
+    await expect(effectiveAgent(ORG.usg)).rejects.toMatchObject({ error: { code: 'not_found' } });
   });
 });
 
@@ -449,10 +449,11 @@ describe.skipIf(!probe)('loadAgents · nothing disappears quietly', () => {
 describe.skipIf(!probe)('publishToAllStudents · D3', () => {
   const president = () => actorFor(USER.sam, ORG.startup);
 
-  /** Rows this test wrote, counted from a baseline — audit_events is append-only and shared. */
-  const auditedSince = async (tx: Tx, from: number, action: string) => {
+  /** Rows this test wrote about one target, counted from a baseline — audit_events is append-only
+   * and shared. */
+  const auditedSince = async (tx: Tx, from: number, action: string, targetId: string) => {
     const rows = await tx.execute<{ id: number }>(
-      sql`select id from audit_events where action = ${action} and id > ${from}`,
+      sql`select id from audit_events where action = ${action} and target_id = ${targetId} and id > ${from}`,
     );
     return rows.length;
   };
@@ -474,7 +475,7 @@ describe.skipIf(!probe)('publishToAllStudents · D3', () => {
       expect(published.status).toBe('enabled');
       expect((await directory()).map((a) => a.templateSlug)).toContain('recruiting-qa');
 
-      expect(await auditedSince(tx, from, 'agent.publish_public')).toBe(1);
+      expect(await auditedSince(tx, from, 'agent.publish_public', INSTALLATION.startupRecruitingQa)).toBe(1);
     }));
 
   const installationLimit = (installationId: string) =>
@@ -574,7 +575,7 @@ describe.skipIf(!probe)('publishToAllStudents · D3', () => {
       expect(await directory()).toBeInstanceOf(Array);
       expect(await myAgents(USER.casey)).toBeInstanceOf(Array);
 
-      expect(await auditedSince(tx, from, 'installation.rejected')).toBe(1);
+      expect(await auditedSince(tx, from, 'installation.rejected', INSTALLATION.startupHandoff)).toBe(1);
     }));
 
   it('refuses a member who is not the president, and audits the refusal', () =>
@@ -584,7 +585,55 @@ describe.skipIf(!probe)('publishToAllStudents · D3', () => {
       await expect(publishToAllStudents(casey, INSTALLATION.startupRecruitingQa)).rejects.toMatchObject({
         error: { code: 'forbidden' },
       });
-      expect(await auditedSince(tx, from, 'authz.denied')).toBe(1);
+      expect(await auditedSince(tx, from, 'authz.denied', INSTALLATION.startupRecruitingQa)).toBe(1);
+    }));
+
+  const unpublished = async (tx: Tx) => {
+    const [row] = await tx.execute<{ audience: string | null; enabled: boolean }>(
+      sql`select audience, enabled from agent_installations where id = ${INSTALLATION.startupRecruitingQa}`,
+    );
+    expect(row).toEqual({ audience: null, enabled: false });
+  };
+
+  // A public agent with a $0 budget would publish and then block every run.
+  it('refuses an explicit limit of 0', () =>
+    inRolledBackApp(async (tx) => {
+      await expect(
+        publishToAllStudents(await president(), INSTALLATION.startupRecruitingQa, { limitMicro: 0 }),
+      ).rejects.toMatchObject({ error: { code: 'invalid', message: expect.stringContaining('Recruiting Q&A') } });
+      expect((await installationLimit(INSTALLATION.startupRecruitingQa)).limitMicro).toBe(2_500_000);
+      await unpublished(tx);
+    }));
+
+  it('treats an own limit of 0 as absent, so the default applies', () =>
+    inRolledBackApp(async (tx) => {
+      await setLimit(await actorFor(USER.avery, ORG.usg), { scope: 'org', orgId: ORG.startup, limitMicro: 4_000_000 });
+      await tx.execute(
+        sql`update quota_limits set limit_micro = 0
+            where scope = 'installation' and installation_id = ${INSTALLATION.startupRecruitingQa}`,
+      );
+      await publishToAllStudents(await president(), INSTALLATION.startupRecruitingQa);
+      expect((await installationLimit(INSTALLATION.startupRecruitingQa)).limitMicro).toBe(2_000_000);
+      const rows = await tx.execute<{ n: number }>(
+        sql`select count(*)::int as n from quota_limits
+            where scope = 'installation' and installation_id = ${INSTALLATION.startupRecruitingQa}`,
+      );
+      expect(rows[0].n).toBe(1);
+    }));
+
+  it("refuses when half the club's limit rounds down to 0", () =>
+    inRolledBackApp(async (tx) => {
+      await tx.execute(
+        sql`update quota_limits set installation_id = ${INSTALLATION.startupHandoff}
+            where scope = 'installation' and installation_id = ${INSTALLATION.startupRecruitingQa}`,
+      );
+      await tx.execute(
+        sql`update quota_limits set limit_micro = 1 where scope = 'org' and org_id = ${ORG.startup}`,
+      );
+      await expect(publishToAllStudents(await president(), INSTALLATION.startupRecruitingQa)).rejects.toMatchObject({
+        error: { code: 'invalid' },
+      });
+      await unpublished(tx);
     }));
 
   // Same denial for a real installation in another club, one that does not exist and a malformed
@@ -602,11 +651,11 @@ describe.skipIf(!probe)('publishToAllStudents · D3', () => {
         const err = await publishToAllStudents(sam, id).catch((e) => e);
         expect(err).toBeInstanceOf(AppError);
         denials.push(err.error);
+        expect(await auditedSince(tx, from, 'authz.denied', id)).toBe(1);
       }
       expect(denials[0]).toMatchObject({ code: 'forbidden' });
       expect(denials[1]).toEqual(denials[0]);
       expect(denials[2]).toEqual(denials[0]);
-      expect(await auditedSince(tx, from, 'authz.denied')).toBe(3);
     }));
 });
 
@@ -780,27 +829,31 @@ describe.skipIf(!probe)('run-time clamp · a version narrowed under an installat
   const widenHandoff = (tx: Tx) =>
     tx.execute(sql`update agent_installations set audience = 'public' where id = ${INSTALLATION.startupHandoff}`);
 
-  const rejectedSince = async (tx: Tx, from: number) =>
-    tx.execute<{ details: { field: string } }>(
-      sql`select details from audit_events
-          where action = 'installation.rejected' and installation_id = ${INSTALLATION.startupHandoff} and id > ${from}`,
+  const auditCount = async (tx: Tx) => {
+    const [{ n }] = await tx.execute<{ n: number }>(
+      sql`select count(*)::int as n from audit_events where installation_id = ${INSTALLATION.startupHandoff}
+          or target_id = ${INSTALLATION.startupHandoff}`,
     );
-
-  const baseline = async (tx: Tx) => {
-    const [{ max }] = await tx.execute<{ max: string }>(sql`select coalesce(max(id), 0) as max from audit_events`);
-    return Number(max);
+    return n;
   };
 
-  it('throws clamp_violation by id and audits installation.rejected with the field', () =>
+  // Any signed-in user reaches this read (the gateway composes the agent before the audience check),
+  // so it audits nothing and says nothing about the club's sources or positions.
+  it('throws a sanitised clamp_violation by id and writes no audit row', () =>
     inRolledBackApp(async (tx) => {
-      const from = await baseline(tx);
-      await widenHandoff(tx);
-      await expect(effectiveAgent(INSTALLATION.startupHandoff)).rejects.toMatchObject({
-        error: { code: 'clamp_violation', cap: { scope: 'installation', field: 'audience' } },
-      });
-      const rows = await rejectedSince(tx, from);
-      expect(rows).toHaveLength(1);
-      expect(rows[0].details.field).toBe('audience');
+      const warn = quiet();
+      try {
+        const before = await auditCount(tx);
+        await widenHandoff(tx);
+        const err = await effectiveAgent(INSTALLATION.startupHandoff).catch((e) => e);
+        expect(err).toBeInstanceOf(AppError);
+        expect(err.error.code).toBe('clamp_violation');
+        expect(err.error).not.toHaveProperty('cap');
+        expect(JSON.stringify(err.error)).not.toMatch(/audience|members|positions|src-/);
+        expect(await auditCount(tx)).toBe(before);
+      } finally {
+        warn.mockRestore();
+      }
     }));
 
   it('keeps the campus-wide lists working, skipping only that row', () =>
