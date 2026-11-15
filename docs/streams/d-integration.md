@@ -127,7 +127,9 @@ dialog), the last roster sync time and
 the connector-attention banner. The USG sidebar groups club quotas under Management; Management stays
 highlighted while the `/usg/clubs` console is open.
 
-A club's detail page starts with an **AI summary** block, left empty until WP-13. Below it, three
+A club's detail page starts with an **AI summary** block: fixed text describing the blocks, shown
+after a short loading step, with no Demo label (`TODO(verify)`: replaced by a generated summary in
+WP-13; see the PR for the open question against decision 28). Below it, three
 collapsible blocks (native `<details>`, collapsed by default) show actual current data for that
 club only; each block header is the title alone:
 

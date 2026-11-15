@@ -1,6 +1,7 @@
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { clubIdentityRows, identityColumns, listManagedClubs, loadClubDetail, type ClubDetail } from '@/lib/connectors/club-detail';
+import { grantsFor } from '@/lib/authz';
 import { users } from '@/lib/db/schema';
 import { withActor } from '@/lib/db/with-actor';
 import { INSTALLATION, ORG, USER } from '@db/seed/ids';
@@ -41,7 +42,7 @@ describe('club identity rows', () => {
       { userId: 'u-casey', person: 'Casey', position: 'Member', endedAt: day('2026-09-15') },
     ]);
     expect(rows).toEqual([
-      ['Casey', 'Member', 'Left organization', '2026-09-15'],
+      ['Casey', 'Member', 'Left organization', 'Sep 15, 2026'],
       ['Taylor', 'Member; Treasurer', 'Active member', '—'],
     ]);
   });
@@ -96,7 +97,10 @@ describe.skipIf(!probe)('per-club management detail', () => {
 
       const archery = ready((await detailFor(ORG.archery)).identity);
       expect(archery.rows.find(row => row[0] === 'Casey')?.[2]).toBe('Left organization');
-      expect(archery.rows.find(row => row[0] === 'Casey')?.[3]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(archery.rows.find(row => row[0] === 'Casey')?.[3]).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
+      // Reporting a departure never restores access: Casey keeps only the public grant in Archery.
+      expect(await grantsFor(USER.casey, ORG.archery)).toEqual(['*']);
+      expect((await actorFor(USER.lee, null)).positions).toEqual([]);
       expect(archery.rows.some(row => row[0] === 'Sam')).toBe(false);
     });
   });

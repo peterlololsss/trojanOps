@@ -55,6 +55,7 @@ async function block<T>(read: () => Promise<T>): Promise<DetailBlock<T>> {
 export interface ClubMembershipRecord { userId: string; person: string; position: string; endedAt: Date | null }
 
 export const identityColumns = ['Person', 'Positions', 'Member status', 'Left on (UTC)'] as const;
+const leftOnFormat = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone: 'UTC' });
 
 /**
  * One row per person in this club's membership history. Any active position means Active member;
@@ -77,7 +78,7 @@ export function clubIdentityRows(records: readonly ClubMembershipRecord[]): stri
       person.person,
       [...(status === 'active' ? person.current : person.former)].sort().join('; '),
       memberStatusLabels[status],
-      status === 'left' && person.leftAt ? person.leftAt.toISOString().slice(0, 10) : '—',
+      status === 'left' && person.leftAt ? leftOnFormat.format(person.leftAt) : '—',
     ];
   }).sort((a, b) => a[0].localeCompare(b[0]));
 }
