@@ -3,6 +3,7 @@
 // real orgs, users and memberships. Fictional people and placeholder text only (I13); dates and
 // amounts agree with the seed documents (minutes 2026-10-08, past events, the budgets).
 import type { FundingStatus } from './types';
+import { HACKSC_CONTENT } from './hacksc-content';
 
 export interface DepartmentContent {
   slug: string;
@@ -62,6 +63,7 @@ export const EMPTY_CLUB: ClubContent = {
 };
 
 export const CLUB_CONTENT: Readonly<Record<string, ClubContent>> = {
+  hacksc: HACKSC_CONTENT,
   startup: {
     tagline: 'Build companies with other Trojans, from first idea to Demo day.',
     about: [

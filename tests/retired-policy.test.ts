@@ -41,6 +41,9 @@ describe.skipIf(!probe)('policy tightening after retirement', () => {
     await distribute(actor, TEMPLATE.eventPlanning);
     await tx.execute(sql`update agent_installations set track = 'pinned', pinned_version = 1, model_class = 'economy', prompt_addendum = 'Keep history' where template_id = ${TEMPLATE.eventPlanning} and org_id = ${ORG.archery}`);
     await retire(actor, TEMPLATE.eventPlanning);
+    // The seeded beginner guide is also Economy-only. Retire it so this scenario isolates
+    // whether historical event-planning rows prevent a Standard-only policy.
+    await retire(actor, TEMPLATE.archeryGettingStarted);
     const before = await tx.execute(sql`select * from agent_installations where template_id = ${TEMPLATE.eventPlanning} and org_id = ${ORG.archery}`);
     await setClubPolicy(actor, ORG.archery, { allowedModelClasses: ['standard'], allowPublicAgents: true });
     expect(await tx.execute(sql`select * from agent_installations where template_id = ${TEMPLATE.eventPlanning} and org_id = ${ORG.archery}`)).toEqual(before);

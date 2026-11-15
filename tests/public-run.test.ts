@@ -21,15 +21,17 @@ describe.skipIf(!probe)('shared directory chat', () => {
   });
   it('loads the real public scope, models and allowance into the shared workspace', async () => {
     const html = await renderPage(INSTALLATION.danceShowcaseQa);
-    expect(html).toContain('What Showcase Q&amp;A can read');
-    expect(html).toContain('Model: Economy');
-    expect(html).toContain('Only you can see what you ask');
+    expect(html).toMatch(/<h1[^>]*>Showcase Q&amp;A<\/h1>/);
+    expect(html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')).toMatch(/Dance Club · v\d+ · Events Performances/);
+    expect(html).toContain('Demo model: gpt-6-luna');
+    expect(html).toContain('Run details');
+    expect(html).not.toMatch(/All students|Template v|Only you can see/);
     expect(html).not.toContain('Sponsor contacts');
   });
   it.each([INSTALLATION.startupHandoff, INSTALLATION.startupRecruitingQa])('does not expose a nonpublic or disabled agent (%s)', async (id) => {
     const html = await renderPage(id);
     expect(html).toContain('Agent unavailable');
     expect(html).not.toContain('name="input"');
-    expect(html).not.toContain('What Club handoff can read');
+    expect(html).not.toContain('Club handoff');
   });
 });

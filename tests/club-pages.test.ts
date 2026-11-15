@@ -164,7 +164,7 @@ describe.skipIf(!probe)('club home · page data', () => {
     expect(home?.canManage).toBe(false);
     expect(home?.mine?.positionNames).toEqual(['Member']);
     // D4: a member sees the members-wide agent, not the officers' funding pre-check.
-    expect(home?.mine?.agents.map((agent) => agent.templateSlug)).toEqual(['handoff']);
+    expect(home?.mine?.agents.map((agent) => agent.templateSlug)).toEqual(['handoff', 'event-retrospective', 'meeting-recap']);
     expect(home?.agentCount).toBeGreaterThan(1);
 
     const recent = await getRecentDocuments(await actorFor(USER.casey, ORG.startup), ORG.startup);
@@ -178,7 +178,7 @@ describe.skipIf(!probe)('club home · page data', () => {
     expect(sam?.canManage).toBe(true);
     const taylor = await getClubHome(await actorFor(USER.taylor, ORG.startup), ORG.startup);
     expect(taylor?.mine?.agents.map((agent) => agent.templateSlug).sort())
-      .toEqual(['funding-precheck', 'handoff']);
+      .toEqual(['event-retrospective', 'funding-precheck', 'handoff', 'meeting-recap']);
   });
 
   it('has no club membership to show a student outside the club', async () => {

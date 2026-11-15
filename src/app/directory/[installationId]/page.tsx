@@ -1,12 +1,12 @@
 import Link from 'next/link';
-import { LockKeyhole, Users } from 'lucide-react';
+import { LockKeyhole } from 'lucide-react';
 import { PageHeader } from '@/components/shell';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { directory } from '@/lib/distribution';
 import { getActor } from '@/lib/identity';
 import { RunWorkspace } from '@/components/inspector';
-import { getRunPageData, isDemoRuntime } from '@/lib/documents/run-page';
+import { agentTags } from '@/app/me/agents/agent-tags';
+import { getRunPageData } from '@/lib/documents/run-page';
 
 export default async function PublicAgentPage({ params }: { readonly params: Promise<{ installationId: string }> }) {
   const actor = await getActor();
@@ -30,10 +30,7 @@ export default async function PublicAgentPage({ params }: { readonly params: Pro
   if (!data?.workspace) return <><PageHeader title="Agent unavailable" /><p>This agent is no longer available. Return to the directory and choose an available agent.</p></>;
   return <>
     <Link href={`/directory/clubs/${agent.orgId}?tab=agents`} className="mb-4 inline-flex min-h-8 items-center text-primary underline underline-offset-4">Back to {agent.orgName}</Link>
-    <PageHeader title={agent.name} description={agent.purpose} />
-    <div className="mb-6 flex flex-wrap items-center gap-3 text-muted-foreground">
-      <span>{agent.orgName}</span><Badge><Users aria-hidden="true" />All students</Badge><span>Template v{agent.templateVersion}</span>
-    </div>
-    <RunWorkspace key={`${actor.userId}:${actor.activeOrgId}:${agent.installationId}`} installationId={agent.installationId} agentName={agent.name} demoRuntime={isDemoRuntime()} config={data.workspace} headerSpacePx={320} />
+    <RunWorkspace key={`${actor.userId}:${actor.activeOrgId}:${agent.installationId}`} installationId={agent.installationId} agentName={agent.name}
+      config={data.workspace} header={{ source: agent.orgName, version: agent.templateVersion, tags: agentTags(agent.templateSlug), description: agent.purpose }} headerSpacePx={144} />
   </>;
 }

@@ -17,14 +17,14 @@ describe('WP-2 app shell', () => {
     expect(navigationFor(actor(null, null, []), [], false)).toHaveLength(2);
   });
 
-  it('opens the directory on departments in a club and on clubs everywhere else', () => {
-    const items = (a: Actor, usg = false) => navigationFor(a, clubs, usg).find((s) => s.label === 'Directory')?.items?.map((i) => [i.label, i.href]);
-    expect(items(actor(USER.taylor, ORG.startup, ['treasurer', 'member']))).toEqual([
+  it('offers a directory sidebar only when the viewer can switch between departments and clubs', () => {
+    const scope = (a: Actor, usg = false) => navigationFor(a, clubs, usg).find((s) => s.label === 'Directory');
+    expect(scope(actor(USER.taylor, ORG.startup, ['treasurer', 'member']))?.items?.map((i) => [i.label, i.href])).toEqual([
       ['Departments', '/directory/departments'], ['All clubs', '/directory/clubs'],
     ]);
-    expect(items(actor(USER.avery, ORG.usg, ['admin']), true)).toEqual([['Clubs', '/directory/clubs']]);
-    expect(items(actor(USER.lee, null, []))).toEqual([['Clubs', '/directory/clubs']]);
-    expect(items(actor(null, null, []))).toEqual([['Clubs', '/directory/clubs']]);
+    expect(scope(actor(USER.avery, ORG.usg, ['admin']), true)).toMatchObject({ href: '/directory', items: undefined });
+    expect(scope(actor(USER.lee, null, []))).toMatchObject({ href: '/directory', items: undefined });
+    expect(scope(actor(null, null, []))).toMatchObject({ href: '/directory', items: undefined });
   });
 
   it('shows club management links only to the president', () => {

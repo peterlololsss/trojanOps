@@ -54,9 +54,9 @@ describe.skipIf(!probe)('only Publish to all students opens an agent to the camp
 describe.skipIf(!probe)('distribution writes', () => {
   it('D2 distributes to all active clubs once and preserves a default installation’s overrides', () => inRolledBackApp(async tx => {
     const actor = await avery();
-    expect(await distribute(actor, TEMPLATE.eventPlanning)).toEqual({ count: 3 });
+    expect(await distribute(actor, TEMPLATE.eventPlanning)).toEqual({ count: 4 });
     const rows = await tx.execute(sql`select * from agent_installations where template_id = ${TEMPLATE.eventPlanning}`);
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
     expect(rows.every(r => r.enabled && r.track === 'latest')).toBe(true);
     await tx.execute(sql`update agent_installations set enabled = false, track = 'pinned', pinned_version = 1,
       usable_by = array['president'], prompt_addendum = 'Keep me' where template_id = ${TEMPLATE.eventPlanning} and org_id = ${ORG.startup}`);
@@ -73,7 +73,7 @@ describe.skipIf(!probe)('distribution writes', () => {
   it('limits distribution to an active cohort and refuses optional templates', () => inRolledBackApp(async tx => {
     await tx.execute(sql`update agent_templates set target = 'pilot' where id = ${TEMPLATE.eventPlanning}`);
     await tx.execute(sql`update orgs set status = 'inactive' where id = ${ORG.archery}`);
-    expect(await distribute(await avery(), TEMPLATE.eventPlanning)).toEqual({ count: 1 });
+    expect(await distribute(await avery(), TEMPLATE.eventPlanning)).toEqual({ count: 2 });
     await expect(distribute(await avery(), TEMPLATE.recruitingQa)).rejects.toMatchObject({ error: { code: 'invalid' } });
   }));
   it('rolls back the whole distribution when a target policy rejects it', () => inRolledBackApp(async tx => {
@@ -169,7 +169,7 @@ describe.skipIf(!probe)('distribution writes', () => {
     await tx.execute(sql`update agent_template_versions set audience = 'public', usable_by = array[]::text[], max_tier = 'public' where template_id = ${TEMPLATE.eventPlanning}`);
     await distribute(await avery(), TEMPLATE.eventPlanning);
     const quotas = await tx.execute(sql`select q.limit_micro from quota_limits q join agent_installations i on i.id = q.installation_id where i.template_id = ${TEMPLATE.eventPlanning}`);
-    expect(quotas).toHaveLength(3);
+    expect(quotas).toHaveLength(4);
     expect(quotas.every(q => Number(q.limit_micro) === 2500000)).toBe(true);
     await tx.execute(sql`update quota_limits set limit_micro = 123 where scope = 'installation' and installation_id in (select id from agent_installations where template_id = ${TEMPLATE.eventPlanning})`);
     await distribute(await avery(), TEMPLATE.eventPlanning);

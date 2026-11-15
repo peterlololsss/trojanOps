@@ -141,7 +141,7 @@ describe.skipIf(!sql)('listBlockedDocuments under RLS', () => {
       for (const [key, installationId] of Object.entries(INSTALLATION)) {
         const { agent, runGrants, accessible, blocked } = await blockedFor(viewer, installationId);
         const label = `${viewer.userId} · ${key}`;
-        const manager = (viewer.userId === USER.sam && agent.orgId === ORG.startup) || viewer.userId === USER.avery;
+        const manager = (viewer.userId === USER.sam && [ORG.startup, ORG.hacksc].some((id) => id === agent.orgId)) || viewer.userId === USER.avery;
         if (!manager) {
           if (blocked !== undefined) mismatches.push(`${label}: not a manager but got a list`);
           continue;
@@ -189,9 +189,9 @@ describe('<Inspector />', () => {
 
   it('renders the six sections in order with labels, never raw grants', () => {
     const html = render(base);
-    expect([...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1]))
-      .toEqual(['Run grants', 'Sources', 'Documents', 'Versions', 'Billing', 'History', 'Audit']);
-    expect(html).toContain('aria-label="Run inspector"');
+    expect([...html.matchAll(/<h3[^>]*>([^<]+)<\/h3>/g)].map((m) => m[1]))
+      .toEqual(['Run grants', 'Sources', 'Documents', 'Versions', 'Billing', 'Audit']);
+    expect(html).not.toMatch(/demo runtime|Earlier messages/i);
     expect(html).toContain('Startup Club · Treasurer');
     expect(html).not.toContain(ORG.startup);
     expect(html).toContain('Officers');

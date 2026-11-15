@@ -2,7 +2,7 @@
 // same shape as versionDraftSchema), its validation, and the fields that differ from the current version.
 import type { Audience, ModelClass, Tier } from '@/lib/contracts';
 import type { UsgPositionOption, UsgVersion } from '@/lib/distribution/usg-view';
-import { AUDIENCES, audienceLabel, MODEL_CLASSES, MODEL_ORDER, plural, SOURCE_KINDS, sourceName, TIERS, toolOption } from '../template-config';
+import { AUDIENCES, audienceLabel, demoModelDefault, MODEL_CLASSES, MODEL_ORDER, plural, SOURCE_KINDS, sourceName, TIERS, toolOption } from '../template-config';
 
 export interface EditorState {
   purpose: string; audience: Audience; usableBy: string[]; maxTier: Tier; sourceKinds: string[]; tools: string[];
@@ -58,7 +58,9 @@ export function versionChanges(before: UsgVersion | undefined, after: VersionBod
   add('Reads up to', before?.maxTier !== after.maxTier, before ? TIERS[before.maxTier].name : none, TIERS[after.maxTier].name);
   add('Tools', !sameSet(before?.tools ?? [], after.tools), list(before?.tools ?? [], t => toolOption(t).name), list(after.tools, t => toolOption(t).name));
   add('Model classes', !sameSet(before?.modelClasses ?? [], after.modelClasses), list(MODEL_ORDER.filter(m => before?.modelClasses.includes(m)), m => MODEL_CLASSES[m as ModelClass].name), list(after.modelClasses, m => MODEL_CLASSES[m as ModelClass].name));
-  add('Default model', before?.defaultModelClass !== after.defaultModelClass, before ? MODEL_CLASSES[before.defaultModelClass].name : none, MODEL_CLASSES[after.defaultModelClass].name);
+  add('Default model', before?.defaultModelClass !== after.defaultModelClass,
+    before ? `${demoModelDefault(before.defaultModelClass)} · ${MODEL_CLASSES[before.defaultModelClass].name}` : none,
+    `${demoModelDefault(after.defaultModelClass)} · ${MODEL_CLASSES[after.defaultModelClass].name}`);
   return changes;
 }
 

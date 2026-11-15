@@ -10,6 +10,7 @@ export const ORG = {
   startup: id(0x10, 2),
   archery: id(0x10, 3),
   dance: id(0x10, 4),
+  hacksc: id(0x10, 5),
 } as const;
 
 export const USER = {
@@ -33,6 +34,7 @@ export const POSITION = {
   },
   archery: { president: id(0x30, 0x301), treasurer: id(0x30, 0x302), member: id(0x30, 0x303) },
   dance: { president: id(0x30, 0x401), member: id(0x30, 0x402) },
+  hacksc: { president: id(0x30, 0x501), treasurer: id(0x30, 0x502), member: id(0x30, 0x503) },
 } as const;
 
 // Documents (C seeds them)
@@ -56,6 +58,12 @@ export const SOURCE = {
     finance: id(0x40, 0x403),
     archive: id(0x40, 0x404),
   },
+  hacksc: {
+    public: id(0x40, 0x501),
+    minutes: id(0x40, 0x502),
+    finance: id(0x40, 0x503),
+    archive: id(0x40, 0x504),
+  },
 } as const;
 
 export const DOCUMENT = {
@@ -68,6 +76,10 @@ export const DOCUMENT = {
   sponsorContacts: id(0x50, 7),
   archeryBudget2026: id(0x50, 8),
   springShowcaseInfo: id(0x50, 9),
+  hackscGuide: id(0x50, 10),
+  hackscMinutes2026: id(0x50, 11),
+  hackscHandoff2026: id(0x50, 12),
+  hackscBudget: id(0x50, 13),
 } as const;
 
 // Distribution (B seeds them)
@@ -78,6 +90,12 @@ export const TEMPLATE = {
   showcaseQa: id(0x60, 4),
   handoff: id(0x60, 5),
   usgReviewAssistant: id(0x60, 6),
+  meetingRecap: id(0x60, 7),
+  eventRetrospective: id(0x60, 8),
+  archeryGettingStarted: id(0x60, 9),
+  auditionGuide: id(0x60, 10),
+  hackscHandoff: id(0x60, 11),
+  hackscMeetingSummary: id(0x60, 12),
 } as const;
 
 export const INSTALLATION = {
@@ -88,6 +106,13 @@ export const INSTALLATION = {
   danceFundingPrecheck: id(0x70, 0x401),
   danceShowcaseQa: id(0x70, 0x402),
   usgReviewAssistant: id(0x70, 0x101),
+  startupMeetingRecap: id(0x70, 0x204),
+  startupEventRetrospective: id(0x70, 0x205),
+  archeryGettingStarted: id(0x70, 0x302),
+  danceAuditionGuide: id(0x70, 0x403),
+  hackscFundingPrecheck: id(0x70, 0x501),
+  hackscHandoff: id(0x70, 0x502),
+  hackscMeetingSummary: id(0x70, 0x503),
 } as const;
 
 export const RULE_PACK = {

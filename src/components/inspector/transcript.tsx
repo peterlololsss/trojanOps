@@ -9,7 +9,7 @@ import type { ActionStatus, Turn } from './run-state';
 
 export interface TranscriptProps {
   readonly turns: Turn[]; readonly actions: Record<string, ActionStatus>;
-  readonly agentName: string; readonly demoRuntime: boolean;
+  readonly agentName: string;
   readonly onConfirm?: (id: string) => void; readonly onReject?: (id: string) => void;
   readonly onRetry?: (input: string) => void; readonly onEdit?: (input: string) => void;
   readonly installationId?: string; readonly orgId?: string;
@@ -33,8 +33,8 @@ function changes(before: RunInspector | null, after: RunInspector): string[] {
 }
 
 export function Transcript(p: TranscriptProps) {
-  if (!p.turns.length) return <div className="border-y border-border py-4"><p className="font-semibold">No runs yet. Write a message below to run {p.agentName}.</p><p className="mt-1 text-muted-foreground">Each run checks your access first. The inspector then shows which documents the agent could read and what the run cost.</p></div>;
-  return <ol aria-label="Transcript" className="space-y-6">{p.turns.map((turn, index) => {
+  if (!p.turns.length) return null;
+  return <ol aria-label="Transcript" className="space-y-8">{p.turns.map((turn, index) => {
     const previous = p.turns.slice(0, index).findLast((t) => t.kind === 'agent')?.result.inspector ?? null;
     const question = p.turns.slice(0, index).findLast((t) => t.kind === 'you')?.text ?? '';
     switch (turn.kind) {
@@ -51,8 +51,9 @@ export function Transcript(p: TranscriptProps) {
       }
       case 'agent': {
         const notes = changes(previous, turn.result.inspector);
-        return <li key={turn.key} className="mr-auto min-w-0 py-1">{notes.map((note) => <p key={note} className="mb-4 flex items-start gap-2 bg-muted p-3 text-sm"><Info aria-hidden className="mt-0.5 size-4 shrink-0" />{note}</p>)}<AnswerTurn result={turn.result} agentName={p.agentName} demoRuntime={p.demoRuntime} modelClass={turn.modelClass} actions={p.actions} onConfirm={p.onConfirm} onReject={p.onReject}
-          installationId={p.installationId} orgId={p.orgId} playing={p.playingId === turn.result.runId} stopped={p.stoppedId === turn.result.runId} onDone={p.onPlaybackDone} onInspect={p.onInspect ? (id) => p.onInspect?.(id, turn.result.runId) : undefined} onAnnounce={p.onAnnounce} />{p.onInspect && <Button type="button" variant="ghost" onClick={() => p.onInspect?.('', turn.result.runId)}>Show this run in inspector</Button>}</li>;
+        return <li key={turn.key} className="mr-auto min-w-0 py-1">{notes.map((note) => <p key={note} className="mb-4 flex items-start gap-2 bg-muted p-3 text-sm"><Info aria-hidden className="mt-0.5 size-4 shrink-0" />{note}</p>)}<AnswerTurn result={turn.result} agentName={p.agentName} actions={p.actions} onConfirm={p.onConfirm} onReject={p.onReject}
+          installationId={p.installationId} orgId={p.orgId} playing={p.playingId === turn.result.runId} stopped={p.stoppedId === turn.result.runId} onDone={p.onPlaybackDone} onInspect={p.onInspect ? (id) => p.onInspect?.(id, turn.result.runId) : undefined}
+          onDetails={p.onInspect ? () => p.onInspect?.('', turn.result.runId) : undefined} onAnnounce={p.onAnnounce} /></li>;
       }
       default: { const exhaustive: never = turn; return exhaustive; }
     }

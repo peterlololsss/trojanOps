@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { Audience, ModelClass, Tier } from '@/lib/contracts';
 import type { UsgTemplateView } from '@/lib/distribution/usg-view';
 import { ErrorNotice, PendingButton, selectClass, SuccessNotice, useConsoleMutation } from '../console-ui';
-import { AUDIENCES, CLUB_TIERS, MODEL_CLASSES, MODEL_ORDER, scopeLabel, SOURCE_KINDS, TIERS, TOOLS, toolOption } from '../template-config';
+import { AUDIENCES, CLUB_TIERS, demoModelDefault, demoModelDescription, MODEL_CLASSES, MODEL_ORDER, scopeLabel, SOURCE_KINDS, TIERS, TOOLS, toolOption } from '../template-config';
 import {
   initialState, reachSentences, toBody, validate, versionChanges, type EditorField, type EditorState, type FieldChange,
 } from './version-draft';
@@ -59,7 +59,7 @@ function Choice({ id, title, description, tag, control }: { id: string; title: s
 }
 const toggle = (values: string[], value: string, on: boolean) => on ? [...values.filter(v => v !== value), value] : values.filter(v => v !== value);
 
-export function VersionEditor({ data, editing, setEditing }: { data: UsgTemplateView; editing: boolean; setEditing: (value: boolean) => void }) {
+export function VersionEditor({ data, editing, setEditing, focusSources = false }: { data: UsgTemplateView; editing: boolean; setEditing: (value: boolean) => void; focusSources?: boolean }) {
   const latest = data.versions.find(v => v.version === data.template.latestVersion) ?? data.versions[0];
   const next = data.template.latestVersion + 1;
   const [state, setState] = useState<EditorState>(() => initialState(latest));
@@ -70,7 +70,10 @@ export function VersionEditor({ data, editing, setEditing }: { data: UsgTemplate
   const body = toBody(state); const changes = versionChanges(latest, body, ctx);
   const set = <K extends keyof EditorState>(key: K, value: EditorState[K]) => setState(s => ({ ...s, [key]: value }));
 
-  useEffect(() => { if (editing) heading.current?.focus(); }, [editing]);
+  const sourceHeading = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (editing) (focusSources ? sourceHeading.current : heading.current)?.focus();
+  }, [editing, focusSources]);
 
   const positionOptions = [...data.positions, ...state.usableBy.filter(slug => !data.positions.some(p => p.slug === slug)).map(slug => ({ slug, name: slug }))];
   const toolOptions = [...TOOLS, ...state.tools.filter(slug => !TOOLS.some(t => t.slug === slug)).map(toolOption)];
@@ -119,10 +122,13 @@ export function VersionEditor({ data, editing, setEditing }: { data: UsgTemplate
         <Textarea id="version-prompt" value={state.systemPrompt} onChange={e => set('systemPrompt', e.target.value)} rows={12} className="text-base leading-6" aria-invalid={!!errors.systemPrompt} aria-describedby={errors.systemPrompt ? 'version-prompt-error' : undefined} />
         {errors.systemPrompt && <p id="version-prompt-error" className="mt-1 flex items-center gap-1 text-primary"><CircleAlert aria-hidden="true" className="size-3 shrink-0" />{errors.systemPrompt}</p>}</div>
 
-      <Field id="version-sources" legend="Knowledge sources" error={errors.sourceKinds}>
-        <div className="space-y-2">{sourceOptions.map(s => <Choice key={s.slug} id={`source-${s.slug}`} title={s.name} description={s.description} tag={scopeLabel(s.owner)}
-          control={<Checkbox id={`source-${s.slug}`} aria-describedby={`source-${s.slug}-hint`} checked={state.sourceKinds.includes(s.slug)} onChange={e => set('sourceKinds', toggle(state.sourceKinds, s.slug, e.target.checked))} />} />)}</div>
-      </Field>
+      <div ref={sourceHeading} tabIndex={-1} className="space-y-2">
+        <Field id="version-sources" legend="Knowledge sources" error={errors.sourceKinds}>
+          <div className="space-y-2">{sourceOptions.map(s => <Choice key={s.slug} id={`source-${s.slug}`} title={s.name} description={s.description} tag={scopeLabel(s.owner)}
+            control={<Checkbox id={`source-${s.slug}`} aria-describedby={`source-${s.slug}-hint`} checked={state.sourceKinds.includes(s.slug)} onChange={e => set('sourceKinds', toggle(state.sourceKinds, s.slug, e.target.checked))} />} />)}</div>
+        </Field>
+        <p className="text-sm text-muted-foreground">Source connections and access limits are saved in the new template version. Connected libraries supply their latest document versions.</p>
+      </div>
 
       <Field id="version-tier" legend="Reads up to">
         {state.audience === 'public' ? <p className="rounded-md border border-border px-3 py-2 font-semibold">{TIERS.public.name}</p>
@@ -138,14 +144,15 @@ export function VersionEditor({ data, editing, setEditing }: { data: UsgTemplate
       </Field>
 
       <Field id="version-models" legend="Model classes" error={errors.modelClasses}>
-        <div className="grid gap-2 sm:grid-cols-2">{MODEL_ORDER.map(m => <Choice key={m} id={`model-${m}`} title={MODEL_CLASSES[m].name} description={MODEL_CLASSES[m].description}
+        <p className="text-muted-foreground">Demo models use the mock runtime. The allowed choices and default are saved by pricing class.</p>
+        <div className="grid gap-2 sm:grid-cols-2">{MODEL_ORDER.map(m => <Choice key={m} id={`model-${m}`} title={MODEL_CLASSES[m].name} description={demoModelDescription(m)}
           control={<Checkbox id={`model-${m}`} aria-describedby={`model-${m}-hint`} checked={state.modelClasses.includes(m)} onChange={e => {
             const classes = MODEL_ORDER.filter(x => x === m ? e.target.checked : state.modelClasses.includes(x));
             setState(s => ({ ...s, modelClasses: classes, defaultModelClass: classes.includes(s.defaultModelClass) ? s.defaultModelClass : classes[0] ?? s.defaultModelClass }));
           }} />} />)}</div>
         <div className="max-w-xs"><Label htmlFor="version-model">Default model</Label>
           <select id="version-model" className={selectClass} value={state.defaultModelClass} onChange={e => set('defaultModelClass', e.target.value as ModelClass)}>
-            {MODEL_ORDER.map(m => <option key={m} value={m}>{MODEL_CLASSES[m].name}{state.modelClasses.includes(m) ? '' : ' (not allowed)'}</option>)}</select></div>
+            {MODEL_ORDER.filter(m => state.modelClasses.includes(m)).map(m => <option key={m} value={m}>{demoModelDefault(m)} · {MODEL_CLASSES[m].name}</option>)}</select></div>
       </Field>
 
       <div><Label htmlFor="version-changes">Change note</Label>

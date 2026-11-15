@@ -121,7 +121,7 @@ describe.skipIf(!probe)('listDemoAccounts (seed)', () => {
     const landing = Object.fromEntries((await listDemoAccounts()).map((a) => [a.userId, a.landing]));
     expect(landing[USER.avery]).toBe('/usg/integrations');
     expect(landing[USER.riley]).toBe('/me/agents');
-    expect(landing[USER.sam]).toBe(`/org/${S}`);
+    expect(landing[USER.sam]).toBe(`/org/${ORG.hacksc}`);
     expect(landing[USER.taylor]).toBe('/me/agents');
     expect(landing[USER.casey]).toBe('/me/agents');
     expect(landing[USER.morgan]).toBe('/me/agents');
@@ -143,7 +143,7 @@ describe.skipIf(!probe)('the / page', () => {
   it('sends a signed-in visit without ?account= to the landing page', async () => {
     process.env.DEMO_MODE = '1';
     signInAs(USER.sam);
-    await expect(render({})).rejects.toMatchObject({ path: `/org/${S}` });
+    await expect(render({})).rejects.toMatchObject({ path: `/org/${ORG.hacksc}` });
     signInAs(USER.lee);
     await expect(render({})).rejects.toMatchObject({ path: '/directory' });
   });

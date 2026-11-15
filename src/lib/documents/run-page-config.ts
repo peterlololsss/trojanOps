@@ -1,4 +1,5 @@
 import { inArray } from 'drizzle-orm';
+import { ORG } from '@db/seed/ids';
 import { capGrants, grantLabels, grantsFor } from '../authz';
 import type { Actor } from '../contracts';
 import { getDb } from '../db/client';
@@ -22,7 +23,7 @@ export async function buildRunConfig(actor: Actor, agent: ResolvedAgent, display
     models: { allowed: agent.allowedModelClasses.map((modelClass) => ({ modelClass, priceMicro: priceMicro(modelClass) })), defaultClass: agent.modelClass, fixedByClub: agent.fixedByClub, limitedByTemplate: agent.limitedByTemplate },
     quota,
     blockedMessage: quota.remainingMicro < Math.min(...agent.allowedModelClasses.map(priceMicro)) ? quotaMessage(quota.scope, { club: display.club, agent: agent.name, ...quota }) : null,
-    starters: STARTERS[agent.templateSlug] ?? [],
+    starters: STARTERS[agent.templateSlug === 'funding-precheck' && agent.orgId === ORG.hacksc ? 'hacksc-funding-precheck' : agent.templateSlug] ?? [],
     audienceLabel: display.audience,
     templateVersion: agent.templateVersion,
   };

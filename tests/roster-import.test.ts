@@ -25,7 +25,7 @@ describe.skipIf(!probe)('roster import', () => {
       expect(robotics).toMatchObject({ name: 'Robotics Club', kind: 'rso', status: 'active' });
       expect(result).toMatchObject({ orgsCreated: 1, usersCreated: 3, positionsCreated: 3, membershipsStarted: 3, membershipsEnded: 0, positionsChanged: 3 });
       expect(result.clubs.filter((c) => !c.created).map((c) => [c.orgName, c.positionsChanged])).toEqual([
-        ['Archery Club', 0], ['Startup Club', 0],
+        ['Archery Club', 0], ['HackSC', 0], ['Startup Club', 0],
       ]);
       const after = await tx.select().from(memberships);
       expect(after.filter((m) => m.orgId !== robotics?.id)).toEqual(before);
@@ -101,8 +101,8 @@ describe.skipIf(!probe)('roster import', () => {
       const result = await importRoster(actor);
       expect(result.orgsCreated).toBe(0);
       expect((await tx.select().from(orgs).where(eq(orgs.slug, 'robotics')))).toHaveLength(1);
-      expect(result.clubs.map((c) => c.orgName)).toEqual(['Archery Club', 'Robotics Club', 'Startup Club']);
-      expect(result.installationsCreated).toBe(3);
+      expect(result.clubs.map((c) => c.orgName)).toEqual(['Archery Club', 'HackSC', 'Robotics Club', 'Startup Club']);
+      expect(result.installationsCreated).toBe(4);
       for (const club of result.clubs) expect(provision).toHaveBeenCalledWith(club.orgId, actor);
     });
   });

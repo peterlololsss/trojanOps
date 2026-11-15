@@ -7,7 +7,8 @@ into one platform that gives every club governed AI:
 
 - Clubs publish **public agents** for all students (recruiting Q&A, event Q&A) and use **internal
   agents** for their members and officers (handoff, minutes).
-- Each student's `/me/agents` lists, per club, the agents that club exposes to them.
+- Each student's `/me/agents` is one workspace: the agents their clubs and USG expose to them and
+  other clubs' public agents, grouped by source, beside the chat.
 - The directory is the org directory: USG and students outside a club browse the clubs; a member
   acting in a club browses its departments. Each club and department opens a dashboard (about,
   events, members, officers); a club's dashboard lists its public agents.
@@ -24,7 +25,7 @@ until then.
 | directory | 组织目录 | clubs (USG, students outside a club) or the active club's departments, each with a dashboard, `/directory` |
 | department | 部门 | a team inside a club (Events, Finance…), with a lead, members, events and a budget the president sees |
 | catalog | 社团智能体库 | agents installed in or available to one club, `/org/[orgId]/catalog` |
-| my agents | 我的智能体 | agents a student's clubs expose to them, `/me/agents` |
+| my agents | 我的智能体 | agents a student's clubs and USG expose to them, plus public agents, `/me/agents` |
 | audience | 受众 | who may use an agent: All students / All members / named positions |
 | max tier | 可读上限 | highest document tier an agent may read: Public / Members / Officers / USG internal |
 | persona | 演示人物 | a demo identity, signed in at `/` or switched in the masthead |
@@ -35,9 +36,9 @@ Demo beats (each runs on real platform logic; agents answer through the mock run
 | # | Beat | Acceptance check |
 |---|---|---|
 | D1 | Integration panel | `/usg/integrations` lists the five connectors, each "Mock", with last sync. "Sync roster" imports Robotics Club from `roster.csv` and provisions it with the templates already distributed (`funding-precheck`); existing clubs report 0 changes |
-| D2 | USG distributes | Avery distributes `event-planning` (default) to all clubs; it appears in all five catalogs, Robotics included. `funding-precheck` (required) is already there. Sam's attempt to give `event-planning` model class `standard` is rejected with the cap named and logged as `installation.rejected` |
+| D2 | USG distributes | Avery distributes `event-planning` (default) to all clubs; it appears in all six catalogs, HackSC and Robotics included. `funding-precheck` (required) is already there. Sam's attempt to give `event-planning` model class `standard` is rejected with the cap named and logged as `installation.rejected` |
 | D3 | Club publishes a public agent | Startup's `recruiting-qa` starts disabled. Sam clicks "Publish to all students"; the confirmation states who gains access and the installation limit. It appears on Startup Club's Agents tab in the directory; Lee (no club) opens it from there; the inspector lists Startup's public documents only |
-| D4 | Internal vs public scope | Casey's `/me/agents`: `handoff` (All members), `recruiting-qa` (All students). Taylor's adds `funding-precheck` (Treasurer, President). Sam's preview of `handoff`: Member → minutes allowed, budget "Not granted"; Treasurer → both; preview of `recruiting-qa`: "Any signed-in student" → recruiting FAQ only, minutes "Outside agent sources" |
+| D4 | Internal vs public scope | Casey's `/me/agents`: `handoff` and `recruiting-qa` under Startup Club. Taylor's adds `funding-precheck`. Sam's preview of `handoff`: Member → minutes allowed, budget "Not granted"; Treasurer → both; preview of `recruiting-qa`: "Any signed-in student" → recruiting FAQ only, minutes "Outside agent sources" |
 | D5 | Quota | Sam sets Casey's limit to $0.00 → Casey's next `handoff` run is blocked before the runtime is called. Lee (seeded with $0.04 today) runs `recruiting-qa` once ($0.01, billed to Startup); the next run hits the $0.05 student daily cap |
 | D6 | Rule update | Avery publishes the USG Funding Department Guidelines as v2 in `/usg/documents` (§3 annual maximum $8,000 → $10,000); the next `funding-precheck` run in any club reads v2: the reply names "USG Funding Department Guidelines (v2)" and the inspector lists it under Versions |
 | D7 | Succession | Sam transfers treasurer from Taylor to Jordan. Taylor's `/me/agents` drops `funding-precheck`; Jordan's gains it; installations and documents are unchanged |
@@ -78,7 +79,8 @@ production deploy.
 - **I11.** Every action in §12 writes one audit row.
 - **I12.** Integrations go only through connector interfaces (§9); the integration panel shows which
   implementation is live.
-- **I13.** Demo data only: fictional people and clubs.
+- **I13.** Demo data only: fictional people and clubs. Exception: the judge-demo club is named
+  HackSC (decision 28); its people, records and figures are still fictional.
 - **I14.** The gateway is a server module on the Node.js runtime, not Next.js middleware.
 - **I15.** A run's input and output are readable only by the user who ran it; club and USG views
   read run metadata only.
@@ -494,7 +496,7 @@ export interface LLMProvider {              // used by the real runtime (WP-13)
 
 1. `agent = effectiveAgent(installationId)` (§8). Refuse retired templates and disabled
    installations with a reason. Runs need a signed-in user. Internal agents need
-   `actor.activeOrgId = agent.orgId`; "Open" on `/me/agents` switches the active org first. Public
+   `actor.activeOrgId = agent.orgId`; choosing one on `/me/agents` switches the active org first. Public
    agents can be run from the directory with any active org.
 2. `canUse(actor.userId, agent)`. Otherwise `authz.denied`, 403 `forbidden`.
    An optional model class must belong to the resolved installation's allowed classes; otherwise
@@ -522,6 +524,10 @@ Mock runtime (`runtime/mock.ts`):
 - Cost follows `gateway/prices.ts`: Economy 1 credit, Standard 3 credits. No model call.
 - If `submit_to_queue` is enabled and the input asks to submit, propose it as a pending write;
   the run's Treasurer or President must confirm. Confirmation records a decision, not execution.
+- Handoff agents (`hacksc-handoff`, `handoff`, or readable records with a "Previous event process"
+  section; `runtime/mock-handoff.ts`) answer with labeled excerpts of the readable minutes and
+  handoff. A finance question with no readable finance document returns an access refusal with no
+  citations; with readable finance documents it quotes them.
 
 ## 8. Agent distribution
 
@@ -533,6 +539,9 @@ Mock runtime (`runtime/mock.ts`):
 
 - **Publish:** `publishVersion(templateId, draft)` by a USG admin (global) or the club president
   (own templates) inserts version n+1 and sets `latest_version`. `audit('template.publish')`.
+- **Create:** `createUsgTemplate(actor, input)` (`distribution/create-template.ts`, USG admin, server
+  action from `/usg/templates`) inserts a `global` template with version 1, not yet distributed.
+  `audit('template.publish', {version: 1, created: true})`.
 - **Distribute:** `distribute(templateId)` (USG; `required` or `default`) sets `distributed_at` and
   upserts an installation (`track='latest'`, `enabled=true`) in every active club in `target` (`all`
   or a cohort). Existing overrides are kept; `required` forces `enabled=true`. Idempotent.
@@ -763,7 +772,7 @@ Pages (25):
 | `/org/[orgId]/preview/retrieval`: president-only permission-filtered demo scores | C |
 | `/org/[orgId]/audit` | C |
 | `/usg/audit` | C |
-| `/me/agents` | D |
+| `/me/agents?agent=`: agent workspace — agents grouped by source (my clubs, USG, all students), chat and run details | D |
 | `/me/usage`: own credits, run metadata and blocked attempts | D |
 | `/directory`: redirects to departments when acting in a club, else to clubs | D |
 | `/directory/clubs`: clubs; USG also sees status, monthly quota and USG funding | D |
@@ -776,17 +785,17 @@ Pages (25):
 
 ## 15. Seed data (fictional)
 
-**Orgs:** `usg`, `startup` (Startup Club), `archery` (Archery Club), `dance` (Dance Club). Cohort
-`pilot` = startup + archery. `roster.csv` adds Robotics Club (§13).
+**Orgs:** `usg`, `startup` (Startup Club), `archery` (Archery Club), `dance` (Dance Club), `hacksc`
+(HackSC). Cohort `pilot` = startup + archery + hacksc. `roster.csv` adds Robotics Club (§13).
 
 | Persona | Memberships | Used in |
 |---|---|---|
 | Avery | USG admin | D1, D2, D6, D8 |
 | Riley | USG reviewer | review assistant |
-| Sam | Startup president | D2, D3, D4, D5, D7 |
-| Taylor | Startup treasurer + member | D4, D7 |
-| Jordan | Startup member, incoming treasurer | D7 |
-| Casey | Startup member | D4, D5 |
+| Sam | Startup president; HackSC president | D2, D3, D4, D5, D7; judge demo |
+| Taylor | Startup treasurer + member; HackSC treasurer + member | D4, D7 |
+| Jordan | Startup member, incoming treasurer; HackSC member | D7 |
+| Casey | Startup member; HackSC member | D4, D5; judge demo handoff |
 | Morgan | Archery treasurer + Startup member | cross-club tests |
 | Lee | no club; $0.04 of public-agent usage today | D3, D5 |
 
@@ -801,6 +810,10 @@ Pages (25):
 | Startup | `finance` | Sponsor contacts | officers: treasurer (+ president) |
 | Archery | `finance` | Archery budget 2026 | officers: treasurer (+ president) |
 | Dance | `public` | Spring showcase info | public |
+| HackSC | `public` | HackSC community guide | public |
+| HackSC | `minutes` | HackSC organizing meeting — October 8, 2026 | members |
+| HackSC | `archive` | HackSC president handoff — 2025–2026 | members |
+| HackSC | `finance` | HackSC finance worksheet — 2026 | officers: president only |
 
 **USG Funding Department Guidelines** (`rulebook`, public): USG's public
 [Funding Department Guidelines](https://usg.usc.edu/branches/funding/), current as of 2026-10-21,

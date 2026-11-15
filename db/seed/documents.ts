@@ -8,9 +8,9 @@ import { DOCUMENT, ORG, SOURCE, USER } from './ids';
 
 type Org = keyof typeof ORG;
 
-const CLUB_NAMES: Record<Org, string> = { usg: 'USG', startup: 'Startup Club', archery: 'Archery Club', dance: 'Dance Club' };
+const CLUB_NAMES: Record<Org, string> = { usg: 'USG', startup: 'Startup Club', archery: 'Archery Club', dance: 'Dance Club', hacksc: 'HackSC' };
 const USG_SOURCE_NAMES: Partial<Record<SourceKind, string>> = { rulebook: 'USG rulebook', usg_internal: 'USG internal' };
-const UPLOADED_BY: Record<Org, string | null> = { usg: USER.avery, startup: USER.sam, archery: null, dance: null };
+const UPLOADED_BY: Record<Org, string | null> = { usg: USER.avery, startup: USER.sam, archery: null, dance: null, hacksc: USER.sam };
 
 const DOCS: Array<{ id: string; org: Org; sourceId: string; title: string; tier: Tier; file: string }> = [
   { id: DOCUMENT.usgFundingRules, org: 'usg', sourceId: SOURCE.usg.rulebook, title: 'USG Funding Department Guidelines', tier: 'public', file: 'usg-funding-rules.md' },
@@ -22,7 +22,32 @@ const DOCS: Array<{ id: string; org: Org; sourceId: string; title: string; tier:
   { id: DOCUMENT.sponsorContacts, org: 'startup', sourceId: SOURCE.startup.finance, title: 'Sponsor contacts', tier: 'officers', file: 'sponsor-contacts.md' },
   { id: DOCUMENT.archeryBudget2026, org: 'archery', sourceId: SOURCE.archery.finance, title: 'Archery budget 2026', tier: 'officers', file: 'archery-budget-2026.md' },
   { id: DOCUMENT.springShowcaseInfo, org: 'dance', sourceId: SOURCE.dance.public, title: 'Spring showcase info', tier: 'public', file: 'spring-showcase-info.md' },
+  { id: DOCUMENT.hackscGuide, org: 'hacksc', sourceId: SOURCE.hacksc.public, title: 'HackSC community guide', tier: 'public', file: 'hacksc-guide.md' },
+  { id: DOCUMENT.hackscMinutes2026, org: 'hacksc', sourceId: SOURCE.hacksc.minutes, title: 'HackSC organizing meeting — October 8, 2026', tier: 'members', file: 'hacksc-minutes-2026.md' },
+  { id: DOCUMENT.hackscHandoff2026, org: 'hacksc', sourceId: SOURCE.hacksc.archive, title: 'HackSC president handoff — 2025–2026', tier: 'members', file: 'hacksc-handoff-2026.md' },
+  { id: DOCUMENT.hackscBudget, org: 'hacksc', sourceId: SOURCE.hacksc.finance, title: 'HackSC finance worksheet — 2026', tier: 'officers', file: 'hacksc-budget-2026.md' },
 ];
+
+/** Adds the judge-demo library while preserving any existing documents and versions. */
+export async function seedHackscDocuments(db: SeedDb): Promise<void> {
+  const createdAt = now();
+  const hackscSources = [
+    { id: SOURCE.hacksc.public, kind: 'public', name: 'HackSC · Public' },
+    { id: SOURCE.hacksc.minutes, kind: 'minutes', name: 'HackSC · Minutes' },
+    { id: SOURCE.hacksc.finance, kind: 'finance', name: 'HackSC · Finance' },
+    { id: SOURCE.hacksc.archive, kind: 'archive', name: 'HackSC · Archive' },
+  ] satisfies Array<{ id: string; kind: SourceKind; name: string }>;
+  await db.insert(sources).values(hackscSources.map((source) => ({
+    ...source, orgId: ORG.hacksc, slug: source.kind, createdAt,
+  }))).onConflictDoNothing();
+  await db.insert(documents).values(DOCS.filter((doc) => doc.org === 'hacksc').map((doc) => ({
+    id: doc.id, orgId: ORG.hacksc, sourceId: doc.sourceId, title: doc.title, tier: doc.tier,
+    allowedPositions: doc.tier === 'officers' ? ['treasurer'] : [],
+    version: 1,
+    bodyMd: readFileSync(new URL(`./docs/${doc.file}`, import.meta.url), 'utf8').trim(),
+    uploadedBy: USER.sam, createdAt,
+  }))).onConflictDoNothing();
+}
 
 export async function seedDocuments(db: SeedDb): Promise<void> {
   const createdAt = now();

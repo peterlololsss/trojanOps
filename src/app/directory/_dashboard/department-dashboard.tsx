@@ -17,6 +17,7 @@ import { Bar, Empty, Panel, textLink } from './parts';
 import { AvatarRow, MembersTable } from './people';
 import { TabLinks } from './tabs';
 import { UpdatesPanel } from './updates';
+import { DepartmentSummary } from './demo-summary';
 
 export function DepartmentDashboardView({ data, base, searchParams }: {
   data: DepartmentDashboard;
@@ -53,6 +54,7 @@ function AboutTab({ data, base, showAll }: { data: DepartmentDashboard; base: st
   const people = data.members.map((m) => ({ userId: m.userId, name: m.name, roles: m.userId === lead?.userId ? ['Lead'] : [] }));
   return (
     <div className="space-y-6">
+      <DepartmentSummary data={data} />
       <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border md:grid-cols-2">
         <section aria-labelledby="team-heading" className="bg-background p-4">
           <h2 id="team-heading" className="text-xl font-semibold leading-7">Team</h2>

@@ -25,6 +25,6 @@ export function TemplatesTable({ data }: { data: UsgTemplatesView }) {
   const table = useTable({ features, data: found.slice((page - 1) * 10, page * 10), columns, getRowId: row => row.id });
   return <div className="space-y-4"><SearchBar value={query} onChange={v => { setQuery(v); setPage(1); }} count={found.length} placeholder="Search by name or purpose" />
     <DataTable table={table} caption="USG agent templates" rowHeaderColumn="name" sorted={{ id: 'name', direction: 'asc' }} numericColumns={['latestVersion']} monoColumns={['distributedAt']} minWidth={1100} alignTop
-      empty={data.templates.length ? 'No templates match your search. Clear filters to see all templates.' : 'No global templates are published yet. Ask the platform team to seed the USG templates.'} />
+      empty={data.templates.length ? 'No templates match your search. Clear filters to see all templates.' : 'No templates yet. Create a template to publish its first version.'} />
     <Pagination page={page} setPage={setPage} total={found.length} /></div>;
 }

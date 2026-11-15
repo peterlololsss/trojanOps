@@ -29,15 +29,16 @@ function capture() {
 }
 
 describe('WP-2 seed', () => {
-  it('seeds four organizations and the pilot cohort, leaving Robotics to roster sync', async () => {
+  it('seeds the demo organizations and the pilot cohort, leaving Robotics to roster sync', async () => {
     const { rows, db } = capture();
     await seedOrgs(db);
     expect(rows.orgs.map((o) => [o.slug, o.kind, o.name])).toEqual([
       ['usg', 'usg', 'USG'], ['startup', 'rso', 'Startup Club'],
       ['archery', 'rso', 'Archery Club'], ['dance', 'rso', 'Dance Club'],
+      ['hacksc', 'rso', 'HackSC'],
     ]);
     expect(rows.org_cohorts.map((c) => [c.cohortSlug, c.orgId])).toEqual([
-      ['pilot', ORG.startup], ['pilot', ORG.archery],
+      ['pilot', ORG.startup], ['pilot', ORG.archery], ['pilot', ORG.hacksc],
     ]);
     expect(rows.positions.every((p) => typeof p.name === 'string' && p.name.length > 0)).toBe(true);
     expect(rows.positions.filter((p) => p.slug === 'member').every((p) => p.isOfficer === false)).toBe(true);
@@ -61,9 +62,9 @@ describe('WP-2 seed', () => {
       return `${user.externalId}:${org.slug}:${position.slug}`;
     }).sort();
     expect(memberships).toEqual([
-      'avery:usg:admin', 'casey:startup:member', 'jordan:startup:member',
+      'avery:usg:admin', 'casey:hacksc:member', 'casey:startup:member', 'jordan:hacksc:member', 'jordan:startup:member',
       'morgan:archery:treasurer', 'morgan:startup:member', 'riley:usg:reviewer',
-      'sam:startup:president', 'taylor:startup:member', 'taylor:startup:treasurer',
+      'sam:hacksc:president', 'sam:startup:president', 'taylor:hacksc:member', 'taylor:hacksc:treasurer', 'taylor:startup:member', 'taylor:startup:treasurer',
     ]);
     const departed = rows.memberships.filter(m => m.endedAt);
     expect(departed).toHaveLength(2);

@@ -3,6 +3,7 @@ import { memberships, rosterState, users } from '@/lib/db/schema';
 import { now } from '@/lib/clock';
 import type { SeedDb } from './index';
 import { ORG, POSITION, USER } from './ids';
+import { hackscPeopleRows } from './hacksc-people';
 
 /** Historical examples; ended memberships confer no current club access. */
 export function departedMembershipSeeds(reference: Date) {
@@ -20,6 +21,7 @@ export function departedMembershipSeeds(reference: Date) {
 
 export async function seedPersonas(db: SeedDb): Promise<void> {
   const createdAt = now();
+  const hacksc = hackscPeopleRows(createdAt);
   await db.insert(users).values(
     (Object.keys(USER) as Array<keyof typeof USER>).map((key) => ({
       id: USER[key],
@@ -44,6 +46,7 @@ export async function seedPersonas(db: SeedDb): Promise<void> {
     r(ORG.startup, 'member', 'casey'),
     r(ORG.startup, 'member', 'morgan'),
     r(ORG.archery, 'treasurer', 'morgan'),
+    ...hacksc.roster,
   ]);
   await db.insert(memberships).values([
     m(USER.avery, ORG.usg, POSITION.usg.admin),
@@ -55,6 +58,7 @@ export async function seedPersonas(db: SeedDb): Promise<void> {
     m(USER.casey, ORG.startup, POSITION.startup.member),
     m(USER.morgan, ORG.archery, POSITION.archery.treasurer),
     m(USER.morgan, ORG.startup, POSITION.startup.member),
+    ...hacksc.memberships,
     ...departedMembershipSeeds(createdAt),
   ]);
 }

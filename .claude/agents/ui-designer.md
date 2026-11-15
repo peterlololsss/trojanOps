@@ -85,17 +85,24 @@ Every screen uses real seed data (club names, document titles); never lorem ipsu
   - At most 5 toolbar actions. Selecting rows shows a bulk-action bar.
   - Row actions in the last column: one visible action plus an overflow menu.
   - Skeleton rows while loading.
-- **My agents** (`/me/agents`): one section per club. The header shows the club name and my
-  positions. Rows show:
-  - agent name and purpose;
-  - why I can use it, using the audience labels ("All students", "All members", or position names
-    such as "Treasurer, President");
-  - version and Open. Open switches the active club, then opens the run page.
-- **Agent run page:**
-  - Two columns: transcript (max 720px) and an inspector (384px).
-  - The transcript reads like a document, not chat bubbles. Each turn has a small label ("You" or
-    the agent name) and turns are separated by rules.
-  - Inspector sections, in order:
+- **My agents** (`/me/agents?agent=`): one workspace, full width between masthead and footer.
+  - Left rail (272px, replaces the side nav): agents grouped by source — each of my clubs (the
+    active club first), USG, then "All students" for other clubs' public agents. Each item shows
+    name, purpose (two lines), topic tags and version; "All students" items add the club name.
+    Items are compact inset cards with neutral borders and a Cardinal selected border, per the
+    user's card-view request. Usage sits at the bottom. No access reasons on the rail.
+  - Choosing an internal agent of another club switches the active club, then opens its chat.
+  - Middle: agent header (name, source · version · tags, purpose, New conversation), transcript in a
+    centred column (max 760px), composer below.
+  - Right: a 320px "Run details" panel, always visible; "No runs yet." before the first run.
+- **Agent chat** (My agents, `/org/[orgId]/agents/[installationId]`, `/directory/[installationId]`):
+  - Your messages align right on a muted surface; answers align left under the agent's name.
+  - Before the first run, the transcript centres the agent's purpose and a vertical list of starter questions.
+  - The composer is a borderless auto-growing field (sr-only label, "Ask <agent>…" placeholder)
+    above one row: model, price, balance, Run.
+  - No access reasons, billed-club, demo-runtime, keyboard-hint or privacy notes on the page;
+    run facts live in Run details.
+  - Run details sections, in order:
     1. Run grants, shown as labels ("Startup Club · Treasurer"), never raw ids.
     2. Sources.
     3. Documents, with tier chips:
@@ -108,8 +115,8 @@ Every screen uses real seed data (club names, document titles); never lorem ipsu
     6. Audit id.
   - Pending actions show inline as cards with Confirm and Reject.
   - Progress names the step: "Checking access", "Reading 3 documents". Never "Thinking…".
-  - Answers carry an "AI-generated" text label that opens their sources. While the mock runtime is
-    on, label replies "Demo runtime: placeholder answer".
+  - Each answer lists its sources, with numbered inline citations; "Run details" selects that run
+    in the panel.
 - **Permission preview** (club president):
   - An agent selector, then a matrix. Rows: "Any signed-in student", "Member", and each position.
     Columns: the club's documents plus the USG rulebook.
@@ -163,7 +170,7 @@ Every screen uses real seed data (club names, document titles); never lorem ipsu
 - **Terms:** "Directory" (clubs, or the active club's departments), "Catalog" (one club's agents), "My agents",
   "Persona" (demo identity). Our module is "the gateway"; USC's is always "Trojan AI Gateway".
 - **Audience labels:** "All students", "All members", or the position names ("Treasurer,
-  President"). The same labels give the reason on My agents. **Tier labels:** "Public", "Members",
+  President"). **Tier labels:** "Public", "Members",
   "Officers", "USG internal".
 - **Before publishing or distributing, say who gains access.** Example: "Publish Recruiting Q&A to
   all students? Anyone signed in with a USC account can use it. It can read only Startup Club's 1

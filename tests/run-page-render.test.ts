@@ -1,11 +1,11 @@
-// Owner: C (WP-9). Markup of the run page parts: transcript, pending action cards and the inspector
-// placeholder. Rendered to static HTML in node (no browser), with seed ids for fixtures.
+// Owner: C (WP-9). Markup of the run page parts: transcript, pending action cards and the Run details
+// panel. Rendered to static HTML in node (no browser), with seed ids for fixtures.
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { RunWorkspace } from '@/components/inspector';
 import { humanizeTool, readCount } from '@/components/inspector/format';
-import { InspectorPlaceholder } from '@/components/inspector/inspector-placeholder';
+import { RunDetailsPanel } from '@/components/inspector/run-details-panel';
 import { PendingActionCard } from '@/components/inspector/pending-action-card';
 import type { ActionStatus, Turn } from '@/components/inspector/run-state';
 import { Transcript, type TranscriptProps } from '@/components/inspector/transcript';
@@ -42,7 +42,7 @@ const turns: Turn[] = [
 ];
 
 const transcript = (props: Partial<TranscriptProps> = {}) => renderToStaticMarkup(createElement(Transcript, {
-  turns, actions: { [ACTION_ID]: { status: 'pending' } }, agentName: 'Club handoff', demoRuntime: true, ...props,
+  turns, actions: { [ACTION_ID]: { status: 'pending' } }, agentName: 'Club handoff', ...props,
 }));
 
 const card = (status: ActionStatus) => renderToStaticMarkup(createElement(PendingActionCard, {
@@ -50,6 +50,8 @@ const card = (status: ActionStatus) => renderToStaticMarkup(createElement(Pendin
 }));
 
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+/** Each button's text, ignoring icons inside it. */
+const buttons = (html: string) => [...html.matchAll(/<button[^>]*>(.*?)<\/button>/g)].map((m) => text(m[1]).trim());
 
 describe('run page markup', () => {
   it('labels speakers and makes AI answers navigable as headings', () => {
@@ -58,7 +60,18 @@ describe('run page markup', () => {
     expect(html).toMatch(/<h2\b[^>]*>AI · Club handoff<\/h2>/);
     expect(html).toContain('What did the board decide last meeting?');
     expect(html).toContain('whitespace-pre-wrap');
-    expect(html).toContain('−1 credit · Read 1 of 1 permitted documents · Audit #1042');
+  });
+
+  it('keeps run metadata out of the transcript and links each answer to its run details', () => {
+    const html = transcript();
+    expect(html).not.toContain('Audit #1042');
+    expect(html).not.toContain('Read 1 of 1 permitted documents');
+    expect(html).not.toContain('<details');
+    expect(text(html)).toContain('Copy');
+    expect(html).not.toContain('Run details');
+    const linked = transcript({ onInspect: () => {} });
+    expect(buttons(linked)).toContain('Run details');
+    expect(linked).not.toContain('Show this run in inspector');
   });
 
   it('escapes reply text instead of rendering HTML', () => {
@@ -67,14 +80,11 @@ describe('run page markup', () => {
     expect(html).toContain('&lt;img');
   });
 
-  it('labels the demo runtime and otherwise says AI-generated', () => {
-    const demo = transcript();
-    expect(demo).toContain('Demo runtime: placeholder answer');
-    expect(demo).not.toContain('AI-generated');
-    const real = transcript({ demoRuntime: false });
-    expect(real).toContain('AI-generated');
-    expect(real).not.toContain('Demo runtime');
-    expect(real).toMatch(/aria-expanded="false"/);
+  it('labels answers with the agent name and no runtime note, and keeps the tier mark', () => {
+    const html = transcript();
+    expect(html).not.toMatch(/Demo runtime|placeholder answer/i);
+    expect(html).toContain('Uses Members information');
+    expect(html).toMatch(/aria-expanded="false"/);
   });
 
   it('takes citation titles from the inspector and drops unknown citations', () => {
@@ -106,7 +116,6 @@ describe('run page markup', () => {
     expect(pending).toContain('Reject');
   });
 
-  const buttons = (html: string) => [...html.matchAll(/<button[^>]*>([^<]+)<\/button>/g)].map((m) => m[1]);
   const live = (html: string) => html.match(/<p role="status" aria-live="polite"[^>]*>(.*?)<\/p>/)?.[1];
 
   it('states confirming, confirmed and rejected with words in one live region, hiding buttons that cannot act', () => {
@@ -153,24 +162,33 @@ describe('run page markup', () => {
     expect(text(refused)).not.toContain('Waits for you to confirm');
   });
 
-  it('shows the six inspector headings before the first run', () => {
-    const html = renderToStaticMarkup(createElement(InspectorPlaceholder));
-    expect([...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1]))
+  it('explains what Run details will show before the first run', () => {
+    const html = renderToStaticMarkup(createElement(RunDetailsPanel, { inspector: null }));
+    expect([...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1])).toEqual(['Run details']);
+    expect(text(html).trim()).toBe('Run details No runs yet. Send a message to see this run’s document access, sources and cost.');
+    const after = renderToStaticMarkup(createElement(RunDetailsPanel, { inspector: result.inspector }));
+    expect([...after.matchAll(/<h3[^>]*>([^<]+)<\/h3>/g)].map((m) => m[1]))
       .toEqual(['Run grants', 'Sources', 'Documents', 'Versions', 'Billing', 'Audit']);
-    expect(html).toContain('Run the agent to see its grants, documents and billing.');
-    expect(html).toContain('w-[384px]');
+    expect(after).toContain('Template v1');
+    expect(after).not.toContain('Finished run');
   });
 
-  it('renders the empty workspace with a labelled field, a live progress region and the placeholder', () => {
+  it('renders the empty workspace with a header, a labelled field, a live progress region and run details', () => {
     const html = renderToStaticMarkup(createElement(RunWorkspace, {
-      installationId: INSTALLATION.startupHandoff, agentName: 'Club handoff', demoRuntime: true,
+      installationId: INSTALLATION.startupHandoff, agentName: 'Club handoff',
+      header: { source: 'Startup Club', version: 1, tags: ['Onboarding', 'Minutes'], description: 'Helps incoming officers catch up.' },
     }));
-    expect(html).toContain('No runs yet. Write a message below to run Club handoff.');
-    expect(html).toMatch(/<label[^>]*for="[^"]+"[^>]*>Message<\/label>/);
+    expect(html).toMatch(/<h1[^>]*>Club handoff<\/h1>/);
+    expect(text(html)).toContain('Startup Club · v1 · Onboarding Minutes');
+    expect(html).toContain('Helps incoming officers catch up.');
+    expect(html).toMatch(/<label[^>]*class="sr-only"[^>]*>Message<\/label>/);
+    expect(html).toContain('placeholder="Ask Club handoff…"');
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain('Run Club handoff');
-    expect(html).toContain('Run the agent to see its grants, documents and billing.');
-    expect(html).not.toMatch(/Thinking/i);
+    expect(html).toContain('Run details');
+    expect(html).toContain('No runs yet.');
+    expect(html).not.toContain('New conversation');
+    expect(html).not.toMatch(/Demo runtime|Thinking|Enter to run|Only you can see|What Club handoff can read|Paid by/i);
     expect(html).not.toContain(INSTALLATION.startupHandoff);
   });
 

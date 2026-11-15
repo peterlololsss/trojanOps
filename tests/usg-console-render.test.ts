@@ -10,8 +10,11 @@ import { DocumentBody, parseDocument } from '@/app/usg/documents/document-body';
 import { DocumentsTable } from '@/app/usg/documents/documents-table';
 import { lineChanges, lineDiff, MAX_DIFF_CELLS } from '@/app/usg/documents/line-diff';
 import { AgentSummary } from '@/app/usg/templates/[templateId]/agent-summary';
+import { TemplateKnowledge } from '@/app/usg/templates/[templateId]/template-knowledge';
+import { TemplateDetail } from '@/app/usg/templates/[templateId]/template-detail';
 import { initialState, reachSentences as versionReach, toBody, validate, versionChanges } from '@/app/usg/templates/[templateId]/version-draft';
 import { VersionEditor, VersionReview } from '@/app/usg/templates/[templateId]/version-editor';
+import { absoluteTime } from '@/app/usg/templates/console-ui';
 import { TemplatesTable } from '@/app/usg/templates/templates-table';
 import type { UsgTemplateView, UsgVersion } from '@/lib/distribution/usg-view';
 import type { UsgDocumentRow, UsgDocumentUser, UsgDocumentView } from '@/lib/documents/usg-documents';
@@ -47,8 +50,8 @@ const view = (patch: Partial<UsgTemplateView> = {}): UsgTemplateView => ({
   targets: [{ slug: 'all', name: 'All active clubs', clubs: [{ id: 'a', name: 'Archery Club' }, { id: 'd', name: 'Dance Club' }, { id: 's', name: 'Startup Club' }] }],
   positions: [{ slug: 'member', name: 'Member' }, { slug: 'president', name: 'President' }, { slug: 'secretary', name: 'Secretary' }, { slug: 'treasurer', name: 'Treasurer' }],
   usgDocuments: [
-    { id: DOCUMENT.usgFundingRules, kind: 'rulebook', title: 'USG Funding Department Guidelines', tier: 'public' },
-    { id: DOCUMENT.reviewerNotes, kind: 'usg_internal', title: 'Reviewer notes', tier: 'usg_internal' },
+    { id: DOCUMENT.usgFundingRules, kind: 'rulebook', title: 'USG Funding Department Guidelines', tier: 'public', version: 1 },
+    { id: DOCUMENT.reviewerNotes, kind: 'usg_internal', title: 'Reviewer notes', tier: 'usg_internal', version: 1 },
   ],
   ...patch,
 });
@@ -68,25 +71,59 @@ const detail: UsgDocumentView = {
     sourceKind: 'rulebook', version: 1, createdAt, bodyMd: guidelines },
 };
 
+describe('USG console timestamps', () => {
+  it('keeps the same punctuation when the runtime joins the date and time with “at”', () => {
+    const prototype = Intl.DateTimeFormat.prototype;
+    const format = Object.getOwnPropertyDescriptor(prototype, 'format');
+    if (!format) throw new Error('Missing Intl.DateTimeFormat.format');
+    Object.defineProperty(prototype, 'format', {
+      ...format,
+      get: () => () => 'Nov 15, 2026 at 10:00 AM',
+    });
+    try {
+      expect(absoluteTime(v1.publishedAt)).toBe('Nov 15, 2026, 10:00 AM PT');
+    } finally {
+      Object.defineProperty(prototype, 'format', format);
+    }
+  });
+});
+
 describe('/usg/templates/[templateId]', () => {
   it('lists the configuration as labels and values, without a rule pack', () => {
     const html = render(createElement(AgentSummary, { data: view() }));
     const page = text(html);
     expect(page).toContain('Configuration Version 1 · published Nov 15, 2026, 10:00 AM PT');
     expect(page).toContain('Purpose Checks a funding request against the USG funding rules before you submit it.');
-    expect(page).toContain('Who uses it Treasurer, President · 3 clubs');
+    expect(page).toContain('Who uses it Treasurer, President');
     expect(html).toContain('You are Funding pre-check, a USG agent for club treasurers and presidents.\n\nFor each budget line');
-    expect(page).toContain('Knowledge USG rulebook USG library USG Funding Department Guidelines Club finances Each club');
-    expect(html).toContain(`href="/usg/documents/${DOCUMENT.usgFundingRules}"`);
     expect(page).toContain('Tools None');
-    expect(page).toContain('Model Standard (default), Economy');
+    expect(page).toContain('Default in chat: gpt-6.1-sol');
+    expect(page).toContain('Economy · gpt-6-luna, claude-haiku-5-5, gemini-4-hydrogen · 1 credit per run');
+    expect(page).toContain('Standard · gpt-6.1-sol, claude-sonnet-5-5, gemini-4-carbon · 3 credits per run');
     expect(page).toContain('Reads up to Officers');
     expectProductOnly(page);
   });
   it('lists only the USG documents the version’s max tier lets it read', () => {
-    const both = { ...v1, sourceKinds: ['rulebook', 'usg_internal'] };
-    expect(text(render(createElement(AgentSummary, { data: view({ versions: [both] }) })))).not.toContain('Reviewer notes');
-    expect(text(render(createElement(AgentSummary, { data: view({ versions: [{ ...both, maxTier: 'usg_internal' }] }) })))).toContain('Reviewer notes');
+    const internal = { ...v1, sourceKinds: ['usg_internal'] };
+    expect(text(render(createElement(TemplateKnowledge, { data: view({ versions: [internal] }) })))).not.toContain('Reviewer notes');
+    expect(text(render(createElement(TemplateKnowledge, { data: view({ versions: [{ ...internal, maxTier: 'usg_internal' }] }) })))).toContain('Reviewer notes');
+  });
+  it('connects knowledge management and one distribution target to template detail', () => {
+    const html = render(createElement(TemplateDetail, { data: view() }));
+    expect(html).toContain('role="tablist"');
+    expect((html.match(/role="tab"/g) ?? [])).toHaveLength(4);
+    expect((html.match(/id="metadata-target"/g) ?? [])).toHaveLength(1);
+    expect(html).not.toContain('rollout-target');
+    expect(html).toContain(`href="/usg/documents/${DOCUMENT.usgFundingRules}"`);
+  });
+  it('shows club ownership for club-only knowledge and uploads only to connected active rulebooks', () => {
+    const club = text(render(createElement(TemplateKnowledge, { data: view({ versions: [{ ...v1, sourceKinds: ['finance'] }] }) })));
+    expect(club).toContain('Each installed club supplies its own club finances');
+    expect(club).not.toContain('No USG documents');
+    const data = view({ knowledgeUpload: { orgId: ORG.usg, sources: [{ id: 'rules', name: 'USG rulebook', kind: 'rulebook' }] } });
+    expect(text(render(createElement(TemplateKnowledge, { data })))).toContain('Add document');
+    expect(text(render(createElement(TemplateKnowledge, { data: { ...data, template: { ...data.template, status: 'retired' } } })))).not.toContain('Add document');
+    expect(text(render(createElement(TemplateKnowledge, { data: { ...data, versions: [{ ...v1, sourceKinds: [] }] } })))).not.toContain('Add document');
   });
   it('shows a template with no published version', () => {
     const page = text(render(createElement(AgentSummary, { data: view({ versions: [], template: { ...view().template, latestVersion: 0, installedCount: 0 } }) })));

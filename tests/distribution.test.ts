@@ -374,17 +374,18 @@ describe.skipIf(!probe)('effectiveAgent · version, clamps and rule pack', () =>
 });
 
 describe.skipIf(!probe)('myAgents · every club judged in that club', () => {
-  it('gives Casey, a plain Startup member, the members agent only', async () => {
+  it('gives Casey, a plain Startup member, the member agents only', async () => {
     const clubs = await myAgents(USER.casey);
-    expect(clubs.map((c) => c.orgId)).toEqual([ORG.startup]);
-    expect(clubs[0].agents.map((a) => a.templateSlug)).toEqual(['handoff']);
-    expect(clubs[0].agents[0].reasonLabel).toBe('All members');
+    expect(clubs.map((c) => c.orgId).sort()).toEqual([ORG.startup, ORG.hacksc].sort());
+    const startup = clubs.find((club) => club.orgId === ORG.startup);
+    expect(startup?.agents.map((a) => a.templateSlug).sort()).toEqual(['event-retrospective', 'handoff', 'meeting-recap']);
+    expect(startup?.agents[0].reasonLabel).toBe('All members');
   });
 
   it('gives Taylor the funding pre-check as well, labelled by position', async () => {
-    const [startup] = await myAgents(USER.taylor);
-    expect(startup.agents.map((a) => a.templateSlug).sort()).toEqual(['funding-precheck', 'handoff']);
-    const precheck = startup.agents.find((a) => a.templateSlug === 'funding-precheck');
+    const startup = (await myAgents(USER.taylor)).find((club) => club.orgId === ORG.startup);
+    expect(startup?.agents.map((a) => a.templateSlug).sort()).toEqual(['event-retrospective', 'funding-precheck', 'handoff', 'meeting-recap']);
+    const precheck = startup?.agents.find((a) => a.templateSlug === 'funding-precheck');
     expect(precheck?.reasonLabel).toBe('Treasurer, President');
   });
 
@@ -734,7 +735,7 @@ describe.skipIf(!probe)('effectiveAgent · tracks and versions', () => {
       const agent = await effectiveAgent(INSTALLATION.startupHandoff);
       expect(agent.templateVersion).toBe(1);
       expect(agent.purpose).not.toBe('Second version.');
-      const listed = (await myAgents(USER.casey))[0].agents.find((a) => a.templateSlug === 'handoff');
+      const listed = (await myAgents(USER.casey)).find((club) => club.orgId === ORG.startup)?.agents.find((a) => a.templateSlug === 'handoff');
       expect(listed?.templateVersion).toBe(1);
     }));
 
@@ -752,7 +753,7 @@ describe.skipIf(!probe)('effectiveAgent · tracks and versions', () => {
         const slugs = (await loadAgents({})).map((l) => l.agent.templateSlug);
         expect(slugs).not.toContain('handoff');
         expect(slugs).toContain('funding-precheck');
-        expect((await myAgents(USER.casey))[0].agents).toEqual([]);
+        expect((await myAgents(USER.casey)).find((club) => club.orgId === ORG.startup)?.agents.map((a) => a.templateSlug).sort()).toEqual(['event-retrospective', 'meeting-recap']);
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('is not published'));
       } finally {
         warn.mockRestore();
@@ -815,10 +816,10 @@ describe.skipIf(!probe)('retired templates · reported, not offered', () => {
   it("is left out of a member's agents, and of nobody else's", () =>
     inRolledBackApp(async (tx) => {
       await tx.execute(sql`update agent_templates set status = 'retired' where id = ${TEMPLATE.handoff}`);
-      const [casey] = await myAgents(USER.casey);
-      expect(casey.agents).toEqual([]);
-      const [taylor] = await myAgents(USER.taylor);
-      expect(taylor.agents.map((a) => a.templateSlug)).toEqual(['funding-precheck']);
+      const casey = (await myAgents(USER.casey)).find((club) => club.orgId === ORG.startup);
+      expect(casey?.agents.map((a) => a.templateSlug).sort()).toEqual(['event-retrospective', 'meeting-recap']);
+      const taylor = (await myAgents(USER.taylor)).find((club) => club.orgId === ORG.startup);
+      expect(taylor?.agents.map((a) => a.templateSlug).sort()).toEqual(['event-retrospective', 'funding-precheck', 'meeting-recap']);
     }));
 });
 
@@ -861,8 +862,8 @@ describe.skipIf(!probe)('run-time clamp · a version narrowed under an installat
       try {
         await widenHandoff(tx);
         expect((await directory()).map((a) => a.templateSlug)).toContain('showcase-qa');
-        const [startup] = await myAgents(USER.taylor);
-        expect(startup.agents.map((a) => a.templateSlug)).toEqual(['funding-precheck']);
+        const startup = (await myAgents(USER.taylor)).find((club) => club.orgId === ORG.startup);
+        expect(startup?.agents.map((a) => a.templateSlug).sort()).toEqual(['event-retrospective', 'funding-precheck', 'meeting-recap']);
         expect(warn).toHaveBeenCalled();
       } finally {
         warn.mockRestore();

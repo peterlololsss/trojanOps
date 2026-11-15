@@ -5,14 +5,15 @@ import { csvRoster } from '@/lib/connectors/roster/mock';
 describe('roster preview summary', () => {
   it('summarizes the actual CSV without counting multiple positions as different people', async () => {
     const preview = buildRosterPreview(await csvRoster.fetch());
-    expect(preview.summary).toMatchObject({ assignmentCount: 10, personCount: 8, clubCount: 3 });
+    expect(preview.summary).toMatchObject({ assignmentCount: 15, personCount: 8, clubCount: 4 });
     expect(preview.summary.clubs).toEqual([
       { name: 'Archery Club', assignmentCount: 1 },
+      { name: 'HackSC', assignmentCount: 5 },
       { name: 'Robotics Club', assignmentCount: 3 },
       { name: 'Startup Club', assignmentCount: 6 },
     ]);
     expect(preview.summary.positions).toEqual([
-      { name: 'member', count: 5 }, { name: 'president', count: 2 }, { name: 'treasurer', count: 3 },
+      { name: 'member', count: 8 }, { name: 'president', count: 3 }, { name: 'treasurer', count: 4 },
     ]);
     expect(preview.rows[0]).toEqual({ club: 'Archery Club', person: 'Morgan', position: 'treasurer' });
   });

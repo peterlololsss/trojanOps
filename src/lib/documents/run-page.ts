@@ -29,6 +29,8 @@ export type RunAccess =
 
 export interface RunPageAgent {
   installationId: string;
+  /** Picks the agent's topic tags (src/app/me/agents/agent-tags.ts). */
+  templateSlug: string;
   name: string;
   purpose: string;
   audience: Audience;
@@ -44,9 +46,8 @@ export type RunPageData = { org: { id: string; name: string }; demoRuntime: bool
 );
 
 /**
- * Whether replies come from the mock runtime (§7), so the run workspace labels them "Demo runtime:
- * placeholder answer". It reads the same env var as `runtime/index.ts` without importing it: only
- * the gateway imports the runtime (I5). Stream D's directory run page uses it too.
+ * Whether replies come from the mock runtime (§7). It reads the same env var as `runtime/index.ts`
+ * without importing it: only the gateway imports the runtime (I5).
  * TODO(verify): process-wide. Ask A for a per-run marker on RunResult (contract PR) once WP-13 can
  * run some agents on the real runtime.
  */
@@ -108,6 +109,7 @@ export async function getRunPageData(viewer: Actor, orgId: string, installationI
     ...(access.kind === 'ok' ? { workspace: await buildRunConfig(viewer, agent, { club: org.name, audience: label }) } : {}),
     agent: {
       installationId: agent.installationId,
+      templateSlug: agent.templateSlug,
       name: agent.name,
       purpose: agent.purpose,
       audience: agent.audience,

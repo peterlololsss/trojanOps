@@ -1,6 +1,8 @@
 // Owner: B. Plain-English names and one-line explanations for agent-template settings, shared by the
 // read-only summary and the configuration editor on /usg/templates/[templateId].
+import { DEMO_MODELS } from '@/components/inspector/demo-models';
 import type { Audience, ModelClass, Tier } from '@/lib/contracts';
+import { creditLabel, priceMicro } from '@/lib/gateway/prices';
 import { positionName } from '@/lib/distribution/labels';
 
 export type SourceKind = 'public' | 'minutes' | 'archive' | 'finance' | 'rulebook' | 'usg_internal';
@@ -40,11 +42,17 @@ export const TOOLS: readonly ToolOption[] = [
 ];
 export const toolOption = (slug: string): ToolOption => TOOLS.find(t => t.slug === slug) ?? { slug, name: slug };
 
-export const MODEL_CLASSES: Record<ModelClass, { name: string; description: string }> = {
-  economy: { name: 'Economy', description: 'A lighter model.' },
-  standard: { name: 'Standard', description: 'A stronger model.' },
+export const MODEL_CLASSES: Record<ModelClass, { name: string }> = {
+  economy: { name: 'Economy' },
+  standard: { name: 'Standard' },
 };
 export const MODEL_ORDER: readonly ModelClass[] = ['economy', 'standard'];
+export const demoModelNames = (modelClass: ModelClass) =>
+  DEMO_MODELS.filter(model => model.modelClass === modelClass).map(model => model.label);
+export const demoModelDefault = (modelClass: ModelClass) =>
+  demoModelNames(modelClass)[0] ?? MODEL_CLASSES[modelClass].name;
+export const demoModelDescription = (modelClass: ModelClass) =>
+  `${demoModelNames(modelClass).join(', ')} · ${creditLabel(priceMicro(modelClass))} per run`;
 
 /** "All students", "All members", or the position names ("Treasurer, President"). */
 export function audienceLabel(audience: Audience, usableBy: string[], names: ReadonlyArray<{ slug: string; name: string }> = []): string {

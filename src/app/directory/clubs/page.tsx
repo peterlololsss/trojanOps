@@ -4,6 +4,7 @@ import { clubsDirectory } from '@/lib/directory/service';
 import { getActor } from '@/lib/identity';
 import { DirectorySignedOut } from '../_dashboard/route-states';
 import { ClubsList } from './clubs-list';
+import { ClubsSummary } from '../_dashboard/demo-summary';
 
 export default async function ClubsPage() {
   const actor = await getActor();
@@ -11,6 +12,7 @@ export default async function ClubsPage() {
   const view = await clubsDirectory(actor);
   return <>
     <PageHeader title="Clubs" />
+    <div className="mb-6"><ClubsSummary data={view} /></div>
     <ClubsList key={`${actor.userId}:${actor.activeOrgId}`} view={view} />
   </>;
 }

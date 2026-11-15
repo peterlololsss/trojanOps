@@ -1,7 +1,7 @@
 // Owner: B. I7 policy/metadata writes and remaining §14 routes on the real app role.
 import { sql } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
-import { usgTemplatesView, usgTemplateView, usgClubsView } from '@/lib/distribution/usg-view';
+import { reviewTemplateKnowledge, usgTemplatesView, usgTemplateView, usgClubsView } from '@/lib/distribution/usg-view';
 import { setClubPolicy } from '@/lib/distribution/club-policy';
 import { getTemplate, updateTemplate } from '@/lib/distribution/template-admin';
 import { installTemplate } from '@/lib/distribution/create-installation';
@@ -11,7 +11,7 @@ import { ACTIVE_ORG_COOKIE, PERSONA_COOKIE } from '@/lib/identity';
 import * as templateRoute from '@/app/api/usg/templates/[templateId]/route';
 import * as policyRoute from '@/app/api/usg/club-policy/[orgId]/route';
 import * as installRoute from '@/app/api/orgs/[orgId]/installations/route';
-import { DOCUMENT, ORG, TEMPLATE, USER, INSTALLATION } from '@db/seed/ids';
+import { DOCUMENT, ORG, SOURCE, TEMPLATE, USER, INSTALLATION } from '@db/seed/ids';
 import { actorFor, appSql, closeAppDb, inRolledBackApp } from './db';
 const probe = await appSql(); await probe?.end();
 afterAll(async () => { if (probe) await closeAppDb(); });
@@ -28,7 +28,7 @@ describe.skipIf(!probe)('USG policy and template management', () => {
     const actor = await avery();
     expect((await usgTemplatesView(actor)).templates.map(t => t.slug)).toContain('event-planning');
     expect((await usgTemplateView(actor, TEMPLATE.eventPlanning))?.versions[0].modelClasses).toEqual(['economy']);
-    expect(await usgClubsView(actor)).toHaveLength(3);
+    expect(await usgClubsView(actor)).toHaveLength(4);
     const [{ count: before }] = await tx.execute<{ count: number }>(sql`select count(*)::int as count from audit_events where action = 'authz.denied'`);
     for (const read of [usgTemplatesView, usgClubsView]) await expect(read(await sam())).rejects.toMatchObject({ error: { code: 'forbidden' } });
     const [{ count: after }] = await tx.execute<{ count: number }>(sql`select count(*)::int as count from audit_events where action = 'authz.denied'`);
@@ -40,8 +40,21 @@ describe.skipIf(!probe)('USG policy and template management', () => {
     expect(list.templates.find(t => t.id === TEMPLATE.fundingPrecheck)).toMatchObject({ purpose: expect.stringContaining('funding request') });
     expect(list).not.toHaveProperty('rulePacks');
     const detail = await usgTemplateView(actor, TEMPLATE.fundingPrecheck);
-    expect(detail?.usgDocuments).toContainEqual({ id: DOCUMENT.usgFundingRules, kind: 'rulebook', title: 'USG Funding Department Guidelines', tier: 'public' });
+    expect(detail?.usgDocuments).toContainEqual({ id: DOCUMENT.usgFundingRules, kind: 'rulebook', title: 'USG Funding Department Guidelines', tier: 'public', version: 1 });
     expect(detail?.positions.map(p => p.slug)).toEqual(expect.arrayContaining(['president', 'treasurer']));
+  }));
+  it('reviews public knowledge uploads through an authorized connected source without writing a document', () => inRolledBackApp(async tx => {
+    const actor = await avery();
+    const draft = { title: 'Knowledge review test', sourceId: SOURCE.usg.rulebook, tier: 'public', allowedPositions: [], bodyMd: 'A public guideline for the review test.' };
+    const [{ count: before }] = await tx.execute<{ count: number }>(sql`select count(*)::int as count from documents`);
+    const receipt = await reviewTemplateKnowledge(actor, TEMPLATE.fundingPrecheck, draft);
+    expect(receipt).toMatchObject({ title: draft.title, whoCanRead: 'All students' });
+    const [{ count: after }] = await tx.execute<{ count: number }>(sql`select count(*)::int as count from documents`);
+    expect(after).toBe(before);
+    await expect(reviewTemplateKnowledge(await sam(), TEMPLATE.fundingPrecheck, draft)).rejects.toMatchObject({ error: { code: 'forbidden' } });
+    await expect(reviewTemplateKnowledge(actor, TEMPLATE.fundingPrecheck, { ...draft, tier: 'usg_internal' })).rejects.toMatchObject({ error: { code: 'invalid' } });
+    await expect(reviewTemplateKnowledge(actor, TEMPLATE.fundingPrecheck, { ...draft, sourceId: SOURCE.startup.finance })).rejects.toMatchObject({ error: { code: 'forbidden' } });
+    await expect(reviewTemplateKnowledge(actor, TEMPLATE.eventPlanning, draft)).rejects.toMatchObject({ error: { code: 'forbidden' } });
   }));
   it('applies a compatible policy, audits it, and never widens a template model ceiling', () => inRolledBackApp(async tx => {
     await setClubPolicy(await avery(), ORG.archery, policy);
@@ -68,10 +81,10 @@ describe.skipIf(!probe)('USG policy and template management', () => {
   it('reads immutable history and patches only authorized metadata, keeping old installations on target changes', () => inRolledBackApp(async tx => {
     const actor = await avery();
     const detail = await getTemplate(actor, TEMPLATE.eventPlanning);
-    expect(detail.versions).toHaveLength(1); expect(detail.targets).toHaveLength(3);
+    expect(detail.versions).toHaveLength(1); expect(detail.targets).toHaveLength(4);
     await updateTemplate(actor, TEMPLATE.eventPlanning, { name: 'Event planning updated', target: 'pilot' });
     const next = await getTemplate(actor, TEMPLATE.eventPlanning);
-    expect(next.template.name).toBe('Event planning updated'); expect(next.targets).toHaveLength(2);
+    expect(next.template.name).toBe('Event planning updated'); expect(next.targets).toHaveLength(3);
     expect(next.versions).toEqual(detail.versions);
     await expect(updateTemplate(actor, TEMPLATE.fundingPrecheck, { distribution: 'optional' })).rejects.toMatchObject({ error: { code: 'invalid' } });
     await expect(updateTemplate(actor, TEMPLATE.eventPlanning, { target: 'missing-cohort' })).rejects.toMatchObject({ error: { code: 'invalid' } });

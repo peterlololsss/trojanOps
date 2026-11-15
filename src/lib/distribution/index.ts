@@ -13,3 +13,4 @@ export { publishRulePack, rulePackDraftSchema } from './rule-packs';
 export { setClubPolicy, clubPolicySchema } from './club-policy';
 export { getTemplate, updateTemplate, templatePatchSchema } from './template-admin';
 export { installTemplate, createInstallationSchema } from './create-installation';
+export { createUsgTemplate } from './create-template';

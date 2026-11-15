@@ -113,7 +113,7 @@ describe.skipIf(!probe)('clubAdmin · the club’s agents', () => {
   it('carries the catalog, so the page can manage installations too', async () => {
     const data = await clubAdmin(await sam(), ORG.startup);
     expect(data!.agents.map((a) => a.templateSlug).sort()).toEqual([
-      'funding-precheck', 'handoff', 'recruiting-qa',
+      'event-retrospective', 'funding-precheck', 'handoff', 'meeting-recap', 'recruiting-qa',
     ]);
   });
 });

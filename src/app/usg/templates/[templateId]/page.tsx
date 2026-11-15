@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/shell';
 import { AppError } from '@/lib/contracts';
 import { usgTemplateView } from '@/lib/distribution/usg-view';
 import { getActor } from '@/lib/identity';
-import { BackToTemplates, ConsoleNav, DeniedConsole } from '../console-ui';
+import { BackToTemplates, DeniedConsole } from '../console-ui';
 import { TemplateDetail } from './template-detail';
 
 export default async function TemplatePage({ params }: { params: Promise<{ templateId: string }> }) {
@@ -15,6 +15,6 @@ export default async function TemplatePage({ params }: { params: Promise<{ templ
     return <><PageHeader title="Agent template" /><DeniedConsole /></>;
   }
   if (!data) notFound();
-  return <><PageHeader title={data.template.name} description="Configuration, distribution and versions." action={<BackToTemplates />} /><ConsoleNav />
+  return <><PageHeader title={data.template.name} description="Configuration, knowledge, distribution and versions." action={<BackToTemplates />} />
     <TemplateDetail key={`${actor.userId}:${actor.activeOrgId}:${templateId}:${data.template.latestVersion}:${data.template.status}:${data.template.target}:${data.template.distribution}:${data.template.name}`} data={data} /></>;
 }

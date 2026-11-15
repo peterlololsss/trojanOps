@@ -26,6 +26,15 @@ describe('safe answer Markdown', () => {
     expect(html).not.toContain('Source 2');
     expect(html).not.toContain('Source 3');
   });
+  // Answer playback renders the reply word by word, so a prefix can end in a bare list marker.
+  // A marker the item pattern missed used to loop forever and crash the tab.
+  it('renders every word-by-word prefix of a reply, including a bare list marker', () => {
+    const reply = 'Here is what this run could read:\n\n1. **Spring 2026 budget:** Totals. [1]\n\n- Item\n\n2.\tTab';
+    const words = reply.split(/(?<=\s)/);
+    for (let n = 0; n <= words.length; n++) expect(render(words.slice(0, n).join(''))).toContain('<div');
+    expect(render('Here:\n\n1. ')).toContain('<ol');
+    expect(render('Here:\n\n- ')).toContain('<ul');
+  });
   it('preserves the starting number of an ordered list', () => {
     expect(render('3. Third cited document')).toMatch(/<ol\b[^>]*\bstart="3"/);
   });

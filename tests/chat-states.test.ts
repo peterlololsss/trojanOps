@@ -21,7 +21,7 @@ const renderComposer = (over: Partial<Parameters<typeof Composer>[0]> = {}) => r
 describe('chat balance and failure states', () => {
   it('offers an affordable model and names the daily reset when Standard costs too much', () => {
     const html = renderComposer();
-    expect(html).toContain('Switch to Economy');
+    expect(html).toContain('Switch to gpt-6-luna');
     expect(html).toContain('80% used');
     expect(html).toContain('midnight PT');
     expect(html).toContain('aria-label="Run Recruiting Q&amp;A"');
@@ -33,13 +33,20 @@ describe('chat balance and failure states', () => {
     expect(html).toContain('100% used');
     expect(html).not.toContain('disabled=');
   });
-  it('offers Stop during playback and explains that the run has finished', () => {
+  it('offers Stop during playback', () => {
     const html = renderComposer({ playing: true });
     expect(html).toContain('Stop</button>');
-    expect(html).toContain('The run has finished.');
+    expect(html).not.toContain('Run Recruiting Q&amp;A');
+  });
+  it('labels the field for screen readers only and shows no keyboard or runtime notes', () => {
+    const html = renderComposer();
+    expect(html).toMatch(/<label[^>]*class="sr-only"[^>]*>Message<\/label>/);
+    expect(html).toContain('placeholder="Ask Recruiting Q&amp;A…"');
+    expect(html).toContain('rows="1"');
+    expect(html).not.toMatch(/Enter to run|Shift\+Enter|Demo runtime/);
   });
   it('keeps a block in the transcript without a retry action', () => {
-    const html = renderToStaticMarkup(createElement(Transcript, { agentName: 'Club handoff', demoRuntime: true, actions: {}, turns: [{ kind: 'note', key: 'n', error: { code: 'quota_exceeded', message: 'No allowance left.' }, retry: false }] }));
+    const html = renderToStaticMarkup(createElement(Transcript, { agentName: 'Club handoff', actions: {}, turns: [{ kind: 'note', key: 'n', error: { code: 'quota_exceeded', message: 'No allowance left.' }, retry: false }] }));
     expect(html).toContain('Blocked before the agent ran');
     expect(html).toContain('Nothing was charged.');
     expect(html).not.toContain('Try again');
@@ -65,7 +72,7 @@ describe('chat notes between runs', () => {
     },
   });
   it('says when a document the agent reads moved to a new version', () => {
-    const html = renderToStaticMarkup(createElement(Transcript, { agentName: 'Funding pre-check', demoRuntime: true, actions: {}, turns: [
+    const html = renderToStaticMarkup(createElement(Transcript, { agentName: 'Funding pre-check', actions: {}, turns: [
       { kind: 'you', key: 'y1', text: 'Check Demo day.' }, { kind: 'agent', key: 'r1', result: result('r1', 1) },
       { kind: 'you', key: 'y2', text: 'And now?' }, { kind: 'agent', key: 'r2', result: result('r2', 2) },
     ] }));

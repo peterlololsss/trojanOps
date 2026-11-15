@@ -64,8 +64,8 @@ describe.skipIf(!probe)('GET /api/me/agents', () => {
     expect(res.status).toBe(200);
 
     const clubs = (await res.json()) as MyAgentsClub[];
-    expect(clubs.map((c) => c.orgId)).toEqual([ORG.startup]);
-    expect(clubs[0].agents.map((a) => a.templateSlug).sort()).toEqual(['funding-precheck', 'handoff']);
+    expect(clubs.map((c) => c.orgId).sort()).toEqual([ORG.startup, ORG.hacksc].sort());
+    expect(clubs.find((club) => club.orgId === ORG.startup)?.agents.map((a) => a.templateSlug).sort()).toEqual(['event-retrospective', 'funding-precheck', 'handoff', 'meeting-recap']);
   });
 
   // The user id comes from the session, never the query string: one student must not be able to
@@ -78,7 +78,7 @@ describe.skipIf(!probe)('GET /api/me/agents', () => {
     );
     const clubs = (await res.json()) as MyAgentsClub[];
     // Casey is a plain member, so she never sees the treasurer's pre-check.
-    expect(clubs[0].agents.map((a) => a.templateSlug)).toEqual(['handoff']);
+    expect(clubs.find((club) => club.orgId === ORG.startup)?.agents.map((a) => a.templateSlug)).toEqual(['handoff', 'event-retrospective', 'meeting-recap']);
   });
 
   it('answers a student with no club with an empty list, not an error', async () => {
@@ -173,8 +173,8 @@ describe.skipIf(!probe)('distribute and narrow an installation (D2)', () => {
         { body: {}, userId: USER.avery, orgId: ORG.usg },
       );
       expect(distributed.status).toBe(200);
-      // The seed has exactly three active RSOs and event-planning targets them all.
-      expect(await distributed.json()).toMatchObject({ count: 3 });
+      // The seed has four active RSOs and event-planning targets them all.
+      expect(await distributed.json()).toMatchObject({ count: 4 });
 
       const [row] = await tx.execute<{ id: string }>(
         sql`select i.id from agent_installations i join agent_templates t on t.id = i.template_id
@@ -362,7 +362,7 @@ describe.skipIf(!probe)('POST /api/orgs/:orgId/positions/:slug/transfer (D7)', (
       expect(res.status).toBe(200);
 
       const slugs = async (userId: string) =>
-        (await myAgents(userId)).flatMap((c) => c.agents.map((a) => a.templateSlug));
+        (await myAgents(userId)).filter((club) => club.orgId === ORG.startup).flatMap((c) => c.agents.map((a) => a.templateSlug));
       expect(await slugs(USER.taylor)).not.toContain('funding-precheck');
       expect(await slugs(USER.jordan)).toContain('funding-precheck');
     }));

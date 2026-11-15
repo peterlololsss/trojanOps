@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Check, CircleAlert, CircleX, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { DemoSummary } from '@/components/ui/demo-summary';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { ConnectorKind, ConnectorStatus } from '@/lib/contracts';
@@ -57,6 +58,10 @@ export function IntegrationPanel({ connectors }: {
   }
 
   return <div className="space-y-6">
+    <DemoSummary source="current connector configuration and recorded health">
+      <p>{connectors.length} connectors support the flow from USG to clubs and their members. {connectors.filter(connector => connector.isMock).length} use demo implementations.</p>
+      <p>{unhealthy.length ? `${unhealthy.length} connectors need attention.` : 'No connector is currently marked degraded or down.'}</p>
+    </DemoSummary>
     {unhealthy.length > 0 && <Alert variant="attention">
       <CircleAlert aria-hidden="true" />
       <div>

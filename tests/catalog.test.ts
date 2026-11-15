@@ -19,7 +19,7 @@ describe.skipIf(!probe)('catalog · what the club has', () => {
   it('lists an installation the club switched off, which my-agents hides', async () => {
     const found = await catalog(await actorFor(USER.casey, ORG.startup), ORG.startup);
     const slugs = found!.agents.map((a) => a.templateSlug).sort();
-    expect(slugs).toEqual(['funding-precheck', 'handoff', 'recruiting-qa']);
+    expect(slugs).toEqual(['event-retrospective', 'funding-precheck', 'handoff', 'meeting-recap', 'recruiting-qa']);
     // Seeded disabled: D3 publishes it on stage, and the president needs to see it to do that.
     expect(entry(found, 'recruiting-qa')!.status).toBe('disabled');
   });

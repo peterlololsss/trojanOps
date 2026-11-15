@@ -54,7 +54,9 @@ export function Markdown({ text, renderCitation }: MarkdownProps) {
     const list = /^(?:([-*])|\d+\.)\s+/.exec(line);
     if (list) {
       const items: ReactNode[] = [];
-      const pattern = list[1] ? /^[-*]\s+(.+)$/ : /^\d+\.\s+(.+)$/;
+      // `[\s\S]*` (not `.+`) so every line `list` matched also matches here: a bare "1. " or "- ",
+      // which answer playback shows mid-word, must still advance `i`, or the loop never ends.
+      const pattern = list[1] ? /^[-*]\s+([\s\S]*)$/ : /^\d+\.\s+([\s\S]*)$/;
       while (i < lines.length) {
         const item = pattern.exec(lines[i]);
         if (!item) break;

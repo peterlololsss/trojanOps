@@ -89,12 +89,12 @@ describe.skipIf(!probe)('grantsFor and getActor (I3)', () => {
   it('falls back from a forged active-org cookie', async () => {
     for (const forged of [A, ORG.usg, randomUUID(), 'not-a-uuid', `${A}:treasurer`]) {
       const casey = await actorFromCookies({ [PERSONA_COOKIE]: USER.casey, [ACTIVE_ORG_COOKIE]: forged });
-      expect(casey).toEqual({ userId: USER.casey, activeOrgId: S, positions: ['member'], grants: ['*', `${S}:*`, `${S}:member`] });
+      expect(casey).toEqual({ userId: USER.casey, activeOrgId: ORG.hacksc, positions: ['member'], grants: ['*', `${ORG.hacksc}:*`, `${ORG.hacksc}:member`] });
     }
     const malformed = await getActor(new Request('http://localhost/', {
       headers: { cookie: `${PERSONA_COOKIE}=${USER.casey}; ${ACTIVE_ORG_COOKIE}=%E0%A4%A` },
     }));
-    expect(malformed.activeOrgId).toBe(S);
+    expect(malformed.activeOrgId).toBe(ORG.hacksc);
     const lee = await actorFromCookies({ [PERSONA_COOKIE]: USER.lee, [ACTIVE_ORG_COOKIE]: S });
     expect(lee).toEqual({ userId: USER.lee, activeOrgId: null, positions: [], grants: ['*'] });
   });

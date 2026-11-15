@@ -1,12 +1,19 @@
 import { DOCUMENT } from '@db/seed/ids';
 
 export const STARTERS: Readonly<Record<string, string[]>> = {
+  'hacksc-handoff': ['This is my first time organizing a hackathon. What should I know?', 'What did the 2025–2026 president highlight in the handoff?', 'Show me HackSC’s financial documents.'],
+  'hacksc-meeting-summary': ['Summarize our organizing decisions and next steps.', 'Who owns venue confirmation and check-in?', 'What changed after last year’s event?'],
+  'hacksc-funding-precheck': ['How does the HackSC event budget compare with the USG annual limit?', 'Which funding approvals should we obtain before booking vendors?', 'What should the treasurer verify before submitting a funding request?'],
   'recruiting-qa': ['Do I need experience to join Startup Club?', 'How does recruiting work?', 'Does membership cost anything?'],
   'showcase-qa': ['When and where is the spring showcase?', 'Are tickets free for students?', 'How can I help backstage?'],
   handoff: ['What did we decide at the Oct 8 meeting?', 'How did pitch night go last year?', 'What should a new treasurer know first?'],
   'funding-precheck': ['How much of the annual cap does the spring budget use?', 'When are funding requests due?', 'Submit the founder panel request for $1,800 to the USG queue.'],
   'event-planning': ['How far ahead should we book a room?', 'What should we change about check-in?', 'What should an event organizer prepare?'],
   'usg-review-assistant': ['What do reviewers check first?', 'Which requests should be flagged?', 'What are the annual funding limits?'],
+  'meeting-recap': ['Summarize the decisions from the Oct 8 meeting.', 'Which action items still need follow-up?', 'What should we carry into the next meeting?'],
+  'event-retrospective': ['What went well at last year’s pitch night?', 'What should we improve for the next event?', 'Summarize the lessons for a new event organizer.'],
+  'archery-getting-started': ['How can I try archery with the club?', 'Do I need my own equipment?', 'What should I know before my first practice?'],
+  'audition-guide': ['How do Dance Club auditions work?', 'What should I prepare for an audition?', 'Can beginners audition?'],
 };
 
 export const DEMO_INDEX = { label: 'Demo index', maxChunkChars: 800, minIndexableChars: 40, queuedMs: 3000, msPerChunk: 2000 } as const;

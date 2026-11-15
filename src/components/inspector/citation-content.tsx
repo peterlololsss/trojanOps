@@ -18,6 +18,6 @@ export function CitationContent(p: {
   return <><p className="text-xs text-muted-foreground">Source {p.n} · {tierLabels[p.tier]}</p><p className="mt-1 font-semibold">{p.title}</p>
     {p.allowed && <q className="mt-3 block text-[16px] leading-6">{p.quote}</q>}
     <p className="mt-3 text-sm">{p.reason}</p>
-    {p.allowed && <div className="mt-3 flex flex-wrap gap-2">{p.orgId && <OpenDocument orgId={p.orgId} documentId={p.documentId} />}{p.onInspect && <Button type="button" variant="ghost" onClick={p.onInspect}>Show in inspector</Button>}</div>}
+    {p.allowed && <div className="mt-3 flex flex-wrap gap-2">{p.orgId && <OpenDocument orgId={p.orgId} documentId={p.documentId} />}{p.onInspect && <Button type="button" variant="ghost" onClick={p.onInspect}>Show in run details</Button>}</div>}
   </>;
 }

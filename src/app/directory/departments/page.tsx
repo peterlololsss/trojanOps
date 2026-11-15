@@ -10,6 +10,7 @@ import { getActor } from '@/lib/identity';
 import { DepartmentsTable } from '../_dashboard/departments';
 import { clubPath } from '../_dashboard/model';
 import { DirectorySignedOut } from '../_dashboard/route-states';
+import { DepartmentsSummary } from '../_dashboard/demo-summary';
 
 export default async function DepartmentsPage() {
   const actor = await getActor();
@@ -19,6 +20,7 @@ export default async function DepartmentsPage() {
   return <>
     <PageHeader title={`${view.club.name} departments`} description={count(view.departments.length, 'department')}
       action={<Link href={clubPath(view.club.id)} className={buttonVariants({ variant: 'secondary' })}>Club profile</Link>} />
+    <div className="mb-6"><DepartmentsSummary data={view} /></div>
     <DepartmentsTable departments={view.departments} club={view.club.name} base="/directory/departments" />
   </>;
 }

@@ -17,6 +17,7 @@ import { Empty, Panel, textLink } from './parts';
 import { AvatarRow, MembersTable, OfficersList, officerPeople } from './people';
 import { TabLinks } from './tabs';
 import { UpdatesPanel } from './updates';
+import { ClubSummary } from './demo-summary';
 
 export function ClubDashboardView({ data, searchParams }: { data: ClubDashboard; searchParams: SearchParams }) {
   const { club, viewer } = data;
@@ -64,6 +65,7 @@ function AboutTab({ data, showAll }: { data: ClubDashboard; showAll: boolean }) 
   const officers = officerPeople(data.officers);
   return (
     <div className="space-y-6">
+      <ClubSummary data={data} />
       {data.oversight && <OversightStrip club={club.name} oversight={data.oversight} />}
 
       <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border md:grid-cols-2">

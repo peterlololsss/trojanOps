@@ -5,7 +5,9 @@ import { isUsgAdmin, isUuid } from '../authz';
 import { AppError, type Actor, type Audience, type ModelClass, type Tier } from '../contracts';
 import { getDb } from '../db/client';
 import { agentInstallations, agentTemplates, agentTemplateVersions, orgCohorts, orgs, positions, sources, usgClubPolicy } from '../db/schema';
-import { listLibraryDocuments } from '../documents/library';
+import { getLibraryPageData } from '../documents/library-page';
+import { uploadDocumentInput } from '../documents/library';
+import { documentAudience } from '../documents/knowledge-library';
 import { audit } from '../gateway/audit';
 import { remaining } from '../gateway/quota';
 import { loadAgents } from './queries';
@@ -27,10 +29,31 @@ export interface UsgTemplatesView { templates: UsgTemplateRow[]; targets: UsgTar
 /** A position slug that exists in at least one club, with its display name. */
 export interface UsgPositionOption { slug: string; name: string }
 /** A USG-owned document the viewer can read, by the kind of source it sits in (rulebook, usg_internal). */
-export interface UsgSourceDocument { id: string; kind: string; title: string; tier: Tier }
+export interface UsgSourceDocument { id: string; kind: string; title: string; tier: Tier; version: number }
+export interface KnowledgeUpload {
+  readonly orgId: string;
+  readonly sources: ReadonlyArray<{ readonly id: string; readonly name: string; readonly kind: string }>;
+}
 export interface UsgTemplateView {
   template: UsgTemplateRow; versions: UsgVersion[]; targets: UsgTarget[];
-  positions: UsgPositionOption[]; usgDocuments: UsgSourceDocument[];
+  positions: UsgPositionOption[]; usgDocuments: UsgSourceDocument[]; knowledgeUpload?: KnowledgeUpload;
+}
+export async function reviewTemplateKnowledge(actor: Actor, templateId: string, raw: unknown) {
+  const data = await usgTemplateView(actor, templateId);
+  const parsed = uploadDocumentInput.safeParse(raw);
+  if (!data || data.template.status === 'retired') {
+    throw new AppError({ code: 'invalid', message: 'Choose an active template before adding a document.' });
+  }
+  if (!parsed.success || parsed.data.tier !== 'public' || parsed.data.allowedPositions.length || !parsed.data.bodyMd.trim()) {
+    throw new AppError({ code: 'invalid', message: 'Add a title and nonempty text for a public rulebook document.' });
+  }
+  const draft = parsed.data;
+  const latest = data.versions.find(version => version.version === data.template.latestVersion);
+  const source = data.knowledgeUpload?.sources.find(item => item.id === draft.sourceId && item.kind === 'rulebook');
+  if (!source || !latest?.sourceKinds.includes(source.kind)) {
+    throw new AppError({ code: 'forbidden', message: 'Choose a connected USG rulebook source you can manage.' });
+  }
+  return { title: draft.title, sourceName: source.name, whoCanRead: documentAudience(draft.tier, draft.allowedPositions, new Map()) };
 }
 export interface UsgClub {
   readonly modelAgents: Array<{ readonly name: string; readonly modelClass: ModelClass; readonly allowed: ModelClass[] }>;
@@ -78,30 +101,46 @@ export async function usgTemplateView(actor: Actor, id: string): Promise<UsgTemp
   const data = await templateData();
   const template = data.templates.find(t => t.id === id);
   if (!template) return null;
-  const [rows, positionRows, usgDocuments] = await Promise.all([
+  const [rows, positionRows, knowledge] = await Promise.all([
     getDb().select().from(agentTemplateVersions).where(eq(agentTemplateVersions.templateId, id)).orderBy(desc(agentTemplateVersions.version)),
     getDb().selectDistinct({ slug: positions.slug, name: positions.name }).from(positions)
       .innerJoin(orgs, eq(orgs.id, positions.orgId)).where(eq(orgs.kind, 'rso')).orderBy(positions.slug),
-    usgSourceDocuments(actor),
+    usgKnowledge(actor),
   ]);
   const positionOptions = [...new Map(positionRows.map(p => [p.slug, p])).values()];
-  return { template, targets: data.targets, positions: positionOptions, usgDocuments, versions: rows.map(v => ({
+  return { template, targets: data.targets, positions: positionOptions, ...knowledge, versions: rows.map(v => ({
     version: v.version, purpose: v.purpose, audience: v.audience, usableBy: v.usableBy, maxTier: v.maxTier,
     sourceKinds: v.sourceKinds, tools: v.tools, modelClasses: v.modelClasses, defaultModelClass: v.defaultModelClass,
     systemPrompt: v.systemPrompt, rulePackSlug: v.rulePackSlug, changelog: v.changelog, publishedAt: v.publishedAt.toISOString(),
   })) };
 }
-/** USG's own rulebook and internal documents, read under the viewer's RLS in the USG library. */
-async function usgSourceDocuments(actor: Actor): Promise<UsgSourceDocument[]> {
+/** Only the USG library's RLS-filtered metadata and authorized upload sources. */
+async function usgKnowledge(actor: Actor): Promise<Pick<UsgTemplateView, 'usgDocuments' | 'knowledgeUpload'>> {
   const [usg] = await getDb().select({ id: orgs.id }).from(orgs).where(eq(orgs.kind, 'usg')).limit(1);
-  if (!usg) return [];
-  const [docs, kinds] = await Promise.all([
-    listLibraryDocuments(actor, usg.id),
-    getDb().select({ id: sources.id, kind: sources.kind }).from(sources).where(and(eq(sources.orgId, usg.id), inArray(sources.kind, ['rulebook', 'usg_internal']))),
+  if (!usg) return { usgDocuments: [] };
+  const [library, kinds] = await Promise.all([
+    getLibraryPageData(actor, usg.id),
+    getDb().select({ id: sources.id, kind: sources.kind }).from(sources)
+      .where(and(eq(sources.orgId, usg.id), inArray(sources.kind, ['rulebook', 'usg_internal']))),
   ]);
-  return docs.flatMap(d => { const kind = kinds.find(k => k.id === d.sourceId)?.kind; return kind ? [{ id: d.id, kind, title: d.title, tier: d.tier }] : []; })
-    .sort((a, b) => a.kind.localeCompare(b.kind) || a.title.localeCompare(b.title));
+  if (!library) return { usgDocuments: [] };
+
+  const byId = new Map(kinds.map(({ id, kind }) => [id, kind]));
+  const usgDocuments = library.documents.flatMap(({ id, sourceId, title, tier, version }) => {
+    const kind = byId.get(sourceId);
+    return kind ? [{ id, kind, title, tier, version }] : [];
+  }).sort((a, b) => a.title.localeCompare(b.title));
+
+  const knowledgeUpload = library.canUpload ? {
+    orgId: library.org.id,
+    sources: library.sources.flatMap(source => {
+      const kind = byId.get(source.id);
+      return kind ? [{ ...source, kind }] : [];
+    }),
+  } : undefined;
+  return { usgDocuments, knowledgeUpload };
 }
+
 export async function usgClubsView(actor: Actor): Promise<UsgClub[]> {
   await requireConsole(actor);
   const [clubs, policies] = await Promise.all([

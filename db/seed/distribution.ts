@@ -11,6 +11,8 @@ import type { ModelClass } from '@/lib/contracts';
 import type { SeedDb } from './index';
 import { INSTALLATION, ORG, RULE_PACK, TEMPLATE, USER } from './ids';
 import pack from '../../rules/packs/usg-funding.v1.json';
+import { seedSampleAgents } from './sample-agents';
+import { seedHackscDistribution } from './hacksc-distribution';
 
 // The rows WP-5 resolves from the database (src/lib/distribution/queries.ts).
 // Ids come from db/seed/ids.ts, which tests address these rows by.
@@ -326,4 +328,6 @@ export async function seedDistribution(db: SeedDb): Promise<void> {
       createdAt,
     })),
   );
+  await seedSampleAgents(db);
+  await seedHackscDistribution(db);
 }

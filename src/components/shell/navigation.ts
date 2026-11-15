@@ -8,6 +8,11 @@ export function matchesPath(pathname: string, path: string): boolean {
   return pathname === path || pathname.startsWith(`${path}/`);
 }
 
+/** Pages that lay out their own full-width columns (rail, chat, run details) instead of the scope side nav. */
+export function isWorkspacePath(pathname: string): boolean {
+  return pathname === '/me/agents';
+}
+
 export function isNavItemActive(pathname: string, item: NavItem): boolean {
   return (item.exact ? pathname === item.href : matchesPath(pathname, item.href))
     || (item.activePaths?.some((path) => matchesPath(pathname, path)) ?? false);
@@ -18,9 +23,9 @@ export function navigationFor(actor: Actor, clubs: readonly Pick<MyAgentsClub, '
   // Directory is the org directory: a member acting in a club sees its departments first; USG and
   // students outside a club see the clubs (§14).
   const inClub = Boolean(actor.userId && actor.activeOrgId && !activeOrgIsUsg && actor.positions.length > 0);
-  const directoryItems: NavItem[] = inClub
+  const directoryItems: NavItem[] | undefined = inClub
     ? [{ href: '/directory/departments', label: 'Departments' }, { href: '/directory/clubs', label: 'All clubs' }]
-    : [{ href: '/directory/clubs', label: 'Clubs' }];
+    : undefined;
   const scopes: Scope[] = [
     { href: '/me/agents', label: 'My agents', match: '/me', items: [{ href: '/me/agents', label: 'My agents' }, { href: '/me/usage', label: 'Usage' }] },
     { href: '/directory', label: 'Directory', match: '/directory', items: directoryItems },

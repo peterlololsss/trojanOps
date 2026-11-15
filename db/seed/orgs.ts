@@ -3,6 +3,7 @@ import { orgCohorts, orgs, positions } from '@/lib/db/schema';
 import { now } from '@/lib/clock';
 import type { SeedDb } from './index';
 import { ORG, POSITION } from './ids';
+import { hackscPeopleRows } from './hacksc-people';
 
 const NAMES: Record<string, string> = {
   admin: 'Admin', reviewer: 'Reviewer', president: 'President', treasurer: 'Treasurer',
@@ -16,10 +17,12 @@ export async function seedOrgs(db: SeedDb): Promise<void> {
     { id: ORG.startup, kind: 'rso', slug: 'startup', name: 'Startup Club', createdAt },
     { id: ORG.archery, kind: 'rso', slug: 'archery', name: 'Archery Club', createdAt },
     { id: ORG.dance, kind: 'rso', slug: 'dance', name: 'Dance Club', createdAt },
+    hackscPeopleRows(createdAt).org,
   ]);
   await db.insert(orgCohorts).values([
     { cohortSlug: 'pilot', orgId: ORG.startup, createdAt },
     { cohortSlug: 'pilot', orgId: ORG.archery, createdAt },
+    { cohortSlug: 'pilot', orgId: ORG.hacksc, createdAt },
   ]);
   const rows = (Object.keys(POSITION) as Array<keyof typeof POSITION>).flatMap((org) =>
     Object.entries(POSITION[org]).map(([slug, id]) => ({

@@ -1,5 +1,6 @@
 // Owner: A (WP-4). Quota limits and Lee's $0.04 of public-agent usage today (§15).
 import { randomUUID } from 'node:crypto';
+import { and, eq } from 'drizzle-orm';
 import { now } from '@/lib/clock';
 import { aiUsage, quotaLimits } from '@/lib/db/schema';
 import type { SeedDb } from './index';
@@ -42,4 +43,40 @@ export async function seedQuota(db: SeedDb): Promise<void> {
     usage(runId, 'hold', RUN_COST),
     usage(runId, 'settle', 0),
   ]));
+  await seedSampleAgentQuota(db);
+  await seedHackscQuota(db);
+}
+
+export async function seedHackscQuota(db: SeedDb): Promise<void> {
+  const [existing] = await db.select({ id: quotaLimits.id }).from(quotaLimits)
+    .where(and(eq(quotaLimits.scope, 'org'), eq(quotaLimits.orgId, ORG.hacksc))).limit(1);
+  if (existing) return;
+  const at = now();
+  await db.insert(quotaLimits).values({ id: '00000090-0000-4000-8000-000000000005',
+    scope: 'org', orgId: ORG.hacksc, limitMicro: 5 * USD, setBy: USER.avery, setAt: at, createdAt: at,
+  }).onConflictDoNothing();
+}
+
+/** Stable row ids let additive demo setup be retried without replacing an edited budget. */
+export async function seedSampleAgentQuota(db: SeedDb): Promise<void> {
+  const at = now();
+  await db.insert(quotaLimits).values([
+    {
+      id: '00000090-0000-4000-8000-000000000302',
+      orgId: ORG.archery,
+      installationId: INSTALLATION.archeryGettingStarted,
+    },
+    {
+      id: '00000090-0000-4000-8000-000000000403',
+      orgId: ORG.dance,
+      installationId: INSTALLATION.danceAuditionGuide,
+    },
+  ].map((agent) => ({
+    ...agent,
+    scope: 'installation' as const,
+    limitMicro: 2.5 * USD,
+    setBy: USER.avery,
+    setAt: at,
+    createdAt: at,
+  }))).onConflictDoNothing();
 }

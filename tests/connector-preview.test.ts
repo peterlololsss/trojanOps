@@ -69,8 +69,8 @@ describe.skipIf(!probe)('current connector CSV projections', () => {
       const ready = await loadConnectorPreview(actor, 'roster');
       expect(ready.status).toBe('ready');
       if (ready.status === 'ready') {
-        expect(ready.data.rows).toHaveLength(10);
-        expect(ready.data.summary).toContain('8 people across 3 clubs');
+        expect(ready.data.rows).toHaveLength(15);
+        expect(ready.data.summary).toContain('8 people across 4 clubs');
       }
       vi.spyOn(getConnectors().roster, 'fetch').mockRejectedValue(new Error('private source path'));
       expect(await loadConnectorPreview(actor, 'roster')).toEqual({ status: 'unavailable', title: 'Roster' });

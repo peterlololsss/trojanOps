@@ -1,5 +1,21 @@
 # Stream C: Documents and permissions
 
+## HackSC judge demo, 2026-11-15
+
+The additive HackSC library contains a public community guide, member-only October 2026
+organizing minutes and the fictional 2025–2026 president's handoff, plus an officer-only finance
+worksheet. These are constructed demo records. The handoff identifies the mistaken reservation
+confirmation and mixed check-in queue, then gives an owner-based process for the next event.
+
+Casey can read the operational records and receives no finance worksheet from the gateway's
+document service. Taylor can read the worksheet with an officer-tier scope. Morgan's Archery
+treasurer position grants no HackSC finance access. `tests/hacksc-documents.test.ts` checks all
+three cases through `listAccessibleDocuments` and Postgres RLS as the app role.
+
+The English-only `hacksc-handoff` starters include the first-time organizer question, president's
+highlighted lesson and financial-document request. The selected runtime is explicitly mock.
+`seedHackscDocuments` inserts missing fixture rows and preserves existing versions.
+
 ## Chat and knowledge delivery, 2026-11-15
 
 Delivered the shared Dify-style chat window, safe Markdown/citations with current access checks,

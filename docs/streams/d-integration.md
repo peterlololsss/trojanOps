@@ -1,5 +1,25 @@
 # Stream D: Integration and demo
 
+## Judge presentation, 2026-11-15
+
+`/demo` now gives the five-beat presentation with role switches and direct links. Avery creates
+an Organizer briefing template and distributes it to the pilot cohort. Sam manages HackSC and
+its departments. Directory and Management summaries are labeled Demo and use authorized visible
+records. Casey opens the member-level HackSC organizer handoff, reads the historical operational
+lessons and gets a finance-access refusal. Workspace headers identify a distributed agent's
+publisher and receiving club, such as USG → HackSC, beside its version.
+
+HackSC is an additive constructed scenario alongside Startup, Archery and Dance. The normal seed
+includes it. For an existing demo database, run `node --env-file=.env --import tsx scripts/demo-setup.ts`
+to insert only missing scenario records in one transaction. Existing documents, versions,
+memberships and limits are preserved. The added roles are Sam as president, Taylor as treasurer
+and member, and Jordan and Casey as members. Roster CSV includes the same assignments.
+
+Prompts and answers are English-only. Run requests show an animated access/quota indicator.
+Completed mock answers play word by word with animated progress, real document counts and
+source citations. Stop ends playback and the full answer remains available. Reduced motion
+shows the finished answer immediately and leaves the progress icons static.
+
 ## Chat and usage delivery, 2026-11-15
 
 Directory run pages now consume C's shared `RunWorkspace` and configuration. `/me/usage` shows
@@ -48,7 +68,7 @@ Stubs by H3.
   Sheet, Switch, Progress, RadioGroup). Restyle them in WP-2 or every `pnpm check` fails.
 - `roster.csv` mirrors the seed plus Robotics Club, and a sync right after a manual transfer changes
   nothing.
-- "Open" on `/me/agents` switches the active club before opening the run page.
+- Choosing an internal agent on `/me/agents` switches the active club before its chat opens.
 - Every connector shows "Mock" honestly.
 
 ## First prompt
@@ -141,3 +161,29 @@ do not change the active persona memberships or imported roster baseline and gra
 `tests/member-status.test.ts` covers club departure versus office changes, rejoining, departure
 dates, identical display names and accounts without history. Seed acceptance also verifies the
 historical examples and unchanged active memberships.
+
+## My agents cards and sample agents
+
+The agent rail now uses compact inset cards, following the requested card view. The workspace
+keeps chat and Run details alongside selection. Four additive examples ship through the normal
+seed: Meeting recap and Event retrospective for Startup members, Archery getting started and
+Dance Audition guide for all students. Public examples have Public-only sources and explicit
+installation budgets. All use Economy on the mock runtime. Archery currently has no public
+seed document, so its guide reports missing source material rather than inventing an answer.
+
+## Personal projects
+
+On My agents, Projects opens a list of named projects with notes and an optional Agent.
+Projects are stored per account in the current browser. Opening a linked Agent uses the
+existing workspace navigation, including the club switch for internal agents. The project
+does not supply run input or store transcripts.
+
+Demo check: As Casey, open Projects, create a project linked to an Agent, and add a note.
+Reload, reopen Projects, and check the note. Select Open agent and verify the correct Agent
+opens. Switch to Lee and verify Casey's project is absent, then switch back to Casey.
+
+Selecting an Agent in My agents also exposes **Project files**. The file library is stored in
+IndexedDB per account and installation. Downloads preserve the uploaded file, and removal
+requires confirmation. These files are separate from the organization's knowledge sources.
+Demo check: add a file to one Agent, refresh and download it, check a second Agent and a
+different persona for isolation, then return to the original Agent and remove the file.

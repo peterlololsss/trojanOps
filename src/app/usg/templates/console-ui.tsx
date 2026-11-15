@@ -5,14 +5,13 @@ import Link from 'next/link';
 import { useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, CircleAlert, LockKeyhole } from 'lucide-react';
+import { auditTime } from '@/components/inspector/format';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 export const money = (micro: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(micro / 1_000_000);
-export const absoluteTime = (iso: string | null) => iso ? new Intl.DateTimeFormat('en-US', {
-  dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Los_Angeles',
-}).format(new Date(iso)) + ' PT' : 'Not published';
+export const absoluteTime = (iso: string | null) => iso ? auditTime(new Date(iso)) : 'Not published';
 export const label = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 export const selectClass = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm';
 export const chipClass = 'inline-flex items-center gap-1 rounded-sm border border-border px-2 text-xs';

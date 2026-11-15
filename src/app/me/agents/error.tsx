@@ -6,7 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 
 export default function MyAgentsError({ retry }: { readonly retry: () => void }) {
-  return <>
+  return <div className="mx-auto w-full max-w-[1280px] p-6">
     <PageHeader title="My agents" />
     <Alert variant="destructive">
       <CircleAlert aria-hidden="true" />
@@ -16,5 +16,5 @@ export default function MyAgentsError({ retry }: { readonly retry: () => void })
         <Button variant="secondary" onClick={retry} className="mt-3">Try again</Button>
       </div>
     </Alert>
-  </>;
+  </div>;
 }
