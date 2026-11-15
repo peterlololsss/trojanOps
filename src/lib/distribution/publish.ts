@@ -1,42 +1,57 @@
 // Owner: B (WP-5, real by H7). "Publish to all students" — demo beat D3, and the one §8 marks
 // never cut: it is what a club can do here that a per-person AI account cannot.
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { AppError, type Actor, type EffectiveAgent } from '../contracts';
 import { getDb } from '../db/client';
-import { agentInstallations } from '../db/schema';
+import { agentInstallations, quotaLimits } from '../db/schema';
 import { audit } from '../gateway/audit';
 import { remaining, setLimit } from '../gateway/quota';
 import { effectiveAgent } from './effective-config';
-import { clampProposedChange } from './queries';
+import { clampProposedChange, installationOrgId } from './queries';
 
 /** What a published installation overrides. Its max tier is derived, not written: I4 forces a
  * public audience down to the public tier, and that is what keeps the club's minutes and budget
  * out of an agent the whole campus can now open. */
 const PUBLIC_OVERRIDE: { audience: 'public'; usableBy: string[] } = { audience: 'public', usableBy: [] };
 
+/** An installation's own limit row, as opposed to the club's limit it falls back to. */
+async function hasInstallationLimit(installationId: string): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ id: quotaLimits.id })
+    .from(quotaLimits)
+    .where(and(eq(quotaLimits.scope, 'installation'), eq(quotaLimits.installationId, installationId)))
+    .limit(1);
+  return !!row;
+}
+
 /**
  * Sets the installation's audience to public and enables it (§8).
+ *
+ * The president is checked first, so a missing installation and another club's installation get
+ * the same denial: the answer is not a way to find out which ids exist (as `setLimit` does it).
  *
  * The clamps run **before** the write. A version published only to members cannot be widened to
  * the campus (I7), and writing first would leave a row that no later read can clamp — which would
  * throw out of `directory()` and `myAgents()` for every student, not just this club.
  *
- * §8 also requires an installation limit, defaulting to half the club's monthly quota, so an
- * outside student cannot drain the club's budget (decision 7). It is set *before* the row changes:
- * if the limit is refused, nothing has been published.
+ * §8 also requires an installation limit, so an outside student cannot drain the club's budget
+ * (decision 7). The president's figure wins; otherwise an existing limit is kept; otherwise it
+ * defaults to half the club's monthly quota. The limit is checked and written *before* the row
+ * changes: a public installation without one would fall back to the club's whole budget, whereas a
+ * refused publish leaves at most an unused limit row, which a retry reuses.
  */
 export async function publishToAllStudents(
   actor: Actor,
   installationId: string,
   input: { limitMicro?: number } = {},
 ): Promise<EffectiveAgent> {
-  const agent = await effectiveAgent(installationId);
+  const ownerOrgId = await installationOrgId(installationId);
 
-  if (actor.activeOrgId !== agent.orgId || !actor.positions.includes('president')) {
+  if (!ownerOrgId || actor.activeOrgId !== ownerOrgId || !actor.positions.includes('president')) {
     await audit('authz.denied', {
       actorUserId: actor.userId,
       actingOrgId: actor.activeOrgId,
-      installationId,
+      ...(ownerOrgId ? { installationId } : {}),
       targetType: 'installation',
       targetId: installationId,
       details: { action: 'agent.publish_public' },
@@ -46,6 +61,8 @@ export async function publishToAllStudents(
       message: 'Only the club president can publish agents to all students.',
     });
   }
+
+  const agent = await effectiveAgent(installationId);
 
   const clamped = await clampProposedChange(installationId, PUBLIC_OVERRIDE);
   if (!clamped) throw new AppError({ code: 'not_found', message: 'This agent does not exist.' });
@@ -67,13 +84,39 @@ export async function publishToAllStudents(
     });
   }
 
-  // A club with no limit row of its own yields 0 here, which would block the agent on every run.
-  // That is why §13 has provisionOrg create the club's default quota for a club the roster brings
-  // in; without it a newly provisioned club can publish an agent nobody can use.
+  // A club with no limit row of its own reads as 0 here, and every run of its agents would be
+  // blocked at the club level. §13 has provisionOrg create the club's default quota for a club the
+  // roster brings in; until it has, refuse rather than write a 0 installation limit.
   const club = await remaining({ scope: 'org', orgId: agent.orgId });
-  const limitMicro = input.limitMicro ?? Math.floor(club.limitMicro / 2);
+  if (club.limitMicro <= 0) {
+    throw new AppError({
+      code: 'invalid',
+      message: 'This club has no monthly AI quota yet, so its agents cannot run. Ask USG to set one first.',
+    });
+  }
 
-  await setLimit(actor, { scope: 'installation', orgId: agent.orgId, installationId, limitMicro });
+  let limitMicro: number | null = input.limitMicro ?? null;
+  if (limitMicro !== null) {
+    if (!Number.isSafeInteger(limitMicro) || limitMicro < 0) {
+      throw new AppError({
+        code: 'invalid',
+        message: 'A limit must be a whole number of micro-dollars, zero or more.',
+      });
+    }
+    if (limitMicro > club.limitMicro) {
+      throw new AppError({
+        code: 'clamp_violation',
+        message: "An agent's budget cannot exceed the club's monthly quota.",
+        cap: { scope: 'org', limitMicro: club.limitMicro, field: 'limitMicro', allowed: club.limitMicro },
+      });
+    }
+  } else if (!(await hasInstallationLimit(installationId))) {
+    limitMicro = Math.floor(club.limitMicro / 2);
+  }
+
+  if (limitMicro !== null) {
+    await setLimit(actor, { scope: 'installation', orgId: agent.orgId, installationId, limitMicro });
+  }
 
   await getDb()
     .update(agentInstallations)
@@ -82,6 +125,7 @@ export async function publishToAllStudents(
 
   // Re-read so the caller gets the clamped result, not what we hoped we wrote.
   const published = await effectiveAgent(installationId);
+  const limit = await remaining({ scope: 'installation', orgId: agent.orgId, installationId });
 
   await audit('agent.publish_public', {
     actorUserId: actor.userId,
@@ -89,7 +133,7 @@ export async function publishToAllStudents(
     installationId,
     targetType: 'installation',
     targetId: installationId,
-    details: { templateSlug: published.templateSlug, maxTier: published.maxTier, limitMicro },
+    details: { templateSlug: published.templateSlug, maxTier: published.maxTier, limitMicro: limit.limitMicro },
   });
 
   return published;

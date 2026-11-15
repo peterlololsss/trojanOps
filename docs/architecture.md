@@ -533,8 +533,9 @@ Mock runtime (`runtime/mock.ts`):
   `audit('installation.update')`; a clamp violation returns `clamp_violation` and writes
   `audit('installation.rejected', {field, allowed})`.
 - **Publish to all students:** on an installation row, sets audience `public` and enables it.
-  - Needs `usg_club_policy.allow_public_agents`, max tier `public`, and an installation limit
-    (default: half the club's monthly quota).
+  - Needs `usg_club_policy.allow_public_agents`, max tier `public`, and an installation limit:
+    the president's figure, else the one the installation already has, else half the club's
+    monthly quota. A club with no monthly quota is refused (`invalid`).
   - The confirmation names who gains access, the readable document count and the limit.
   - `audit('agent.publish_public')`.
   - Never cut.
