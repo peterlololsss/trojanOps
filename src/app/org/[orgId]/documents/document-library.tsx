@@ -10,7 +10,7 @@ import type { LibraryPageData } from '@/lib/documents/library-page';
 import {
   changeFilter, formatPacific, initialQuery, tierLabels, tierOptions, viewLibrary,
 } from '@/lib/documents/library-view';
-import { DataTable } from './data-table';
+import { DataTable } from '@/components/inspector/data-table';
 import { fieldClass, UploadForm } from './upload-form';
 
 const features = tableFeatures({});

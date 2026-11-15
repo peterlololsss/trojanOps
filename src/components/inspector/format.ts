@@ -10,6 +10,28 @@ export function readCount(n: number): string {
   return `Read ${n} ${n === 1 ? 'document' : 'documents'}`;
 }
 
+// Campus time. Built from parts so the output doesn't depend on ICU's spacing (newer ICU puts a
+// narrow no-break space before AM/PM).
+const PT = 'America/Los_Angeles';
+const ptTime = new Intl.DateTimeFormat('en-US', {
+  timeZone: PT, year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+});
+const ptDay = new Intl.DateTimeFormat('en-US', { timeZone: PT, year: 'numeric', month: '2-digit', day: '2-digit' });
+const part = (parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes) =>
+  parts.find((p) => p.type === type)?.value ?? '';
+
+/** An absolute time in Pacific time: "Nov 15, 2026, 10:42 AM PT" ("PT" for both PST and PDT). */
+export function auditTime(date: Date): string {
+  const p = ptTime.formatToParts(date);
+  return `${part(p, 'month')} ${part(p, 'day')}, ${part(p, 'year')}, ${part(p, 'hour')}:${part(p, 'minute')} ${part(p, 'dayPeriod').toUpperCase()} PT`;
+}
+
+/** The calendar day in Pacific time, "2026-11-15", for date filters and file names. */
+export function ptDate(date: Date): string {
+  const p = ptDay.formatToParts(date);
+  return `${part(p, 'year')}-${part(p, 'month')}-${part(p, 'day')}`;
+}
+
 /** A tool id as words: `submit_to_queue` → "Submit to queue". */
 export function humanizeTool(tool: string): string {
   const words = tool.replace(/[_\-.]+/g, ' ').trim().toLowerCase();

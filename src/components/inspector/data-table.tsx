@@ -1,9 +1,10 @@
 'use client';
 
-// A presentational table over a TanStack v9 table instance, following the Data Table rules in
-// .claude/agents/ui-designer.md: 40px rows, right-aligned numeric columns, a sort icon only on the
-// sorted column, muted header row, 1px row dividers. It knows nothing about documents so stream D can
-// move it to src/components/ui. The caller owns state (filters, pages) and passes the table.
+// Owner: C. A presentational table over a TanStack v9 table instance, following the Data Table rules
+// in .claude/agents/ui-designer.md: 40px rows, right-aligned numeric columns, a sort icon only on the
+// sorted column, muted header row, 1px row dividers. Shared by the document library and the audit
+// views; it knows nothing about either, so stream D can move it to src/components/ui. The caller owns
+// state (filters, pages) and passes the table.
 import type { ReactNode } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import type { ReactTable, RowData, TableFeatures } from '@tanstack/react-table';
@@ -25,10 +26,12 @@ export interface DataTableProps<TFeatures extends TableFeatures, TData extends R
   /** Shown in one full-width row when there are no rows. */
   empty?: ReactNode;
   minWidth?: number;
+  /** Top-align cells when some rows wrap to several lines. */
+  alignTop?: boolean;
 }
 
 export function DataTable<TFeatures extends TableFeatures, TData extends RowData>({
-  table, caption, numericColumns = [], monoColumns = [], rowHeaderColumn, sorted, empty, minWidth = 760,
+  table, caption, numericColumns = [], monoColumns = [], rowHeaderColumn, sorted, empty, minWidth = 760, alignTop = false,
 }: DataTableProps<TFeatures, TData>) {
   const rows = table.getRowModel().rows;
   const columnCount = table.getAllLeafColumns().length;
@@ -68,7 +71,7 @@ export function DataTable<TFeatures extends TableFeatures, TData extends RowData
             <tr key={row.id} className="h-[40px] border-t border-border hover:bg-accent">
               {row.getAllCells().map((cell) => {
                 const id = cell.column.id;
-                const className = `px-3 py-2 ${numericColumns.includes(id) ? 'text-right tabular-nums' : ''} ${
+                const className = `px-3 py-2 ${alignTop ? 'align-top' : ''} ${numericColumns.includes(id) ? 'text-right tabular-nums' : ''} ${
                   monoColumns.includes(id) ? 'whitespace-nowrap font-mono text-xs' : ''}`;
                 return id === rowHeaderColumn
                   ? <th key={cell.id} scope="row" className={`${className} font-semibold`}><table.FlexRender cell={cell} /></th>
