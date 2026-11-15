@@ -4,8 +4,9 @@ import { useRef, useState, useTransition, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, Check, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { ApiError, Tier } from '@/lib/contracts';
+import type { Tier } from '@/lib/contracts';
 import type { LibraryPageData } from '@/lib/documents/library-page';
+import { uploadErrorMessage } from '@/lib/documents/upload-error';
 
 export const tierLabels: Record<Tier, string> = {
   public: 'Public', members: 'Members', officers: 'Officers', usg_internal: 'USG internal',
@@ -40,8 +41,7 @@ export function UploadForm({ data }: { data: LibraryPageData }) {
           }),
         });
         if (!response.ok) {
-          const failure = await response.json().catch(() => null) as ApiError | null;
-          setError(failure?.message ?? `Upload failed (${response.status}). Try again or ask your club president for help.`);
+          setError(await uploadErrorMessage(response));
           return;
         }
         form.reset();
